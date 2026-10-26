@@ -2,8 +2,13 @@
 set -euo pipefail
 
 # ----------------------------------------------------------------------------
-# Ploi zero-downtime deploy script for a Laravel app (native PHP, no Docker).
-# Paste this into Ploi > Site > Deploy script and edit the SETTINGS block.
+# Ploi deploy script for a PHP/Node app on a native (non-Docker) Ploi server.
+# Paste it into the site's deploy script in Ploi and edit the SETTINGS block.
+# Works for zero-downtime sites and for plain in-place sites (auto-detected).
+#
+# PRESET=laravel adds Laravel defaults (required .env keys, migrate, key:generate,
+# optimize, queue:restart). PRESET=generic does only what you configure.
+# Every project-specific step is an optional hook, empty by default.
 #
 # !! Ploi substitutes its placeholders (RELEASE, BRANCH, SITE ... written in
 # !! curly braces) in this text BEFORE bash runs it - comments included. A shell
@@ -11,145 +16,172 @@ set -euo pipefail
 # !! and bash then fails with e.g. "main: unbound variable". So variables here
 # !! use non-placeholder names (DEPLOY_BRANCH, SITE_DOMAIN). See docs/deploy.md.
 #
-# First run bootstraps everything it can and stops with clear instructions
-# for anything only a human can fill in. Later runs just deploy.
-# Queue worker (queue:work) and scheduler (schedule:work) run as Ploi daemons
-# from /home/ploi/<site>/<APP_SUBDIR>; do NOT also enable Ploi's schedule:run cron.
-# queue:restart below makes the worker pick up each new release.
+# The first run bootstraps what it can and stops with clear instructions for
+# anything only a human can fill in. Later runs just deploy.
 # ----------------------------------------------------------------------------
+
 # ---- SETTINGS ----------------------------------------------------------------
-SITE_DOMAIN="example.com"                 # Ploi site domain (= folder in /home/ploi)
-APP_ENV_NAME="production"                 # APP_ENV written on first run
+SITE_DOMAIN="example.com"          # Ploi site domain (= folder in /home/ploi)
+PRESET="laravel"                   # laravel | generic
+APP_ENV_NAME="production"          # APP_ENV written into a new .env (laravel)
 DEPLOY_BRANCH="main"
-APP_SUBDIR="src"                          # Laravel root inside the repo ("." if top level)
-PHP_MIN="8.5.0"
-NODE_MIN_MAJOR=22
-# First-install command (runs once, until storage/installed exists). Leave empty
-# to just run migrations. ADMIN_* values are read from <shared>/install.env and
-# passed as --admin-name/--admin-email/--admin-password when INSTALL_NEEDS_ADMIN=1.
-INSTALL_COMMAND="php artisan migrate --force"
-INSTALL_NEEDS_ADMIN=0
-TENANTS_MIGRATE=0                         # 1 = also run tenants:migrate (stancl/tenancy)
-DOCTOR_COMMAND=""                         # optional health check, e.g. php artisan app:doctor
-# Keys that must be non-empty in the shared .env before the deploy continues.
-REQUIRED_VARS="APP_URL DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD"
-TENANCY_DOMAIN_KEY=""                     # e.g. TENANCY_CENTRAL_DOMAINS: set to SITE_DOMAIN on first run
+APP_SUBDIR="."                     # app root inside the repo, e.g. "src"
+PHP_MIN="8.3.0"                    # preflight minimum; "" = don't check PHP
+NODE_MIN_MAJOR=""                  # e.g. 22; "" = check only that node exists if package.json does
+# Keys that must be non-empty in the shared .env ("" = preset default).
+REQUIRED_VARS=""
+# KEY=VALUE pairs (no spaces) written into a NEW shared .env only. @SITE_DOMAIN@ is replaced.
+ENV_DEFAULTS=""
+# Hooks: shell snippets run with bash -euo pipefail in the app root. Multi-line ok.
+FIRST_INSTALL_CMD=""               # once, until the install marker exists ("" = MIGRATE_CMD)
+INSTALL_ENV_KEYS=""                # e.g. "ADMIN_EMAIL ADMIN_PASSWORD": read from <shared>/install.env,
+                                   # exported to FIRST_INSTALL_CMD, file shredded afterwards
+MIGRATE_CMD=""                     # every later deploy ("" = preset default)
+EXTRA_MIGRATE_CMDS=""              # after MIGRATE_CMD / FIRST_INSTALL_CMD, every deploy
+BUILD_CMDS=""                      # "" = composer install (composer.json) + npm ci/build (package.json)
+POST_DEPLOY_CMDS=""                # after the preset's caches/restarts
+HEALTHCHECK_CMD=""                 # last; a failure fails the deploy
 # ------------------------------------------------------------------------------
-SHARED="${SHARED:-/home/ploi/$SITE_DOMAIN-shared}"     # survives every release
-OLD_ENV="${OLD_ENV:-/home/ploi/$SITE_DOMAIN/$APP_SUBDIR/.env}"  # picked up if you already made one
+SITE_ROOT="${SITE_ROOT:-/home/ploi/$SITE_DOMAIN}"
+SHARED="${SHARED:-$SITE_ROOT-shared}"                    # survives every release
+OLD_ENV="${OLD_ENV:-$SITE_ROOT/$APP_SUBDIR/.env}"        # adopted if no shared .env yet
+MARKER="$SHARED/.first-install-done"
 
 say()  { echo "==> $*"; }
 stop() { echo; echo "!! $*"; exit 1; }
 env_get() { grep -E "^$1=" "$2" | tail -1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/'; }
-env_set() { # env_set KEY VALUE FILE  (replace or append)
+env_set() { # env_set KEY VALUE FILE  (replace or append; GNU sed, as on Ubuntu)
   local v; v=$(printf '%s' "$2" | sed 's/[&|\\]/\\&/g')   # escape sed specials in the value
   if grep -qE "^$1=" "$3"; then sed -i "s|^$1=.*|$1=$v|" "$3"; else echo "$1=$2" >> "$3"; fi
 }
+hook() { [ -z "$2" ] || { say "$1"; bash -euo pipefail -c "$2"; }; }
 
-# 0. Preflight: tools this deploy needs on the host ---------------------------
-need() { command -v "$1" >/dev/null 2>&1 || stop "$1 is not installed on this server. $2"; }
-need git      "Install git."
-need php      "Install PHP $PHP_MIN+ and set it as the CLI default."
-need composer "Install Composer."
-need node     "Install Node $NODE_MIN_MAJOR."
-need npm      "npm ships with Node; reinstall Node."
-PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
-php -r "exit(version_compare(PHP_VERSION, '$PHP_MIN', '>=') ? 0 : 1);" \
-  || stop "PHP $PHP_VER found, but this app needs PHP $PHP_MIN+. Switch the server and site PHP version in Ploi."
-NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
-[ "$NODE_MAJOR" -ge "$NODE_MIN_MAJOR" ] || stop "Node $NODE_MAJOR found, but this app needs Node $NODE_MIN_MAJOR+."
-say "Using PHP $PHP_VER, Node $(node -v), $(composer --version 2>/dev/null | head -1)"
+case "$PRESET" in
+  laravel)
+    : "${REQUIRED_VARS:=APP_URL DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD}"
+    : "${MIGRATE_CMD:=php artisan migrate --force}" ;;
+  generic) ;;
+  *) stop "PRESET must be laravel or generic (got $PRESET)" ;;
+esac
 
+# 0. Release directory: Ploi fills this in on zero-downtime sites ------------
 # shellcheck disable=SC1083  # {RELEASE} is replaced by Ploi before running
-cd {RELEASE}
+RELEASE_DIR="{RELEASE}"
+case "$RELEASE_DIR" in "{"*) RELEASE_DIR="$SITE_ROOT" ;; esac   # in-place site
+[ -d "$RELEASE_DIR" ] || stop "release directory $RELEASE_DIR does not exist"
+cd "$RELEASE_DIR"
 git pull origin "$DEPLOY_BRANCH"
-cd "$APP_SUBDIR"
+cd "$APP_SUBDIR" || stop "APP_SUBDIR=$APP_SUBDIR not found in the repository"
+APP_ROOT="$(pwd)"
 
-# 1. Shared folders ----------------------------------------------------------
-mkdir -p "$SHARED"
-if [ ! -d "$SHARED/storage" ]; then
-  say "First run: creating shared storage"
-  cp -a storage "$SHARED/storage"
+# 1. Preflight -----------------------------------------------------------------
+need() { command -v "$1" >/dev/null 2>&1 || stop "$1 is not installed on this server. $2"; }
+need git "Install git."
+if [ -n "$PHP_MIN" ] && { [ -f composer.json ] || [ "$PRESET" = laravel ]; }; then
+  need php "Install PHP $PHP_MIN+ and set it as the CLI default."
+  need composer "Install Composer."
+  php -r "exit(version_compare(PHP_VERSION, '$PHP_MIN', '>=') ? 0 : 1);" \
+    || stop "PHP $(php -r 'echo PHP_VERSION;') found, but this app needs PHP $PHP_MIN+. Switch the PHP version in Ploi."
 fi
-mkdir -p "$SHARED"/storage/{app/public,framework/{cache/data,sessions,views},logs,keys}
+if [ -f package.json ] || [ -n "$NODE_MIN_MAJOR" ]; then
+  need node "Install Node ${NODE_MIN_MAJOR:-LTS}."; need npm "npm ships with Node; reinstall Node."
+  if [ -n "$NODE_MIN_MAJOR" ]; then
+    NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
+    [ "$NODE_MAJOR" -ge "$NODE_MIN_MAJOR" ] || stop "Node $NODE_MAJOR found, but this app needs Node $NODE_MIN_MAJOR+."
+  fi
+fi
+say "Deploying $SITE_DOMAIN ($PRESET) from $APP_ROOT"
 
-# 2. Shared .env -------------------------------------------------------------
+# 2. Shared .env (and storage for Laravel) -------------------------------------
+mkdir -p "$SHARED"; chmod 700 "$SHARED"
 if [ ! -f "$SHARED/.env" ]; then
-  if [ -f "$OLD_ENV" ]; then
-    say "Adopting existing $OLD_ENV"
-    cp "$OLD_ENV" "$SHARED/.env"
-  else
+  if [ -f "$OLD_ENV" ] && [ ! -L "$OLD_ENV" ]; then
+    say "Adopting existing $OLD_ENV"; cp "$OLD_ENV" "$SHARED/.env"
+  elif [ -f .env.example ]; then
     say "First run: creating $SHARED/.env from .env.example"
     cp .env.example "$SHARED/.env"
-    env_set APP_ENV   "$APP_ENV_NAME"     "$SHARED/.env"
-    env_set APP_DEBUG false               "$SHARED/.env"
-    env_set APP_URL   "https://$SITE_DOMAIN"   "$SHARED/.env"
-    if [ -n "$TENANCY_DOMAIN_KEY" ]; then env_set "$TENANCY_DOMAIN_KEY" "$SITE_DOMAIN" "$SHARED/.env"; fi
-    env_set SESSION_SECURE_COOKIE true    "$SHARED/.env"
-    env_set DB_PASSWORD ""                "$SHARED/.env"
+    if [ "$PRESET" = laravel ]; then
+      env_set APP_ENV "$APP_ENV_NAME" "$SHARED/.env"
+      env_set APP_DEBUG false "$SHARED/.env"
+      env_set APP_URL "https://$SITE_DOMAIN" "$SHARED/.env"
+      env_set SESSION_SECURE_COOKIE true "$SHARED/.env"
+      env_set DB_PASSWORD "" "$SHARED/.env"
+    fi
+  else
+    : > "$SHARED/.env"
   fi
-  chmod 600 "$SHARED/.env"
+  for kv in $ENV_DEFAULTS; do
+    env_set "${kv%%=*}" "$(printf '%s' "${kv#*=}" | sed "s/@SITE_DOMAIN@/$SITE_DOMAIN/g")" "$SHARED/.env"
+  done
 fi
+chmod 600 "$SHARED/.env"
 
 missing=""
 for v in $REQUIRED_VARS; do [ -n "$(env_get "$v" "$SHARED/.env" || true)" ] || missing="$missing $v"; done
 [ -z "$missing" ] || stop "Fill in these values in $SHARED/.env, then deploy again:$missing
-   Edit it with:  nano $SHARED/.env   (leave APP_KEY empty - the installer sets it)"
+   Edit it with:  nano $SHARED/.env   (or scripts/web/update-env-db.sh for DB_*)"
 
-# 3. Link shared files into this release -------------------------------------
-rm -rf storage .env
-ln -s "$SHARED/storage" storage
-ln -s "$SHARED/.env"    .env
-
-# 4. Dependencies and assets (every deploy) ----------------------------------
-say "Installing PHP dependencies"
-composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
-say "Building frontend"
-npm ci --no-audit --no-fund
-npm run build
-
-# 5. First install, or a normal migrate --------------------------------------
-if [ ! -f storage/installed ]; then
-  INSTALL_ENV="$SHARED/install.env"
-  if [ "$INSTALL_NEEDS_ADMIN" = 1 ]; then
-    if [ ! -f "$INSTALL_ENV" ]; then
-      printf 'ADMIN_NAME=\nADMIN_EMAIL=\nADMIN_PASSWORD=\n' > "$INSTALL_ENV"; chmod 600 "$INSTALL_ENV"
-    fi
-    ADMIN_NAME=$(env_get ADMIN_NAME "$INSTALL_ENV" || true)
-    ADMIN_EMAIL=$(env_get ADMIN_EMAIL "$INSTALL_ENV" || true)
-    ADMIN_PASSWORD=$(env_get ADMIN_PASSWORD "$INSTALL_ENV" || true)
-    if [ -z "$ADMIN_NAME" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
-      stop "First install needs an administrator. Fill in $INSTALL_ENV, then deploy again.
-     Edit it with:  nano $INSTALL_ENV   (it is deleted after a successful install)"
-    fi
+if [ "$PRESET" = laravel ]; then
+  if [ ! -d "$SHARED/storage" ]; then
+    say "First run: creating shared storage"
+    if [ -d storage ] && [ ! -L storage ]; then cp -a storage "$SHARED/storage"; else mkdir -p "$SHARED/storage"; fi
   fi
-
-  say "First run: $INSTALL_COMMAND"
-  if [ "$INSTALL_NEEDS_ADMIN" = 1 ]; then
-    # shellcheck disable=SC2086  # INSTALL_COMMAND is a command line on purpose
-    $INSTALL_COMMAND --no-interaction \
-      --admin-name="$ADMIN_NAME" --admin-email="$ADMIN_EMAIL" --admin-password="$ADMIN_PASSWORD"
-    shred -u "$INSTALL_ENV" 2>/dev/null || rm -f "$INSTALL_ENV"
-  else
-    # shellcheck disable=SC2086
-    $INSTALL_COMMAND
-  fi
-  if [ "$TENANTS_MIGRATE" = 1 ]; then php artisan tenants:migrate --force; fi
-  touch storage/installed   # no-op if the install command already wrote it
-else
-  say "Running migrations"
-  php artisan migrate --force
-  if [ "$TENANTS_MIGRATE" = 1 ]; then php artisan tenants:migrate --force; fi
+  mkdir -p "$SHARED"/storage/{app/public,framework/{cache/data,sessions,views},logs}
+  [ -L storage ] || rm -rf storage
+  ln -sfn "$SHARED/storage" storage
+  # an install made by older versions of this script (storage/installed) counts as done
+  [ ! -f "$SHARED/storage/installed" ] || touch "$MARKER"
+fi
+[ -L .env ] || rm -f .env
+ln -sfn "$SHARED/.env" .env
+# Ploi's environment editor opens $SITE_ROOT/.env: point it at the shared file
+if [ "$APP_ROOT" != "$SITE_ROOT" ] && { [ ! -e "$SITE_ROOT/.env" ] || [ -L "$SITE_ROOT/.env" ]; }; then
+  ln -sfn "$SHARED/.env" "$SITE_ROOT/.env"
 fi
 
-# 6. Caches, workers, health check -------------------------------------------
-php artisan storage:link --force >/dev/null 2>&1 || true
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-php artisan event:cache
-php artisan queue:restart
-# shellcheck disable=SC2086
-if [ -n "$DOCTOR_COMMAND" ]; then $DOCTOR_COMMAND; fi
+# 3. Dependencies and assets -----------------------------------------------------
+if [ -n "$BUILD_CMDS" ]; then
+  hook "Build" "$BUILD_CMDS"
+else
+  if [ -f composer.json ]; then say "composer install"; composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist; fi
+  if [ -f package.json ]; then
+    say "npm ci + build"; npm ci --no-audit --no-fund
+    if grep -q '"build"' package.json; then npm run build; fi
+  fi
+fi
+
+# 4. First install, or migrations --------------------------------------------------
+if [ "$PRESET" = laravel ] && [ -z "$(env_get APP_KEY "$SHARED/.env" || true)" ]; then
+  say "Generating APP_KEY"; php artisan key:generate --force
+fi
+if [ ! -f "$MARKER" ]; then
+  INSTALL_ENV="$SHARED/install.env"
+  if [ -n "$INSTALL_ENV_KEYS" ]; then
+    if [ ! -f "$INSTALL_ENV" ]; then
+      (umask 077; for k in $INSTALL_ENV_KEYS; do echo "$k="; done > "$INSTALL_ENV")
+    fi
+    empty=""
+    for k in $INSTALL_ENV_KEYS; do
+      val="$(env_get "$k" "$INSTALL_ENV" || true)"; [ -n "$val" ] || empty="$empty $k"; export "$k=$val"
+    done
+    [ -z "$empty" ] || stop "First install needs:$empty. Fill them in $INSTALL_ENV, then deploy again.
+   Edit it with:  nano $INSTALL_ENV   (it is deleted after a successful install)"
+  fi
+  hook "First install" "${FIRST_INSTALL_CMD:-$MIGRATE_CMD}"
+  if [ -n "$INSTALL_ENV_KEYS" ]; then shred -u "$INSTALL_ENV" 2>/dev/null || rm -f "$INSTALL_ENV"; fi
+  touch "$MARKER"
+else
+  hook "Migrations" "$MIGRATE_CMD"
+fi
+hook "Extra migrations" "$EXTRA_MIGRATE_CMDS"
+
+# 5. Caches, workers, hooks, health check -------------------------------------------
+if [ "$PRESET" = laravel ]; then
+  php artisan storage:link --force >/dev/null 2>&1 || true
+  php artisan optimize             # config, routes, views, events
+  php artisan queue:restart        # daemons pick up the new code
+fi
+hook "Post-deploy" "$POST_DEPLOY_CMDS"
+hook "Health check" "$HEALTHCHECK_CMD"
 
 echo "Application deployed"
