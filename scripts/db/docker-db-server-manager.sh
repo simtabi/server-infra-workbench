@@ -908,17 +908,24 @@ take_lock() {
     warn "removing stale lock $DBM_LOCK (pid ${pid:-?} is gone)"; rm -rf "$DBM_LOCK"; mkdir "$DBM_LOCK" || die "cannot take lock $DBM_LOCK"
   fi
   echo "$$" > "$DBM_LOCK/pid"; LOCK_HELD=1
-  trap 'release_lock' EXIT
+  trap 'finish_log; release_lock' EXIT
 }
 release_lock() { [ "$LOCK_HELD" = 1 ] && rm -rf "$DBM_LOCK"; LOCK_HELD=0; }
 
 # logging with secrets redacted (values of *PASSWORD*/*TOKEN*/*SECRET* keys, -p<pw>, long hex, bearer tokens)
 DBM_LOG="${DBM_LOG:-/var/log/docker-db-server-manager.log}"
 redact() { perl -pe 'BEGIN{$|=1} s/((?:PASSWORD|TOKEN|SECRET|PASS)[A-Za-z0-9_]*["\x27]?\s*[=:]\s*["\x27]?)[^\s"\x27]+/$1***/gi; s/(\s-p)(?!\s)\S+/$1***/g; s/(?<!sha256:)\b[0-9a-f]{32,}\b/***/g; s/(Bearer\s+)\S+/$1***/gi'; }
+LOG_PID=""
+finish_log() { # flush the log pipe before exit so the last lines (often the error) are not lost
+  [ -n "$LOG_PID" ] || return 0
+  exec 1>&3 2>&4 3>&- 4>&-; wait "$LOG_PID" 2>/dev/null || true; LOG_PID=""
+}
 start_log() {
   (umask 077; touch "$DBM_LOG") 2>/dev/null || { warn "cannot write $DBM_LOG; logging to stdout only"; return 0; }
   chmod 600 "$DBM_LOG"
+  exec 3>&1 4>&2
   exec > >(redact | tee -a "$DBM_LOG") 2>&1
+  LOG_PID=$!; trap 'finish_log; release_lock' EXIT
   echo "---- $(date '+%F %T %z') $TOOL_NAME $VERSION upgrade on $(hostname) (log: $DBM_LOG)"
 }
 

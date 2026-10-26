@@ -25,6 +25,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The pgvector image build failed: the pgdg repo was switched to https before `ca-certificates` was installed.
 - `doctor` no longer fails where `ss` is missing (falls back to `lsof`, else reports unknown).
 - `install` validates the config first.
+- The run log is flushed before exit, so the final error line is never lost.
 
 ### Changed (1.3.0)
 
