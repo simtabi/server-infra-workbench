@@ -80,7 +80,7 @@ whole app, not only `public/`, so the `public/storage` symlink from
 ## 1. DNS and firewall
 
 1. Create an **A** record (and **AAAA** if the droplet has IPv6) for each
-   domain, e.g. `app.example.com` and `stg.example.com`, pointing at the
+   domain, e.g. `app.example.com` and `staging.example.com`, pointing at the
    web droplet's **public** IP. Check: `dig +short app.example.com`.
 2. Ports **80** and **443** (tcp, plus 443/udp for HTTP/3) must reach the
    droplet. Caddy needs 80 for the ACME HTTP challenge and redirects. If ufw
@@ -203,15 +203,15 @@ Use the same files twice, in two folders with their own `.env`:
 
 | | Staging | Production |
 |---|---|---|
-| Folder | `/home/ploi/containers/stg` | `/home/ploi/containers/app` |
-| `COMPOSE_PROJECT_NAME` | `stg` | `app` |
-| `SITE_DOMAIN` | `stg.example.com` | `app.example.com` |
+| Folder | `/home/ploi/containers/staging` | `/home/ploi/containers/app` |
+| `COMPOSE_PROJECT_NAME` | `staging` | `app` |
+| `SITE_DOMAIN` | `staging.example.com` | `app.example.com` |
 | `ACME_CA` | staging URL while testing, then production | production |
 | App `.env` | `APP_ENV=staging`, staging database | `APP_ENV=production` |
 
 Only one Caddy can own ports 80/443 on a host. If staging and production
 share a droplet, run Caddy once and list both domains, each with its own
-site block and upstream (`php_fastcgi stg-1:9000 ...`), with both
+site block and upstream (`php_fastcgi staging-app-1:9000 ...`), with both
 projects on the shared `web` network (`external: true` in the second project).
 Separate droplets are simpler.
 

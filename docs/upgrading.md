@@ -8,8 +8,7 @@ current version has generic defaults (`PG_USER=app`, `PG_DB=app`,
 without it would point it at an `app` database that doesn't exist and build a
 differently named image.
 
-The myapp server is the worked example:
-[`examples/myapp/db-server.conf`](../examples/myapp/db-server.conf).
+A worked example for a real server is in [`examples/`](../examples/README.md).
 
 ## Rules
 
@@ -75,14 +74,5 @@ flowchart TD
 5. **Check the web side** still matches: `-- env` and compare with the
    web server's `DB_*` (`update-env-db.sh --dry-run` shows the diff without writing).
 
-## myapp (`db-01`)
-
-```sh
-scripts/db/remote-run.sh --host db-01 --expect-ip 10.0.0.5 \
-  --config examples/myapp/db-server.conf -- status, verify
-scripts/db/remote-run.sh --host db-01 --expect-ip 10.0.0.5 \
-  --config examples/myapp/db-server.conf -- install, cron-install, env
-```
-
 `cron-install` rewrites `/etc/cron.d/docker-db-server-backup` so the nightly
-job also reads the config file.
+job also reads the config file, and adds a logrotate entry for the backup log.

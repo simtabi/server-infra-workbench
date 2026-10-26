@@ -52,9 +52,9 @@ Then **redeploy** in Ploi: config is cached at deploy time (`config:cache`).
 
 - PgBouncer must run in **session** mode (it does); transaction mode would
   need emulated prepares and other Laravel changes.
-- Tenant creation (`CREATE DATABASE`, e.g. stancl/tenancy) needs a **direct**
+- Apps that create databases at runtime (`CREATE DATABASE`, e.g. multi-tenant packages) needs a **direct**
   Postgres connection on 5432 and a role with `CREATEDB`. Keep `DB_PORT=5432`
-  unless a separate connection handles tenant provisioning.
+  unless a separate connection handles database provisioning.
 - New databases inherit the extensions from `template1` (postgis, vector, ...).
 
 ## Ploi Docker servers

@@ -60,7 +60,7 @@ ssh -t <db-alias> 'ip -4 addr | grep -q "inet <private-ip>/" || { echo "ABORT: $
 
 | Service | Image | Port (private IP only) | Login |
 |---|---|---|---|
-| PostgreSQL 18.6 + PostGIS 3.6 + pgvector 0.8 | `PG_IMAGE` (default `local/postgres:18-postgis-pgvector`, built from `postgis/postgis:18-3.6`) | `5432` | `<user>` / `PG_PASSWORD` (superuser, so it can create tenant databases) |
+| PostgreSQL 18.6 + PostGIS 3.6 + pgvector 0.8 | `PG_IMAGE` (default `local/postgres:18-postgis-pgvector`, built from `postgis/postgis:18-3.6`) | `5432` | `<user>` / `PG_PASSWORD` (superuser, so it can create databases) |
 | PgBouncer 1.26.1, session mode, scram-sha-256 | `edoburu/pgbouncer:v1.26.1-p0` | `6432` → container `5432` | same as Postgres |
 | MySQL 9.7 | `mysql:9.7` | `3306` | `root` / `MYSQL_ROOT_PASSWORD` |
 | MariaDB 13 | `mariadb:13` | `3307` → container `3306` | `root` / `MARIADB_ROOT_PASSWORD` |
@@ -105,12 +105,15 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 
 | Command | Changes data? | Prompts | What it does |
 |---|---|---|---|
+| `init [file]` | no (writes a config file) | no | starter config for this host: detects the private IP and VPC range; no root needed |
 | `install` | no (keeps `.env` and volumes) | no | Docker, files, build, `up --wait`, ufw, `verify`, summary |
 | `reset` | **destroys** all DB data | `Type RESET` (or `--yes`) | new passwords, rebuild from scratch |
 | `status` | no | no | `docker compose ps` |
-| `verify` | no | no | health, extensions, logins via PgBouncer/Postgres/MySQL/MariaDB |
-| `env` | no | no | prints the `DB_*` lines (contains the password) |
-| `backup` | writes `BACKUP_DIR/<ts>/` | no | three gzip dumps, prunes to `KEEP` |
+| `verify` | no | no | health, extensions, logins for each enabled engine |
+| `doctor` | no | no | host checks: ports only on the private IP, ufw default deny, unattended-upgrades, reboot-required, free disk, age of the newest backup, cron |
+| `env [engine]` | no | no | prints the `DB_*` lines (contains the password) |
+| `create-db <name> [postgres\|mysql\|mariadb]` | creates a database + user | no | random password, prints the `DB_*` lines for the new app |
+| `backup` | writes `BACKUP_DIR/<ts>/` | no | one gzip dump per enabled engine plus MySQL/MariaDB users and grants, prunes to `KEEP`, then `BACKUP_HOOK` |
 | `restore <dir> [postgres\|mysql\|mariadb\|all]` | **overwrites** | `Type RESTORE` (or `--yes`) | loads the dumps |
 | `cron-install` / `cron-remove` | cron file only | no | daily `backup` at `CRON_TIME` |
 | `logs [service]` | no | no | follow the last 200 lines |
@@ -189,6 +192,32 @@ It ends with `ALL CHECKS PASSED`, and any failure stops it with a line like `!! 
 ### `env`
 Prints the `DB_*` lines for `WEB_ENV` (the shared Laravel `.env`; see [web-server-ploi.md](web-server-ploi.md)). This output **contains the Postgres password**.
 
+### `init`
+```sh
+ssh <db-alias> 'bash -s -- init' < scripts/db/docker-db-server-manager.sh > my-db-server.conf
+```
+Prints a config for the host it runs on (`EXPECTED_PRIVATE_IP`, `PRIVATE_IP` and
+`VPC_CIDR` from `PRIVATE_IFACE`, engines, users). It contains no secrets. Edit it,
+then install it with `remote-run.sh --config` or `sudo install -m 600 FILE /etc/docker-db-server-manager.conf`.
+
+### Engines
+Each engine can be switched off in the config: `ENABLE_POSTGRES`, `ENABLE_PGBOUNCER`,
+`ENABLE_MYSQL`, `ENABLE_MARIADB` (`1`/`0`, all `1` by default). A disabled engine gets
+no container, published port, firewall rule, backup or check. PgBouncer needs
+Postgres. Turning an engine off later and running `install` removes its container
+(`--remove-orphans`) but keeps its volume until `uninstall --purge`.
+
+### `create-db <name> [engine]`
+Creates a database and a user of the same name with a random password on one engine
+(default: the first enabled of postgres, mysql, mariadb) and prints the `DB_*` lines.
+The name must match `^[a-z_][a-z0-9_]{0,62}$`; an existing user is refused, so
+re-running is safe. Postgres users made this way connect **directly on 5432**: the
+PgBouncer userlist only holds `PG_USER`.
+
+### `doctor`
+Read-only health check of the host (run as root for the ufw part). Every line is
+`ok`, `WARN` or `FAIL`; exit code 1 on any `FAIL`.
+
 ### `backup`
 
 ```mermaid
@@ -205,7 +234,15 @@ flowchart LR
 KEEP=14 BACKUP_DIR=/mnt/volume/db ./docker-db-server-manager.sh backup
 ```
 It writes three gzip dumps to `$BACKUP_DIR/<ts>/` (chmod 600) and runs `gzip -t` on each one. It keeps the newest `$KEEP` backups (default 7) and prunes the rest.
-- **Postgres** uses `pg_dumpall --clean --if-exists`, which covers every database (including tenants) and every role.
+- Writes to `BACKUP_DIR/.partial-<ts>` and renames it to `<ts>` only when every
+  dump succeeded, so a half-written backup is never counted or restored. Refuses to
+  start with less than `MIN_FREE_MB` free. `BACKUP_DIR` is `chmod 700`.
+- MySQL and MariaDB users and grants go to `grants-<engine>.sql.gz` (dumps of the
+  `mysql` system schema are not portable between versions).
+- `BACKUP_HOOK` (optional) runs after a good backup with the directory as `$1`, for
+  an offsite copy (rclone, `aws s3`, `restic`...). A hook failure fails the backup run.
+- `cron-install` also writes `/etc/logrotate.d/docker-db-server-backup` (weekly, 8 kept).
+- **Postgres** uses `pg_dumpall --clean --if-exists`, which covers every database (including ones the app creates itself) and every role.
 - **MySQL and MariaDB** dump only user databases. The `mysql`, `sys` and `*_schema` system schemas are left out on purpose, so a restore never overwrites root or the passwords in `.env`. Database users you create yourself in MySQL or MariaDB are therefore **not** backed up, so recreate them after a restore.
 
 When you run it with `sudo`, put the variables after sudo: `sudo KEEP=14 ./docker-db-server-manager.sh backup`.
@@ -237,7 +274,7 @@ Prints the detailed help with examples.
 |---|---|---|
 | `PRIVATE_IP` | the value in `.env`, else the IPv4 address on `PRIVATE_IFACE` (`eth1`); required otherwise | the address all ports bind to |
 | `EXPECTED_PRIVATE_IP` | unset | abort unless this IP is on the host |
-| `VPC_CIDR` | `10.0.0.0/8` (set your VPC range, e.g. `10.0.0.0/20`) | source range for the ufw rules |
+| `VPC_CIDR` | `10.0.0.0/8` (set your VPC range, e.g. `10.0.0.0/20`; `init` prints it) | source range for the ufw rules |
 | `DB_DIR` | `/opt/db` | install folder |
 | `BACKUP_DIR` | `$DB_DIR/backups` | where backups go |
 | `KEEP` | `7` | backups kept after each `backup` |
@@ -246,7 +283,7 @@ Prints the detailed help with examples.
 Also configurable: `PG_USER`/`PG_DB` (`app`), `PG_IMAGE`, `PG_BASE_IMAGE`, `PGVECTOR_PKG`, `PG_MAX_CONNECTIONS` (200), `PGBOUNCER_IMAGE`, `PGBOUNCER_MAX_CLIENT_CONN` (500), `PGBOUNCER_POOL_SIZE` (20), `MYSQL_IMAGE`, `MARIADB_IMAGE`, the four `*_PORT`s, `CRON_TIME`, `CRON_FILE`, `CRON_LOG`, `WEB_ENV`. Put them in `/etc/docker-db-server-manager.conf` (template: [`config/db-server.env.example`](../config/db-server.env.example)), or pass `--config FILE`. Environment variables beat the file. `shared_preload_libraries=pg_stat_statements` is fixed.
 
 ## 6. PostgreSQL extensions
-These are created in `<db>` **and in `template1`**, so every new tenant database gets them automatically:
+These are created in `<db>` **and in `template1`**, so every database created later gets them automatically:
 
 `vector` 0.8.7, `postgis` 3.6.4, `pg_trgm` 1.6, `pgcrypto` 1.4, `uuid-ossp` 1.1, `pg_stat_statements` 1.12 (plus `plpgsql`).
 
@@ -265,7 +302,7 @@ Then **redeploy in Ploi**, because the config is cached at deploy time. For MySQ
 
 ## 8. PgBouncer notes
 - It runs in session mode, so Laravel and prepared statements work unchanged. To use it, set `DB_PORT=6432`.
-- It **must** stay in session mode for Laravel. **Creating or dropping databases** (tenant provisioning) needs a direct Postgres connection on 5432 and a role with `CREATEDB` (the bootstrap user is a superuser). Keep the app on 5432 until you've tested it on 6432.
+- It **must** stay in session mode for Laravel. **Creating or dropping databases** (e.g. a multi-database app provisioning one) needs a direct Postgres connection on 5432 and a role with `CREATEDB` (the bootstrap user is a superuser). Keep the app on 5432 until you've tested it on 6432.
 - The edoburu image writes `"<user>" "<plain password>"` to `userlist.txt`, which scram-sha-256 needs so it can log in to Postgres on the client's behalf.
 - You can query the admin console with `psql "host=<PRIVATE_IP> port=6432 user=<user> dbname=pgbouncer" -c "show pools;"`. Its healthcheck logs a login every 5 seconds; that is expected, not an attack.
 - Transaction mode would need extra Laravel settings (emulated prepares) and isn't configured.
@@ -289,7 +326,7 @@ Then **redeploy in Ploi**, because the config is cached at deploy time. For MySQ
 | apt `500 Internal Server Error` during the build | A mirror had a temporary problem (apt already retries 5 times). Run the command again. |
 | PgBouncer `client_login_timeout (server down)` | Check `logs pgbouncer` and `logs postgres`. Make sure the password in `.env` matches (after a manual change, run `reset` or recreate the pgbouncer container). |
 | `refusing without a terminal` | Add `--yes` when running it from scripts or cron. |
-| Extensions missing in a new tenant database | That database was created from a template other than `template1`. Use `CREATE DATABASE x` without `TEMPLATE`. |
+| Extensions missing in a newly created database | That database was created from a template other than `template1`. Use `CREATE DATABASE x` without `TEMPLATE`. |
 | Web server can't connect | Check `nc -zv <PRIVATE_IP> 5432` from the web server, `ufw status`, and that both droplets are in the same VPC. |
 | Ploi says ".env file not found" | Run `ln -sfn /home/ploi/<site>-shared/.env /home/ploi/<site>/.env` on the web server. |
 

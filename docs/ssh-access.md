@@ -36,8 +36,8 @@ sequenceDiagram
 
 ```sh
 sshmgr host apply <profile> <alias> <public-ip> ploi <role> --reconcile
-# web: sshmgr host apply myproj prd-web-00 203.0.113.10 ploi web --reconcile
-# db:  sshmgr host apply myproj prd-db-00  203.0.113.20 ploi db  --reconcile
+# web: sshmgr host apply myproject prd-web-00 203.0.113.10 ploi web --reconcile
+# db:  sshmgr host apply myproject prd-db-00  203.0.113.20 ploi db  --reconcile
 ```
 
 This mints an ed25519 key for the host and writes the `Host <alias>` block.

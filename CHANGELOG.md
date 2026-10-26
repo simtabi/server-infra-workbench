@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (project-neutral core)
+
+- The core scripts, configs and docs no longer assume any one project. Project names live only in
+  `examples/`; `make test` fails if one appears in a core file.
+- `ploi-deploy.sh` rewritten: `PRESET=laravel|generic`; optional hooks `FIRST_INSTALL_CMD`, `INSTALL_ENV_KEYS`,
+  `MIGRATE_CMD`, `EXTRA_MIGRATE_CMDS`, `BUILD_CMDS`, `POST_DEPLOY_CMDS`, `HEALTHCHECK_CMD` (all empty by default);
+  `ENV_DEFAULTS` replaces `TENANCY_DOMAIN_KEY`. Removed `INSTALL_COMMAND`, `INSTALL_NEEDS_ADMIN`, `TENANTS_MIGRATE`,
+  `DOCTOR_COMMAND` (see `examples/myapp/ploi-deploy.settings.sh` for the mapping). Works on in-place sites too,
+  links `<site>/.env` to the shared file for Ploi's editor, enforces `chmod 600`, composer/npm steps only when
+  `composer.json`/`package.json` exist, first-install marker in the shared dir (old `storage/installed` honoured).
+- Defaults: `APP_SUBDIR=.`, `PHP_MIN=8.3.0`, no Node version check unless `NODE_MIN_MAJOR` is set.
+
+### Added (manager 1.1.0)
+
+- `ENABLE_POSTGRES/PGBOUNCER/MYSQL/MARIADB` toggles; `PG_EXTENSIONS`; `init`, `create-db`, `doctor`, `env [engine]`.
+- Backups: free-space check (`MIN_FREE_MB`), atomic `.partial` directory, `chmod 700`, MySQL/MariaDB users and grants,
+  `BACKUP_HOOK` for offsite copies, logrotate entry from `cron-install`.
+- `scripts/web/check-db-reach.sh`; `update-env-db.sh` keeps only `KEEP_BACKUPS` `.env.bak.*` copies (umask 077).
+- Docs: getting started ("new project in 10 minutes"), security and operations (Docker bypasses ufw, updates,
+  secrets on disk, logs, monitoring), status (done vs open); `examples/generic-laravel/`.
+- Tests: engine toggles, `init`, `create-db` name check, `.bak` pruning, deploy sandbox, project-neutral core.
+
 ### Added (docs and tooling)
 
 - `docs/web-server-caddy.md`: Caddy on a Ploi Docker server, end to end (DNS, ports/ufw, files in
