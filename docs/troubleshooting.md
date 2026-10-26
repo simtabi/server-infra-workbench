@@ -37,6 +37,7 @@ Real problems hit while building the reference deployment, and the fix for each.
 | Termius: `Authentication failed (publickey)` | Termius offered the right key but it is not in the server's `authorized_keys` for that user | Add the `.pub` key in Ploi for `ploi` ([ssh-access.md](ssh-access.md)) |
 | `scp: stat local "/home/ploi/Downloads/..."`, `Could not resolve hostname <alias>`, or `ploi@<host>: Permission denied (publickey)` right after a login banner | Workstation commands run while logged into the server | Exit to the workstation, or use `scripts/db/remote-run.sh` from there |
 | `sudo` rejects the password | Wrong password (DB/Ploi-login password, or stray whitespace from copy-paste) | Use the sudo password from Ploi's provisioning email, type it, or `passwd ploi` from the DO web console |
-| Login banner: `*** System restart required ***` | Kernel/security updates pending | `sudo reboot` before running the setup |
+| Login banner: `*** System restart required ***` | Kernel/security updates pending | Full upgrade and reboot ([security.md](security.md#updates-and-reboots)) before running the setup |
+| apt: `N not upgraded` / `no longer required` | Held-back updates and unused dependencies | `sudo apt-get update && sudo apt-get full-upgrade -y && sudo apt-get autoremove --purge -y && sudo apt-get autoclean` |
 | A `10.10.x.x` address in the banner instead of the VPC IP | DO's anchor IP on `eth0` | Normal. The VPC IP is on `eth1` |
 | Caddy: certificate not issued, 502, `File not found.` | DNS/ports, container network, or `php_fastcgi` root | See [web-server-caddy.md](web-server-caddy.md#troubleshooting) |

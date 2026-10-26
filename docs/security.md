@@ -27,6 +27,17 @@ systemctl is-active unattended-upgrades
 ls /var/run/reboot-required 2>/dev/null && cat /var/run/reboot-required.pkgs   # reboot when present
 ```
 
+Bring a server fully up to date (installs held-back packages, removes unused
+dependencies, cleans the package cache, then reboots):
+
+```sh
+sudo apt-get update && sudo apt-get full-upgrade -y && sudo apt-get autoremove --purge -y && sudo apt-get autoclean && sudo reboot
+```
+
+`full-upgrade` installs the updates plain `upgrade` keeps back ("N not upgraded"),
+and `autoremove` drops the "automatically installed and no longer required"
+packages apt lists. The reboot drops your SSH session; reconnect after a minute.
+
 Reboot the web server in a quiet window; on the DB server the containers come
 back by themselves (`restart: unless-stopped`), check with `verify` afterwards.
 fail2ban (Ploi installs it) protects SSH: `sudo fail2ban-client status sshd`.
