@@ -1,0 +1,19 @@
+# secrets / runtime state: NEVER commit.
+.env
+*.env
+!*.env.example
+*.conf.local
+*.bak.*
+db-env-backup-*
+backups/
+*.sql
+*.sql.gz
+
+# os / editor / tooling
+.DS_Store
+*.swp
+.idea/
+.vscode/
+.claude/
+__pycache__/
+*.pyc
