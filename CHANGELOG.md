@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (docs and tooling)
+
+- `docs/web-server-caddy.md`: Caddy on a Ploi Docker server, end to end (DNS, ports/ufw, files in
+  `/home/ploi/containers/<name>`, Ploi panel vs scp, Caddyfile, validate, reload, logs, staging vs prod, troubleshooting).
+- `compose/caddy` rewritten as a Laravel stack: caddy + php-fpm `app` + `queue` + `scheduler`, `conf/` folder mount,
+  persistent `caddy_data`, `php/Dockerfile`, `ACME_CA` switch, `variants/` (reverse proxy, whoami smoke test under
+  the `smoke` profile).
+- Mermaid diagrams: architecture, request flow, Caddy stack, deploy pipeline, DB command lifecycle, backup/restore,
+  upgrade procedure, SSH key flow, "which machine am I on?". Port, settings and command reference tables.
+- `docs/README.md` index, `docs/upgrading.md` (moving an existing server to this version, myapp commands).
+- `tests/check-links.py` + `make links`; `tests/render-mermaid.sh` + `make mermaid`; `make compose-check` now also runs
+  `caddy validate` on every Caddyfile; `make ci` = lint + smoke + links + compose-check.
+
+### Fixed
+
+- Deploy script required `TENANCY_CENTRAL_DOMAINS` for every app; `REQUIRED_VARS` and `TENANCY_DOMAIN_KEY` are now
+  settings (the myapp example sets both). `env_set` escapes `|`, `&` and `\` in values.
+- myapp example ran `reset --yes` against a server with data; now `status, verify` then `install`.
+- The Caddy example mounted the Caddyfile as a single file (edits not seen after reload) and proxied to whoami only.
+- Config example pinned `BACKUP_DIR`/`WEB_ENV` values that disagreed with derived defaults.
+- Docs: `verify` description (direct login is via `127.0.0.1:5432`), unverifiable Ploi menu paths reworded, daemon
+  directory wording, DB-role note for sshmgr.
+
 ### Added
 
 - **Docker DB Server Setup Manager** (`scripts/db/docker-db-server-manager.sh`), imported from the version verified on

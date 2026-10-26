@@ -19,20 +19,24 @@ in [`examples/`](examples).
 | [`scripts/db/remote-run.sh`](scripts/db/remote-run.sh) | Run the manager on the DB server from your workstation, with a wrong-server guard |
 | [`scripts/web/update-env-db.sh`](scripts/web/update-env-db.sh) | Back up a shared Laravel `.env` and replace its `DB_*` keys idempotently (password masked in output); local or `--remote` |
 | [`scripts/deploy/ploi-deploy.sh`](scripts/deploy/ploi-deploy.sh) | Ploi zero-downtime deploy script for Laravel (preflight, shared storage/.env, first-run install, migrations, caches, queue restart) |
-| [`compose/caddy`](compose/caddy) | Caddy reverse proxy compose example for a Ploi Docker web server |
+| [`compose/caddy`](compose/caddy) | Laravel (php-fpm, queue, scheduler) behind Caddy with automatic HTTPS, for a Ploi Docker web server; reverse-proxy and smoke-test variants |
 | [`config/`](config) | `.env.example`-style templates for every script |
 | [`tools/ploi-do-plan-finder`](tools/ploi-do-plan-finder) | List droplet plans/regions available through Ploi for your DO credentials |
 | [`examples/myapp`](examples/myapp) | The reference deployment (no secrets) |
 
 ## Docs
 
-1. [Architecture](docs/architecture.md): droplets, VPC, `eth0` vs `eth1`, where things live
-2. [DB server](docs/db-server.md): runbook and full manager reference
-3. [Web server (Ploi)](docs/web-server-ploi.md): shared `.env`, `DB_*` updates, Laravel/PgBouncer notes, Ploi Docker servers
-4. [Deploy script](docs/deploy.md), including the Ploi placeholder caveat
-5. [Daemons](docs/daemons.md): queue worker and scheduler in Supervisor
-6. [SSH access](docs/ssh-access.md): sshmgr keys, Ploi, sudo, Termius
-7. [Troubleshooting](docs/troubleshooting.md): real failures and fixes
+Start at the [docs index](docs/README.md) (diagrams and command reference included).
+
+1. [Architecture](docs/architecture.md): droplets, VPC, `eth0` vs `eth1`, ports, where things live
+2. [SSH access](docs/ssh-access.md): sshmgr keys, Ploi, sudo, Termius
+3. [DB server](docs/db-server.md): runbook and full manager reference
+4. [Upgrading an existing DB server](docs/upgrading.md): install the config first, no `reset`
+5. [Web server (Ploi, native)](docs/web-server-ploi.md): shared `.env`, `DB_*` updates, Laravel/PgBouncer notes
+6. [Web server with Caddy (Ploi Docker)](docs/web-server-caddy.md): install, Caddyfile, DNS, HTTPS, staging/prod
+7. [Deploy script](docs/deploy.md), including the Ploi placeholder caveat
+8. [Daemons](docs/daemons.md): queue worker and scheduler in Supervisor
+9. [Troubleshooting](docs/troubleshooting.md): real failures and fixes
 
 ## Quick start
 
@@ -48,7 +52,7 @@ cp config/db-server.env.example my-db-server.conf     # set EXPECTED_PRIVATE_IP,
 scripts/db/remote-run.sh --host prd-db-00 --expect-ip 10.0.0.5 \
   --config my-db-server.conf -- install, cron-install, env
 
-# 3. Put the DB_* lines on the web server, then redeploy in Ploi
+# 3. Save the printed DB_* lines as db.env (never commit it), put them on the web server, redeploy
 scripts/web/update-env-db.sh --remote prd-web-00 --site example.com --from db.env
 ```
 
@@ -58,11 +62,13 @@ scripts/web/update-env-db.sh --remote prd-web-00 --site example.com --from db.en
 make help     # targets
 make lint     # shellcheck + bash -n on every script
 make test     # offline smoke tests
-make ci       # what CI runs
+make links    # check relative links and #anchors in all Markdown
+make compose-check  # docker compose config + caddy validate
+make ci       # all of the above (what CI runs)
 ```
 
-Requires bash 4+, [shellcheck](https://www.shellcheck.net/) and (for the
-compose checks) docker.
+Requires bash 4+ (`update-env-db.sh` also runs on macOS bash 3.2), python3,
+[shellcheck](https://www.shellcheck.net/) and (for the compose checks) docker.
 
 ## License
 
