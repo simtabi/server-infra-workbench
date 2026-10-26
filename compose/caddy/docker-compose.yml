@@ -1,0 +1,41 @@
+# Caddy reverse proxy for a Ploi *Docker* web server.
+# Ploi > Server > Applications deploys compose apps under
+# /home/ploi/containers/<name>; put this file (and Caddyfile) there, or run it
+# by hand with `docker compose up -d`. Caddy gets TLS certificates
+# automatically, so point the domain's DNS at the server first and keep ports
+# 80/443 free (no nginx on a Docker-type server).
+#
+# Do NOT deploy docker-db-server-manager's stack as a Ploi application: it owns
+# its own compose project in /opt/db and the two would fight over it.
+services:
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in .env}
+      UPSTREAM: ${UPSTREAM:-app:8080}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web]
+
+  # Example upstream. Replace with your app image, or delete this service and
+  # join your app's network to `web` instead.
+  app:
+    image: ${APP_IMAGE:-traefik/whoami}
+    restart: unless-stopped
+    environment:
+      WHOAMI_PORT_NUMBER: "8080"
+    networks: [web]
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+
+networks:
+  web: {}
