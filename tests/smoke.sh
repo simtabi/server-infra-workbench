@@ -43,9 +43,9 @@ ls "$T"/app.env.bak.* >/dev/null && ok "backup written" || fail "backup written"
 if "$W" --env "$T/app.env" --set APP_KEY=x 2>/dev/null; then fail "non-DB key"; else ok "non-DB_* keys refused"; fi
 
 # --- remote-run -------------------------------------------------------------
-"$R" --dry-run --host h --expect-ip 10.0.0.5 -- verify, env | grep -q 'sudo /root/docker-db-server-manager.sh env' \
+"$R" --dry-run --host h --expect-ip 10.0.0.5 -- verify, env | grep 'sudo /root/docker-db-server-manager.sh env' >/dev/null \
   && ok "remote-run builds the command list" || fail "remote-run builds the command list"
-"$R" --dry-run --host h --expect-ip 10.0.0.5 | grep -qF "inet 10\\.0\\.0\\.5/" && ok "remote-run includes IP guard" || fail "remote-run includes IP guard"
+"$R" --dry-run --host h --expect-ip 10.0.0.5 | grep -F "inet 10\\.0\\.0\\.5/" >/dev/null && ok "remote-run includes IP guard" || fail "remote-run includes IP guard"
 
 # --- deploy script: no Ploi placeholder collisions ---------------------------
 if grep -nE '\$\{(BRANCH|SITE|RELEASE|DOMAIN|REPOSITORY|REPOSITORY_NAME|PROJECT_ROOT|TIME)\}' "$D"; then
