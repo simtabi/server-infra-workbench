@@ -1,0 +1,11 @@
+# For an app container that speaks HTTP itself (Octane/FrankenPHP, Node, ...).
+# cp variants/reverse-proxy.Caddyfile conf/Caddyfile && docker compose exec -w /etc/caddy caddy caddy reload
+{
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+}
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy {$UPSTREAM:app:8000}
+	log
+}

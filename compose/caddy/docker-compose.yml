@@ -1,36 +1,65 @@
-# Caddy reverse proxy for a Ploi *Docker* web server.
-# Ploi > Server > Applications deploys compose apps under
-# /home/ploi/containers/<name>; put this file (and Caddyfile) there, or run it
-# by hand with `docker compose up -d`. Caddy gets TLS certificates
-# automatically, so point the domain's DNS at the server first and keep ports
-# 80/443 free (no nginx on a Docker-type server).
+# Caddy in front of a Laravel app (php-fpm) on a Ploi *Docker* server.
+# Full guide: docs/web-server-caddy.md
+#
+#   conf/Caddyfile            active config (mounted as the /etc/caddy folder,
+#                             not as a single file, so `caddy reload` sees edits)
+#   variants/*.Caddyfile      alternatives: reverse-proxy, smoke-test
+#   php/Dockerfile            php-fpm image with the extensions Laravel + Postgres need
+#   ${APP_PATH}               the Laravel code (contains public/index.php and .env)
+#
+# Caddy obtains and renews TLS certificates by itself; it needs the domain's
+# DNS pointing here and ports 80 + 443 reachable. Keep the caddy_data volume:
+# it holds the certificates and ACME account keys.
 #
 # Do NOT deploy docker-db-server-manager's stack as a Ploi application: it owns
-# its own compose project in /opt/db and the two would fight over it.
+# its compose project in /opt/db on the DB server.
+name: ${COMPOSE_PROJECT_NAME:-web}
+
+x-app: &app
+  build: ./php
+  image: ${APP_IMAGE:-local/laravel-fpm:8.5}
+  restart: unless-stopped
+  working_dir: /var/www/html
+  volumes:
+    - ${APP_PATH:-./app}:/var/www/html
+  networks: [web]
+
 services:
   caddy:
-    image: ${CADDY_IMAGE:-caddy:2}
+    image: ${CADDY_IMAGE:-caddy:2.11}
     restart: unless-stopped
+    cap_add: [NET_ADMIN]          # optional: bigger UDP buffers for HTTP/3
     ports:
       - "80:80"
       - "443:443"
       - "443:443/udp"
     environment:
       SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in .env}
-      UPSTREAM: ${UPSTREAM:-app:8080}
+      ACME_CA: ${ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
+      - ./conf:/etc/caddy:ro
+      - ${APP_PATH:-./app}:/srv/app:ro                  # whole app, so public/storage symlink resolves
+      - caddy_data:/data                                # certificates: keep!
       - caddy_config:/config
+    depends_on: [app]
     networks: [web]
 
-  # Example upstream. Replace with your app image, or delete this service and
-  # join your app's network to `web` instead.
-  app:
-    image: ${APP_IMAGE:-traefik/whoami}
-    restart: unless-stopped
-    environment:
-      WHOAMI_PORT_NUMBER: "8080"
+  app:                            # php-fpm on :9000, reached as app:9000
+    <<: *app
+
+  queue:                          # replaces the Ploi queue daemon on a Docker server
+    <<: *app
+    command: ["php", "artisan", "queue:work"]
+    depends_on: [app]
+
+  scheduler:                      # replaces the Ploi scheduler daemon
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+    depends_on: [app]
+
+  whoami:                         # optional smoke test: docker compose --profile smoke up -d
+    image: traefik/whoami
+    profiles: [smoke]
     networks: [web]
 
 volumes:
@@ -38,4 +67,5 @@ volumes:
   caddy_config: {}
 
 networks:
-  web: {}
+  web:
+    name: ${PROXY_NETWORK:-web}   # other compose projects can join it as "external"

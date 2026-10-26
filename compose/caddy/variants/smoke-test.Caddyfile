@@ -1,0 +1,9 @@
+# Proves DNS, ports and HTTPS before the app exists:
+# cp variants/smoke-test.Caddyfile conf/Caddyfile && docker compose --profile smoke up -d caddy whoami
+{
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+}
+
+{$SITE_DOMAIN} {
+	reverse_proxy whoami:80
+}

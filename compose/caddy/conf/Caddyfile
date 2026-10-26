@@ -1,0 +1,15 @@
+# Laravel through php-fpm. SITE_DOMAIN can be one domain or a comma-separated list.
+{
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+}
+
+{$SITE_DOMAIN} {
+	# Caddy's own copy of public/ (static files); php-fpm sees the code at /var/www/html
+	root * /srv/app/public
+	encode zstd gzip
+	php_fastcgi app:9000 {
+		root /var/www/html/public
+	}
+	file_server
+	log
+}
