@@ -42,7 +42,8 @@ say()  { echo "==> $*"; }
 stop() { echo; echo "!! $*"; exit 1; }
 env_get() { grep -E "^$1=" "$2" | tail -1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/'; }
 env_set() { # env_set KEY VALUE FILE  (replace or append)
-  if grep -qE "^$1=" "$3"; then sed -i "s|^$1=.*|$1=$2|" "$3"; else echo "$1=$2" >> "$3"; fi
+  local v; v=$(printf '%s' "$2" | sed 's/[&|\\]/\\&/g')   # escape sed specials in the value
+  if grep -qE "^$1=" "$3"; then sed -i "s|^$1=.*|$1=$v|" "$3"; else echo "$1=$2" >> "$3"; fi
 }
 
 # 0. Preflight: tools this deploy needs on the host ---------------------------
