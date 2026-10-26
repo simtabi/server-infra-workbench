@@ -24,7 +24,8 @@
 #    --from FILE       KEY=VALUE file with DB_* values ("-" = stdin)
 #    --set KEY=VALUE   set one key (repeatable)
 #    --remote ALIAS    run on ALIAS over ssh instead of locally
-#    --no-backup       skip the .bak copy
+#    --no-backup       skip the .bak copy (backups are chmod 600; the newest
+#                      KEEP_BACKUPS, default 5, are kept)
 #    --dry-run         print what would be written, change nothing
 #    -h, --help
 # =============================================================================
@@ -104,7 +105,10 @@ fi
 [ -f "$ENV_FILE" ] || die "$ENV_FILE does not exist (deploy once in Ploi first, or create it)"
 if [ "$BACKUP" = 1 ]; then
   bak="$ENV_FILE.bak.$(date +%Y%m%d%H%M%S)"
-  cp -p "$ENV_FILE" "$bak"; chmod 600 "$bak"; echo "backup: $bak"
+  (umask 077; cp "$ENV_FILE" "$bak"); chmod 600 "$bak"; echo "backup: $bak"
+  # keep the newest KEEP_BACKUPS copies (they contain secrets)
+  # shellcheck disable=SC2012  # timestamped names, no odd characters
+  ls -1 "$ENV_FILE".bak.* 2>/dev/null | sort -r | tail -n +"$((${KEEP_BACKUPS:-5} + 1))" | while read -r old; do rm -f "$old"; echo "pruned: $old"; done
 fi
 
 pattern="^($(IFS='|'; echo "${ORDER[*]}"))="
