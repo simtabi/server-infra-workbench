@@ -31,6 +31,23 @@ grep -q '^\\c d1$' "$T/db/postgres/init/10-extensions.sql" && ok "init SQL uses 
 grep -q '^MYSQL_PORT=13306$' "$T/db/stack.env" && ok "stack.env carries settings" || fail "stack.env carries settings"
 grep -q '${PRIVATE_IP}:${MYSQL_PORT}:3306' "$T/db/docker-compose.yml" && ok "compose uses port variables" || fail "compose uses port variables"
 
+for combo in "1 0 0 0" "0 0 1 1"; do
+  read -r ep eb em ea <<<"$combo"; d="$T/e$ep$eb$em$ea"; mkdir -p "$d"
+  PRIVATE_IP=10.0.0.5 DB_DIR="$d" ENABLE_POSTGRES=$ep ENABLE_PGBOUNCER=$eb ENABLE_MYSQL=$em ENABLE_MARIADB=$ea \
+    bash -c 'source <(sed "/^# ---- main/,\$d" "$1"); dc() { :; }; write_files >/dev/null; enabled_ports | tr "\n" " "' _ "$M" > "$d/ports"
+done
+grep -q '^  postgres:' "$T/e1000/docker-compose.yml" && ! grep -qE '^  (mysql|mariadb|pgbouncer):' "$T/e1000/docker-compose.yml" \
+  && [ "$(cat "$T/e1000/ports")" = "5432 " ] && ok "engine toggles: postgres only" || fail "engine toggles: postgres only"
+! grep -qE '^  (postgres|pgbouncer):' "$T/e0011/docker-compose.yml" && grep -q '^  mariadb:' "$T/e0011/docker-compose.yml" \
+  && [ "$(cat "$T/e0011/ports")" = "3306 3307 " ] && ok "engine toggles: mysql + mariadb" || fail "engine toggles: mysql + mariadb"
+if ENABLE_POSTGRES=0 PRIVATE_IP=10.0.0.5 "$M" status 2>"$T/err"; then fail "pgbouncer without postgres"; fi
+grep -q 'needs ENABLE_POSTGRES=1' "$T/err" && ok "pgbouncer without postgres rejected" || fail "pgbouncer without postgres rejected"
+PG_EXTENSIONS="vector pg_trgm" PRIVATE_IP=10.0.0.5 DB_DIR="$T/x" bash -c 'mkdir -p "$2"; source <(sed "/^# ---- main/,\$d" "$1"); dc() { :; }; write_files >/dev/null' _ "$M" "$T/x"
+[ "$(grep -c 'CREATE EXTENSION' "$T/x/postgres/init/10-extensions.sql")" = 4 ] && ok "PG_EXTENSIONS drives the init SQL" || fail "PG_EXTENSIONS drives the init SQL"
+"$M" init "$T/init.conf" >/dev/null 2>&1; grep -q '^ENABLE_MYSQL=1$' "$T/init.conf" && ! grep -qi password "$T/init.conf" \
+  && ok "init writes a config without secrets" || fail "init writes a config without secrets"
+if PRIVATE_IP=10.0.0.5 "$M" create-db 'bad;name' 2>/dev/null; then fail "create-db name"; else ok "create-db rejects unsafe names"; fi
+
 # --- update-env-db ----------------------------------------------------------
 printf 'APP_NAME=x\nDB_HOST=old\nDB_SSLMODE=prefer\nDB_PASSWORD=old\n' > "$T/app.env"
 printf '# from env\nDB_HOST=10.0.0.5\nDB_PASSWORD=s3cret\n' > "$T/v.env"
@@ -41,6 +58,15 @@ grep -q '^DB_SSLMODE=prefer$' "$T/app.env" && grep -q '^APP_NAME=x$' "$T/app.env
 grep -q 'DB_PASSWORD=\*\*\*' "$T/out" && ! grep -q s3cret "$T/out" && ok "password masked in output" || fail "password masked in output"
 ls "$T"/app.env.bak.* >/dev/null && ok "backup written" || fail "backup written"
 if "$W" --env "$T/app.env" --set APP_KEY=x 2>/dev/null; then fail "non-DB key"; else ok "non-DB_* keys refused"; fi
+for i in 1 2 3 4 5 6 7; do touch "$T/app.env.bak.2026010100000$i"; done
+KEEP_BACKUPS=3 "$W" --env "$T/app.env" --set DB_PORT=6432 >/dev/null
+baks=("$T"/app.env.bak.*); newest="${baks[${#baks[@]}-1]}"
+[ "${#baks[@]}" = 3 ] && ok ".env backups pruned to KEEP_BACKUPS" || fail ".env backups pruned"
+[ "$(stat -c %a "$newest" 2>/dev/null || stat -f %Lp "$newest")" = 600 ] \
+  && ok ".env backup is chmod 600" || fail ".env backup is chmod 600"
+
+# --- check-db-reach --------------------------------------------------------------
+if scripts/web/check-db-reach.sh 127.0.0.1 9 >/dev/null 2>&1; then fail "closed port reported open"; else ok "check-db-reach reports a closed port"; fi
 
 # --- remote-run -------------------------------------------------------------
 "$R" --dry-run --host h --expect-ip 10.0.0.5 -- verify, env | grep 'sudo /root/docker-db-server-manager.sh env' >/dev/null \
@@ -52,6 +78,16 @@ if grep -nE '\$\{(BRANCH|SITE|RELEASE|DOMAIN|REPOSITORY|REPOSITORY_NAME|PROJECT_
   fail "deploy script uses a Ploi placeholder name as a shell variable"
 fi
 ok "deploy script avoids Ploi placeholder names"
+
+# --- deploy script sandbox (generic preset, hooks, first-install marker) -----
+bash tests/deploy-sandbox.sh | grep -qE 'deploy sandbox (ok|skipped)' && ok "deploy sandbox" || fail "deploy sandbox"
+
+# --- core stays project-neutral -------------------------------------------------
+if git ls-files >/dev/null 2>&1; then core="$(git ls-files | grep -vE '^(examples/|CHANGELOG\.md$|tests/smoke\.sh$)')"
+else core="$(find . -type f -not -path './.git/*' -not -path './examples/*' -not -name CHANGELOG.md -not -name smoke.sh)"; fi
+# shellcheck disable=SC2086
+if grep -il 'myapp' $core; then fail "project name in core files (only examples/ may name a project)"
+else ok "core is project-neutral (no project names outside examples/)"; fi
 
 # --- no secrets committed -----------------------------------------------------
 if git ls-files >/dev/null 2>&1; then files="$(git ls-files)"; else files="$(find . -type f -not -path './.git/*')"; fi
