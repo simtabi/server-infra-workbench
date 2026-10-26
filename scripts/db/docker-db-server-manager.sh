@@ -25,6 +25,8 @@
 #
 #  COMMANDS
 #    init [file]        write a starter config for this host (detects IP and VPC)
+#    upgrade|apply      guided safe update: preflight, diff, backup, savepoint, apply,
+#                       verify, auto-rollback (live servers: use this, not install)
 #    install            first-time setup; keeps an existing .env and data
 #    reset              DESTROY everything and start over with new passwords
 #    status             containers, health, ports
@@ -81,7 +83,7 @@ set -euo pipefail
 trap 'echo "!! ERROR: line $LINENO: \"$BASH_COMMAND\" failed" >&2' ERR
 
 TOOL_NAME="Docker DB Server Setup Manager"
-VERSION="1.2.0"
+VERSION="1.3.0"
 
 # ---- configuration ------------------------------------------------------------
 # A config file is KEY=VALUE lines. It only fills in variables the environment
@@ -171,6 +173,18 @@ Commands:
       Writes a starter config with this host's private IP and VPC range
       (stdout, or FILE). Review it, then install it as $DBM_CONFIG.
         ./docker-db-server-manager.sh init > db-server.conf
+
+  upgrade | apply [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot]
+      Guided, safe update of an installed stack (use this, not install, on a live server):
+      preflight (config, Docker, disk, health, port bindings, versions) -> diff of the
+      generated files -> confirm -> optional DigitalOcean snapshot -> verified backup ->
+      savepoint (compose, stack.env, .env, postgres/, manager, config, pgbouncer.ini,
+      image ids) -> apply -> verify + doctor. Any failure rolls back automatically to the
+      savepoint and re-verifies. Data is never restored automatically. Locked, logged to
+      $DBM_LOG with secrets redacted. Idempotent: "already up to date" if nothing changes.
+        sudo ./docker-db-server-manager.sh upgrade --dry-run
+        sudo ./docker-db-server-manager.sh upgrade
+        sudo ./docker-db-server-manager.sh upgrade --yes --no-snapshot      # automation
 
   install
       First-time setup. Installs Docker if missing, writes files, keeps an
@@ -352,8 +366,11 @@ cat > postgres/Dockerfile <<'EOF'
 ARG PG_BASE_IMAGE
 FROM ${PG_BASE_IMAGE}
 ARG PGVECTOR_PKG
-RUN sed -i 's|http://apt.postgresql.org|https://apt.postgresql.org|g' /etc/apt/sources.list.d/*.list \
- && apt-get -o Acquire::Retries=5 update \
+# apt packages are GPG-signed; ca-certificates first so the pgdg repo can switch to https
+RUN apt-get -o Acquire::Retries=5 update \
+ && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates \
+ && for f in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do [ -f "$f" ] && sed -i 's|http://apt.postgresql.org|https://apt.postgresql.org|g' "$f"; done; \
+ apt-get -o Acquire::Retries=5 update \
  && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ${PGVECTOR_PKG} \
  && rm -rf /var/lib/apt/lists/*
 EOF
@@ -824,19 +841,312 @@ cmd_rotate_password() { # <user> [engine] [--out FILE]
   print_creds "$U_ENGINE" "$db" "$u" "$pw"
 }
 
+# ---- guided upgrade -------------------------------------------------------------
+# upgrade = preflight -> plan (diff) -> confirm -> [snapshot] -> verified backup ->
+# savepoint -> apply -> verify + doctor -> (auto-rollback on failure). Data is never
+# restored automatically; `restore` stays a separate, confirmed command.
+INTERACTIVE=0
+is_interactive() { [ "$FORCE" != 1 ] && [ "${NONINTERACTIVE:-0}" != 1 ] && [ -t 0 ] && { : </dev/tty; } 2>/dev/null; }
+ask_yn() { # prompt default(y|n) -> 0 yes / 1 no; strict answers, 3 tries
+  local a i d="$2"
+  if [ "$INTERACTIVE" != 1 ]; then die "needs an answer to: $1 (non-interactive: pass the matching flag)"; fi
+  for i in 1 2 3; do
+    printf '%s [%s] ' "$1" "$([ "$d" = y ] && echo Y/n || echo y/N)" >/dev/tty
+    IFS= read -r a </dev/tty || die "no answer"
+    a="$(printf '%s' "${a:-$d}" | tr '[:upper:]' '[:lower:]')"
+    case "$a" in y|yes) echo "answer: yes"; return 0 ;; n|no) echo "answer: no"; return 1 ;; esac
+    printf 'please answer y or n\n' >/dev/tty
+  done
+  die "no valid answer to: $1"
+}
+ask_word() { # WORD -> succeed only if typed exactly
+  [ "$INTERACTIVE" = 1 ] || die "needs typed confirmation ($1); non-interactive runs can't give it"
+  local a; printf 'Type %s to continue: ' "$1" >/dev/tty; IFS= read -r a </dev/tty || die "aborted"
+  [ "$a" = "$1" ] || die "aborted (typed '$a', expected $1)"
+}
+
+valid_ipv4() { local IFS=. a b c d; [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+  read -r a b c d <<<"$1"; for x in "$a" "$b" "$c" "$d"; do [ "$x" -le 255 ] || return 1; done; }
+valid_cidr() { [[ "$1" =~ ^(.+)/([0-9]{1,2})$ ]] || return 1; local ip="${BASH_REMATCH[1]}" bits="${BASH_REMATCH[2]}"; valid_ipv4 "$ip" && [ "$bits" -le 32 ]; }
+valid_port() { [[ "$1" =~ ^[0-9]{1,5}$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
+validate_config() { # strict: refuse anything ambiguous before touching the server
+  local bad=0 v p seen=" "
+  err() { printf '!! config: %s\n' "$*" >&2; bad=1; }
+  valid_ipv4 "${PRIVATE_IP:-}" || err "PRIVATE_IP '${PRIVATE_IP:-}' is not an IPv4 address"
+  case "${PRIVATE_IP:-}" in 0.0.0.0) err "PRIVATE_IP must not be 0.0.0.0 (would publish on every interface)" ;; esac
+  [ -z "${EXPECTED_PRIVATE_IP:-}" ] || valid_ipv4 "$EXPECTED_PRIVATE_IP" || err "EXPECTED_PRIVATE_IP is not an IPv4 address"
+  valid_cidr "$VPC_CIDR" || err "VPC_CIDR '$VPC_CIDR' is not a CIDR (e.g. 10.0.0.0/20)"
+  for v in PG_PORT PGBOUNCER_PORT MYSQL_PORT MARIADB_PORT ADMINER_PORT; do valid_port "${!v}" || err "$v '${!v}' is not a port (1-65535)"; done
+  for p in $(enabled_ports) $(on "$ENABLE_ADMINER" && echo "$ADMINER_PORT"); do
+    case "$seen" in *" $p "*) err "port $p is used twice" ;; esac; seen="$seen$p "
+  done
+  for v in KEEP MIN_FREE_MB PG_MAX_CONNECTIONS PGBOUNCER_POOL_SIZE PGBOUNCER_MAX_CLIENT_CONN; do
+    [[ "${!v}" =~ ^[0-9]+$ ]] || err "$v '${!v}' must be a whole number"
+  done
+  [ "$KEEP" -ge 1 ] 2>/dev/null || err "KEEP must be at least 1"
+  for v in PG_USER PG_DB; do [[ "${!v}" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || err "$v '${!v}' must match ^[a-z_][a-z0-9_]*\$"; done
+  for v in PG_IMAGE PG_BASE_IMAGE PGBOUNCER_IMAGE MYSQL_IMAGE MARIADB_IMAGE ADMINER_IMAGE; do
+    [[ "${!v}" =~ ^[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?$ ]] || err "$v '${!v}' is not an image reference"
+    [[ "${!v}" =~ :latest$ ]] && err "$v uses :latest; pin a version"
+  done
+  [[ "$DB_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] && [ "$DB_DIR" != / ] || err "DB_DIR '$DB_DIR' must be an absolute path"
+  unset -f err
+  [ "$bad" = 0 ] || die "config invalid - fix it (see config/db-server.env.example); nothing was changed"
+  echo "config ok"
+}
+
+# lock: one mutating run at a time (cron backup, a second ssh session, ...)
+DBM_LOCK="${DBM_LOCK:-$( [ -d /run/lock ] && echo /run/lock || echo /tmp )/docker-db-server-manager.lock}"
+LOCK_HELD=0
+take_lock() {
+  if mkdir "$DBM_LOCK" 2>/dev/null; then :
+  else
+    local pid; pid="$(cat "$DBM_LOCK/pid" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      die "another run is in progress (pid $pid, lock $DBM_LOCK); wait for it to finish"
+    fi
+    warn "removing stale lock $DBM_LOCK (pid ${pid:-?} is gone)"; rm -rf "$DBM_LOCK"; mkdir "$DBM_LOCK" || die "cannot take lock $DBM_LOCK"
+  fi
+  echo "$$" > "$DBM_LOCK/pid"; LOCK_HELD=1
+  trap 'release_lock' EXIT
+}
+release_lock() { [ "$LOCK_HELD" = 1 ] && rm -rf "$DBM_LOCK"; LOCK_HELD=0; }
+
+# logging with secrets redacted (values of *PASSWORD*/*TOKEN*/*SECRET* keys, -p<pw>, long hex, bearer tokens)
+DBM_LOG="${DBM_LOG:-/var/log/docker-db-server-manager.log}"
+redact() { perl -pe 'BEGIN{$|=1} s/((?:PASSWORD|TOKEN|SECRET|PASS)[A-Za-z0-9_]*["\x27]?\s*[=:]\s*["\x27]?)[^\s"\x27]+/$1***/gi; s/(\s-p)(?!\s)\S+/$1***/g; s/(?<!sha256:)\b[0-9a-f]{32,}\b/***/g; s/(Bearer\s+)\S+/$1***/gi'; }
+start_log() {
+  (umask 077; touch "$DBM_LOG") 2>/dev/null || { warn "cannot write $DBM_LOG; logging to stdout only"; return 0; }
+  chmod 600 "$DBM_LOG"
+  exec > >(redact | tee -a "$DBM_LOG") 2>&1
+  echo "---- $(date '+%F %T %z') $TOOL_NAME $VERSION upgrade on $(hostname) (log: $DBM_LOG)"
+}
+
+installed_version() { sed -n '1s/^# generated by .* \([0-9][0-9.]*\) - .*/\1/p' "$DB_DIR/docker-compose.yml" 2>/dev/null | grep . || echo unknown; }
+
+preflight() {
+  log "Preflight"
+  validate_config
+  echo "manager: $VERSION, installed stack: $(installed_version)"
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then die "Docker is not running (systemctl status docker)"; fi
+  docker compose version >/dev/null 2>&1 || die "docker compose plugin missing"
+  echo "docker ok: $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
+  local free; free="$(df -Pm "$DB_DIR" | awk 'NR==2 {print $4}')"
+  [ "${free:-0}" -ge "$((MIN_FREE_MB * 2))" ] || die "only ${free}MB free on $DB_DIR; upgrade needs $((MIN_FREE_MB * 2))MB (2 x MIN_FREE_MB) for backup + images"
+  echo "disk ok: ${free}MB free"
+  need_stack; load_env
+  local line bad=0 ports
+  while IFS=$'\t' read -r svc state health; do
+    [ -n "$svc" ] || continue
+    if [ "$state" != running ] || { [ -n "$health" ] && [ "$health" != healthy ]; }; then
+      echo "  $svc: $state ${health:-} - NOT HEALTHY"; bad=1
+    else echo "  $svc: $state ${health:-}"; fi
+  done < <(dc ps -a --format '{{.Service}}{{"\t"}}{{.State}}{{"\t"}}{{.Health}}')
+  if [ "$bad" = 1 ]; then
+    warn "some containers are not healthy before the upgrade"
+    ask_yn "Continue anyway (the upgrade may fix it; rollback returns to this state)?" n || die "aborted; nothing changed"
+  fi
+  ports="$(dc ps --format '{{.Service}} {{.Ports}}')"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    if echo "$line" | grep -qE '(^| |,)(0\.0\.0\.0|\[?::\]?):[0-9]+->'; then echo "  PUBLIC port: $line - PROBLEM"; bad=2; fi
+    case "$line" in adminer*) echo "$line" | grep -qE '127\.0\.0\.1:[0-9]+->' || { echo "  adminer not on loopback: $line - PROBLEM"; bad=2; } ;; esac
+  done <<<"$ports"
+  [ "$bad" = 2 ] && warn "a port is published on every interface now; the upgrade rewrites bindings to $PRIVATE_IP / 127.0.0.1"
+  echo "preflight ok"
+}
+
+PLAN_DIR=""
+render_to() { local DB_DIR="$1"; write_files >/dev/null; }
+plan() { # renders the new files next to the old ones and prints a diff; returns 0 if anything changes
+  log "Plan (dry run): what would change"
+  PLAN_DIR="$(mktemp -d)"; chmod 700 "$PLAN_DIR"
+  cp -p "$DB_DIR/.env" "$PLAN_DIR/.env"
+  ( render_to "$PLAN_DIR" )
+  local f changed=1
+  for f in docker-compose.yml stack.env postgres/Dockerfile postgres/init/10-extensions.sql; do
+    if ! diff -q "$DB_DIR/$f" "$PLAN_DIR/$f" >/dev/null 2>&1; then
+      changed=0; echo "--- $f"; diff -u "$DB_DIR/$f" "$PLAN_DIR/$f" 2>/dev/null | tail -n +3 || true
+    fi
+  done
+  [ "$changed" = 0 ] || echo "no file changes"
+  return "$changed"
+}
+
+snapshot_token() { # never echoed or logged
+  if [ -n "${DIGITALOCEAN_TOKEN:-}" ]; then printf '%s' "$DIGITALOCEAN_TOKEN"; return 0; fi
+  local f="${DO_TOKEN_FILE:-/root/.config/digitalocean-token}"
+  [ -f "$f" ] || return 1
+  [ "$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f")" = 600 ] || { warn "$f must be chmod 600; ignoring it"; return 1; }
+  tr -d ' \n\r' < "$f"
+}
+take_snapshot() { # server-side, DigitalOcean API; waits for completion
+  local tok id act st i name
+  tok="$(snapshot_token)" || return 1
+  id="$(curl -fsS --max-time 5 http://169.254.169.254/metadata/v1/id 2>/dev/null)" || { warn "not a DigitalOcean droplet (no metadata)"; return 1; }
+  name="$(hostname)-pre-upgrade-$(date +%Y%m%d-%H%M%S)"
+  log "DigitalOcean snapshot $name (droplet $id)"
+  act="$(curl -fsS -X POST -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' \
+    -d "{\"type\":\"snapshot\",\"name\":\"$name\"}" "https://api.digitalocean.com/v2/droplets/$id/actions" \
+    | sed -n 's/.*"action":{"id":\([0-9]*\).*/\1/p')"
+  [ -n "$act" ] || { warn "snapshot request failed"; return 1; }
+  for i in $(seq 1 240); do
+    st="$(curl -fsS -H "Authorization: Bearer $tok" "https://api.digitalocean.com/v2/actions/$act" | sed -n 's/.*"status":"\([a-z-]*\)".*/\1/p')"
+    case "$st" in completed) echo "snapshot completed: $name"; return 0 ;; errored) warn "snapshot errored"; return 1 ;; esac
+    sleep 15
+  done
+  warn "snapshot still running after 60 min"; return 1
+}
+SNAP_MODE=ask   # ask | yes | no | taken
+snapshot_policy_check() { # fail fast, before any work, if a non-interactive run can't decide
+  [ "$INTERACTIVE" = 1 ] && return 0
+  case "$SNAP_MODE" in
+    ask) if snapshot_token >/dev/null; then SNAP_MODE=yes
+         else die "non-interactive upgrade: no DigitalOcean token for a snapshot. Pass --snapshot-taken (done elsewhere) or --no-snapshot (accept: verified backup only)"; fi ;;
+  esac
+}
+snapshot_step() {
+  case "$SNAP_MODE" in
+    taken) echo "snapshot: taken before this run (remote-run/doctl)"; return 0 ;;
+    no) warn "snapshot skipped (--no-snapshot): rollback relies on the saved files and the verified backup"; return 0 ;;
+    yes) take_snapshot || die "snapshot failed; nothing changed (re-run with --no-snapshot to proceed without one)"; return 0 ;;
+  esac
+  if snapshot_token >/dev/null; then
+    if ask_yn "Take a DigitalOcean snapshot first (recommended; a few minutes)?" y; then
+      take_snapshot || { warn "snapshot failed"; ask_word CONTINUE; }
+    fi
+  else
+    warn "no DigitalOcean token (DIGITALOCEAN_TOKEN or ${DO_TOKEN_FILE:-/root/.config/digitalocean-token}, chmod 600) and no --snapshot-taken."
+    warn "A snapshot is the only undo for host-level damage (disk, Docker engine). The backup and saved files cover the database stack."
+    ask_word CONTINUE
+  fi
+}
+
+verify_backup() { # $1 dir: every enabled engine present, gzip ok, dump trailer present
+  local d="$1"
+  on "$ENABLE_POSTGRES" && { gzip -cd "$d/postgres.sql.gz" | tail -c 2000 | grep -q 'dump complete' || die "postgres dump in $d is incomplete"; }
+  local e; for e in mysql mariadb; do
+    if [ "$e" = mysql ]; then on "$ENABLE_MYSQL" || continue; else on "$ENABLE_MARIADB" || continue; fi
+    [ -f "$d/$e.sql.gz" ] || die "$e dump missing in $d"
+    if [ -n "$(gzip -cd "$d/$e.sql.gz" | head -c 1)" ]; then
+      gzip -cd "$d/$e.sql.gz" | tail -c 500 | grep -q 'Dump completed' || die "$e dump in $d is incomplete"
+    fi
+  done
+  echo "backup verified: $d"
+}
+
+SAVE=""
+savepoint() {
+  SAVE="$DB_DIR/upgrade-saves/$(date +%Y%m%d-%H%M%S)"
+  log "Savepoint $SAVE"
+  (umask 077; mkdir -p "$SAVE")
+  chmod 700 "$DB_DIR/upgrade-saves"
+  cp -p "$DB_DIR/docker-compose.yml" "$DB_DIR/.env" "$SAVE/"
+  [ -f "$DB_DIR/stack.env" ] && cp -p "$DB_DIR/stack.env" "$SAVE/"
+  [ -d "$DB_DIR/postgres" ] && cp -Rp "$DB_DIR/postgres" "$SAVE/postgres"
+  local prev="${DBM_PREV_SCRIPT:-$SELF.prev}"; [ -f "$prev" ] || prev="$SELF"
+  if [ -f "$prev" ]; then cp -p "$prev" "$SAVE/manager.sh"; else warn "manager script not found at $SELF; savepoint has no script copy"; fi
+  local cfg="${DBM_PREV_CONFIG:-$DBM_CONFIG.prev}"; [ -f "$cfg" ] || cfg="$DBM_CONFIG"
+  [ -f "$cfg" ] && cp -p "$cfg" "$SAVE/manager.conf"
+  if on "$ENABLE_PGBOUNCER" && dc ps --status running --services 2>/dev/null | grep -qx pgbouncer; then
+    mkdir -p "$SAVE/pgbouncer"
+    dc exec -T pgbouncer cat /etc/pgbouncer/pgbouncer.ini > "$SAVE/pgbouncer/pgbouncer.ini" 2>/dev/null || true
+    dc exec -T pgbouncer cat /etc/pgbouncer/userlist.txt > "$SAVE/pgbouncer/userlist.txt" 2>/dev/null || true
+  fi
+  local s; for s in $(dc ps --services 2>/dev/null); do
+    printf '%s %s\n' "$s" "$(docker inspect -f '{{.Image}}' "$(dc ps -q "$s")" 2>/dev/null)"
+  done > "$SAVE/images.txt"
+  if on "$ENABLE_POSTGRES"; then # pin the running postgres image so a rebuild cannot garbage-collect it
+    local pimg; pimg="$(awk '$1=="postgres"{print $2}' "$SAVE/images.txt")"
+    [ -z "$pimg" ] || docker tag "$pimg" "${PG_IMAGE%:*}:pre-upgrade" || warn "could not pin the current postgres image"
+  fi
+  installed_version > "$SAVE/version"
+  chmod -R go-rwx "$SAVE"
+  find "$DB_DIR/upgrade-saves" -mindepth 1 -maxdepth 1 -type d | sort -r | tail -n +6 | while read -r old; do rm -rf "$old"; done
+  find "$SAVE" -maxdepth 2 | sed 's/^/  /'
+}
+
+rollback() {
+  log "ROLLBACK to $SAVE"
+  cd "$DB_DIR"
+  cp -p "$SAVE/docker-compose.yml" "$SAVE/.env" ./
+  [ -f "$SAVE/stack.env" ] && cp -p "$SAVE/stack.env" ./
+  [ -d "$SAVE/postgres" ] && { rm -rf ./postgres; cp -Rp "$SAVE/postgres" ./postgres; }
+  if on "$ENABLE_POSTGRES"; then # put the old locally built image back under its tag
+    local old img; img="$(set -a; . ./stack.env; echo "$PG_IMAGE")"
+    old="${img%:*}:pre-upgrade"; docker image inspect "$old" >/dev/null 2>&1 || old="$(awk '$1=="postgres"{print $2}' "$SAVE/images.txt")"
+    [ -z "$old" ] || docker tag "$old" "$img" || warn "could not retag old postgres image"
+  fi
+  dc up -d --wait --wait-timeout 300 --remove-orphans || warn "containers did not all become healthy after rollback"
+  [ -f "$SAVE/manager.sh" ] && ! cmp -s "$SAVE/manager.sh" "$SELF" && cp -p "$SAVE/manager.sh" "$SELF.rolled-back-from" 2>/dev/null || true
+  set +e; ( set -e; cmd_verify ); local rc=$?; set -e
+  if [ "$rc" = 0 ]; then echo "ROLLBACK OK: the stack is back on the saved files ($SAVE). Data was not touched."
+  else echo "ROLLBACK VERIFY FAILED. Data is untouched; backup: $LAST_BACKUP. Next: logs, then restore $LAST_BACKUP all (confirmed) or the snapshot."; fi
+  return 1
+}
+
+LAST_BACKUP=""
+cmd_upgrade() { # [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot]
+  need_root
+  local dry=0 a
+  for a in "$@"; do case "$a" in
+    --dry-run) dry=1 ;; --yes|-y) FORCE=1 ;; --non-interactive) NONINTERACTIVE=1 ;;
+    --snapshot) SNAP_MODE=yes ;; --snapshot-taken) SNAP_MODE=taken ;; --no-snapshot) SNAP_MODE=no ;;
+    *) die "unknown upgrade option: $a (see help)" ;; esac; done
+  if is_interactive; then INTERACTIVE=1; fi
+  [ "$dry" = 1 ] || start_log
+  banner upgrade
+  [ "$dry" = 1 ] || snapshot_policy_check
+  preflight
+  local changes=0 cur; cur="$(installed_version)"
+  if plan; then changes=1; fi
+  if [ "$changes" = 0 ] && [ "$cur" = "$VERSION" ]; then
+    rm -rf "$PLAN_DIR"; echo "already up to date ($VERSION); nothing to do"; return 0
+  fi
+  if [ "$dry" = 1 ]; then rm -rf "$PLAN_DIR"; echo "dry run: nothing changed"; return 0; fi
+  if [ "$INTERACTIVE" = 1 ]; then ask_yn "Apply these changes ($cur -> $VERSION)?" n || { rm -rf "$PLAN_DIR"; die "aborted; nothing changed"; }
+  elif [ "$FORCE" != 1 ]; then rm -rf "$PLAN_DIR"; die "non-interactive upgrade needs --yes to apply"; fi
+  rm -rf "$PLAN_DIR"
+  snapshot_step
+  cmd_backup
+  LAST_BACKUP="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort | tail -1)"
+  verify_backup "$LAST_BACKUP"
+  savepoint
+  log "Apply"
+  set +e
+  ( set -e; write_files; start_stack; firewall ); local rc=$?
+  if [ "$rc" = 0 ]; then ( set -e; cmd_verify; [ "${DBM_TEST_FAIL_VERIFY:-0}" != 1 ] || { echo "test hook: forced verify failure"; exit 1; } ); rc=$?; fi
+  if [ "$rc" = 0 ]; then ( set -e; cmd_doctor ); rc=$?; fi
+  set -e
+  if [ "$rc" != 0 ]; then
+    warn "apply/verify/doctor failed (exit $rc) - rolling back automatically"
+    rollback || true
+    die "UPGRADE FAILED and was rolled back. Log: $DBM_LOG  Savepoint: $SAVE  Backup: $LAST_BACKUP"
+  fi
+  log "UPGRADE OK: $cur -> $VERSION"
+  echo "backup: $LAST_BACKUP"; echo "savepoint: $SAVE (manual rollback: see docs/db-server.md#upgrade)"; echo "log: $DBM_LOG"
+}
+
+listen_addrs() { # $1 port -> space-separated listening addr:port, "" if none, "?" if no tool
+  if command -v ss >/dev/null 2>&1; then { ss -Htln "sport = :$1" 2>/dev/null || true; } | awk '{print $4}' | tr '\n' ' '
+  elif command -v lsof >/dev/null 2>&1; then { lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; } | awk 'NR>1{print $9}' | sort -u | tr '\n' ' '
+  else echo "?"; fi
+}
 cmd_doctor() { # read-only
   local bad=0 p l
   log "Exposure: DB ports must listen on $PRIVATE_IP only"
   for p in $(enabled_ports); do
-    l="$(ss -Htln "sport = :$p" 2>/dev/null | awk '{print $4}' | tr '\n' ' ')"
-    if [ -z "$l" ]; then echo "  $p: not listening"
+    l="$(listen_addrs "$p")"
+    if [ "$l" = "?" ]; then echo "  $p: unknown (no ss or lsof to check)"
+    elif [ -z "$l" ]; then echo "  $p: not listening"
     elif echo "$l" | grep -qE '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):'; then echo "  $p: PUBLIC ($l) - PROBLEM"; bad=1
     else echo "  $p: ok ($l)"; fi
   done
   echo "  (Docker-published ports bypass ufw; binding to the private IP is what keeps them off the internet.)"
   if on "$ENABLE_ADMINER"; then
-    l="$(ss -Htln "sport = :$ADMINER_PORT" 2>/dev/null | awk '{print $4}' | tr '\n' ' ')"
-    if [ -z "$l" ]; then echo "  adminer $ADMINER_PORT: not listening"
+    l="$(listen_addrs "$ADMINER_PORT")"
+    if [ "$l" = "?" ]; then echo "  adminer $ADMINER_PORT: unknown (no ss or lsof to check)"
+    elif [ -z "$l" ]; then echo "  adminer $ADMINER_PORT: not listening"
     elif echo "$l" | grep -qvE '^(127\.0\.0\.1:[0-9]+[[:space:]]*)+$'; then echo "  adminer $ADMINER_PORT: NOT loopback-only ($l) - PROBLEM"; bad=1
     else echo "  adminer $ADMINER_PORT: ok ($l, tunnel only)"; fi
   fi
@@ -908,7 +1218,7 @@ summary() {
 }
 
 cmd_install() {
-  need_root; banner install; ensure_docker
+  need_root; banner install; validate_config; ensure_docker
   mkdir -p "$DB_DIR"
   if [ -f "$DB_DIR/.env" ]; then echo "keeping existing $DB_DIR/.env"; else new_env; fi
   write_files; start_stack; firewall; cmd_verify; summary
@@ -1053,6 +1363,7 @@ for a in "$@"; do
   if [ -n "${skip_next:-}" ]; then skip_next=; continue; fi
   case "$a" in
     -y|--yes) FORCE=1 ;;
+    --non-interactive) NONINTERACTIVE=1 ;;
     --config) skip_next=1 ;;
     --version) echo "$TOOL_NAME $VERSION"; exit 0 ;;
     *) ARGS+=("$a") ;;
@@ -1062,7 +1373,12 @@ set -- "${ARGS[@]+"${ARGS[@]}"}"
 CMD="${1:-help}"; shift || true
 detect_ip
 case "$CMD" in help|-h|--help|init) ;; *) check_engines; guard_host; need_ip ;; esac
+case "$CMD" in # mutating commands: one at a time
+  upgrade|apply|install|reset|restore|backup|uninstall|create-db|create-user|grant|drop-db|drop-user|rotate-password)
+    need_root; take_lock ;;
+esac
 case "$CMD" in
+  upgrade|apply) cmd_upgrade "$@" ;;
   install)      cmd_install ;;
   reset)        cmd_reset ;;
   status)       cmd_status ;;

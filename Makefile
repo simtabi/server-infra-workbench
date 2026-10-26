@@ -5,7 +5,7 @@
 SHELL   := /bin/bash
 SCRIPTS := $(shell find . -name '*.sh' -not -path './.git/*' | sort)
 
-.PHONY: help lint syntax shellcheck compose-check links mermaid test ci
+.PHONY: help lint syntax shellcheck compose-check links mermaid test it ci
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -35,5 +35,8 @@ mermaid: ## render every Mermaid block to /tmp/vhm-mermaid (needs node; download
 
 test: ## offline smoke tests (no servers touched)
 	bash tests/smoke.sh
+
+it: ## Docker integration test of the guided upgrade (throwaway containers, ~3 min)
+	bash tests/upgrade-it.sh
 
 ci: lint test links compose-check ## the gate CI runs

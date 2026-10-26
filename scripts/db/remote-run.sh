@@ -23,6 +23,13 @@
 #    --script FILE       manager to upload (default: next to this script)
 #    --no-upload         use the copy already in /root
 #    --dry-run           print the remote commands, connect to nothing
+#
+#  UPGRADE + SNAPSHOT
+#    Before uploading, the current /root manager and /etc config are kept as
+#    *.prev so `upgrade` saves the OLD versions in its savepoint. If the command
+#    list has `upgrade`/`apply` and doctl is configured here (doctl auth init),
+#    you are offered a DigitalOcean snapshot (doctl ... --wait) first; the
+#    manager then gets --snapshot-taken. No token is ever sent to the server.
 #    -h, --help
 #  sudo prompts once (ssh -t). Use the ploi user's sudo password from Ploi's
 #  "server provisioned" email; reset it with `passwd ploi` from the DO console.
@@ -58,6 +65,8 @@ if [ -d /home/ploi ] && [ "$(id -un)" = ploi ]; then
 fi
 
 M=/root/docker-db-server-manager.sh
+C=/etc/docker-db-server-manager.conf
+case ",$CMDS," in *upgrade*|*apply*) UPG=1 ;; *) UPG=0 ;; esac
 if [ "$UPLOAD" = 1 ] && [ "$DRY" = 0 ]; then
   [ -f "$SCRIPT" ] || die "manager not found: $SCRIPT"
   scp -q "$SCRIPT" "$HOST:docker-db-server-manager.sh"
@@ -70,15 +79,36 @@ if [ '$EXPECT' != skip ]; then
 fi
 echo \"OK: running on \$(hostname)\""
 [ "$UPLOAD" = 0 ] || remote+="
+if sudo test -f $M; then sudo cp -p $M $M.prev; fi
+if sudo test -f $C; then sudo cp -p $C $C.prev; fi
 sudo install -m 755 ~/docker-db-server-manager.sh $M"
 [ -z "$CONFIG" ] || remote+="
 sudo install -m 600 ~/docker-db-server-manager.conf /etc/docker-db-server-manager.conf"
-IFS=',' read -r -a parts <<< "$CMDS"
+# optional snapshot from the workstation (doctl), before anything changes
+if [ "$UPG" = 1 ] && [ "$DRY" = 0 ] && ! grep -qE -- '--(dry-run|no-snapshot|snapshot-taken|snapshot)' <<<"$CMDS"; then
+  if command -v doctl >/dev/null 2>&1 && doctl account get >/dev/null 2>&1; then
+    did="$(ssh "$HOST" 'curl -fsS --max-time 5 http://169.254.169.254/metadata/v1/id' 2>/dev/null || true)"
+    if [[ "$did" =~ ^[0-9]+$ ]]; then
+      ans=""; [ -t 0 ] && read -r -p "Snapshot droplet $did with doctl before upgrading (recommended)? [Y/n] " ans
+      case "$(printf '%s' "${ans:-y}" | tr '[:upper:]' '[:lower:]')" in
+        y|yes) doctl compute droplet-action snapshot "$did" --snapshot-name "db-pre-upgrade-$(date +%Y%m%d-%H%M%S)" --wait \
+                 || die "snapshot failed; nothing changed"
+               CMDS="$(sed -E 's/(upgrade|apply)/\1 --snapshot-taken/' <<<"$CMDS")" ;;
+        n|no) echo "no snapshot from here; the server will ask" ;;
+        *) die "answer y or n" ;;
+      esac
+    else echo "!! could not read the droplet id; the server will handle the snapshot question" >&2; fi
+  else
+    echo "note: doctl not configured here (brew install doctl && doctl auth init) - the server will ask about a snapshot"
+  fi
+fi
+IFS=',' read -r -a parts <<< "$CMDS"; remote_cmds=""
 for c in "${parts[@]}"; do
   c="$(echo "$c" | xargs)"; [ -n "$c" ] || continue
-  remote+="
+  remote_cmds+="
 sudo $M $c"
 done
+remote+="$remote_cmds"
 
 echo "--- will run on $HOST:"
 while IFS= read -r l; do printf '    %s\n' "$l"; done <<< "$remote"

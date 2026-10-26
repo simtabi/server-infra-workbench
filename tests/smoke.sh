@@ -84,6 +84,23 @@ TN=scripts/local/db-tunnel.sh
   && ok "db-tunnel builds forwards" || fail "db-tunnel builds forwards"
 if "$TN" --print --host u@h postgres 2>/dev/null; then fail "db-tunnel without private ip"; else ok "db-tunnel needs --private-ip for engines"; fi
 
+# --- guided upgrade (offline parts) -------------------------------------------
+"$M" help | grep -q 'upgrade' && ok "help mentions upgrade" || fail "help mentions upgrade"
+src='source <(sed "/^# ---- main/,\$d" "$1"); shift'
+if PRIVATE_IP=999.1.1.1 bash -c "$src; validate_config" _ "$M" 2>"$T/v1"; then fail "bad ip accepted"; fi
+grep -q 'not an IPv4' "$T/v1" && ok "validate_config rejects a bad IP" || fail "validate_config bad ip"
+if PRIVATE_IP=10.0.0.5 PG_PORT=3306 MYSQL_PORT=3306 ENABLE_MYSQL=1 bash -c "$src; validate_config" _ "$M" 2>"$T/v2"; then fail "dup port accepted"; fi
+grep -q 'used twice' "$T/v2" && ok "validate_config rejects duplicate ports" || fail "validate_config dup port"
+PRIVATE_IP=10.0.0.5 bash -c "$src; validate_config" _ "$M" >/dev/null 2>&1 && ok "validate_config accepts defaults" || fail "validate_config defaults"
+sleep 30 & h=$!; mkdir "$T/lk"; echo "$h" > "$T/lk/pid"
+if DBM_LOCK="$T/lk" bash -c "$src; take_lock" _ "$M" 2>"$T/l"; then fail "lock ignored"; fi
+kill "$h" 2>/dev/null; wait "$h" 2>/dev/null || true
+grep -q 'another run is in progress' "$T/l" && ok "lock conflict refused" || fail "lock conflict"
+if NONINTERACTIVE=1 SNAP_MODE=ask bash -c "$src; snapshot_policy_check" _ "$M" </dev/null 2>"$T/n"; then fail "ni snapshot"; fi
+grep -q 'no-snapshot' "$T/n" && ok "non-interactive needs a snapshot decision" || fail "non-interactive snapshot"
+"$R" --dry-run --host h --expect-ip 10.0.0.5 -- upgrade --dry-run | grep 'docker-db-server-manager.sh.prev' >/dev/null \
+  && ok "remote-run keeps the previous manager" || fail "remote-run .prev"
+
 # --- remote-run -------------------------------------------------------------
 "$R" --dry-run --host h --expect-ip 10.0.0.5 -- verify, env | grep 'sudo /root/docker-db-server-manager.sh env' >/dev/null \
   && ok "remote-run builds the command list" || fail "remote-run builds the command list"

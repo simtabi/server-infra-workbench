@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (manager 1.3.0, guided upgrade)
+
+- `upgrade` (alias `apply`): one guided, self-healing rollout on a live server. Preflight (config validation:
+  IPv4, CIDR, ports and duplicates, names, pinned images, no `:latest`; disk, Docker, container health, public
+  bindings), diff plan (`--dry-run`), DigitalOcean snapshot offer (`--snapshot` via API token on the server,
+  `--snapshot-taken`, `--no-snapshot`), verified backup, savepoint in `upgrade-saves/<ts>` (previous manager,
+  config, compose, `.env`, PgBouncer config, pinned `:pre-upgrade` image), confirm, apply, verify + doctor,
+  automatic rollback of files and containers with re-verify. Data restore stays a separate confirmed command.
+- TTY-aware prompts with validation; `--non-interactive` never prompts and fails safe.
+- Lock for all mutating commands (stale-lock recovery); redacted run log `/var/log/docker-db-server-manager.log` (chmod 600).
+- `remote-run.sh`: keeps the previous manager and config as `*.prev`; offers a doctl snapshot from the Mac before `upgrade`.
+- `tests/upgrade-it.sh` / `make it`: Docker integration test (install, dry run, happy path, idempotency, forced
+  failure + rollback, invalid config, lock conflict, log redaction).
+
+### Fixed (1.3.0)
+
+- The pgvector image build failed: the pgdg repo was switched to https before `ca-certificates` was installed.
+- `doctor` no longer fails where `ss` is missing (falls back to `lsof`, else reports unknown).
+- `install` validates the config first.
+
+### Changed (1.3.0)
+
+- Rollout plan, db-server.md, upgrading.md and the example README use `upgrade` instead of manual backup/copy/install steps.
+
 ### Added (manager 1.2.0, connections)
 
 - Optional Adminer web UI: `ENABLE_ADMINER` (default 0), `ADMINER_IMAGE=adminer:6.1.2-standalone` (pinned),

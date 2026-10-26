@@ -1,96 +1,85 @@
-# Rollout plan: manager 1.2.0 on a live DB server
+# Rollout plan: upgrading a live DB server (manager 1.3.0+)
 
-Applies the 1.2.0 changes (PgBouncer `auth_query`, user-management commands, `citext` default, optional
-Adminer) to a server already running an earlier manager, without losing data. Every step runs **from the
-workstation repo folder** through `remote-run.sh`, which refuses to run unless `--expect-ip` is on the host.
+One guided command, `upgrade`, does the whole rollout on the server: checks, backup, rollback copies,
+apply, verify, and automatic rollback if anything fails. Run it **from the workstation repo folder**
+through `remote-run.sh`, which refuses to run unless `--expect-ip` is on the host.
 
 Replace `db-alias` (ssh alias or `user@public-ip`), `10.0.0.5` (private IP) and `db-server.conf` with yours.
-Project examples: [`examples/`](../../examples).
+Project examples: [`examples/`](../../examples). Full reference: [db-server.md](../db-server.md#upgrade).
 
 ```mermaid
 flowchart TD
-  A[1. dry run] --> B[2. backup + snapshot]
-  B --> C[3. keep old manager + compose]
-  C --> D[4. install 1.2.0]
-  D --> E{5. verify + doctor ok?}
-  E -- yes --> F[6. test a pooled user]
-  F --> G[7. optional: Adminer]
-  E -- no --> R[Rollback]
+  A[1. upgrade --dry-run: diff only] --> B[2. upgrade]
+  B --> P[preflight: config, disk, docker, health, bindings]
+  P --> S[snapshot offered: doctl on the Mac or DO token on the server]
+  S --> K[backup + verify dump trailers]
+  K --> V[savepoint: script, conf, compose, .env, pgbouncer, images]
+  V --> X[apply]
+  X --> Y{verify + doctor ok?}
+  Y -- yes --> Z[UPGRADE OK]
+  Y -- no --> R[auto-rollback of files + containers, re-verify]
 ```
 
 ## 0. Before you start
 
-- Quiet window; the app keeps working, but `install` recreates PgBouncer (a few seconds of reconnects).
-- Take a DigitalOcean droplet snapshot (*Droplet → Snapshots*): the outermost rollback.
+- Quiet window: changed containers are recreated (a few seconds of reconnects through PgBouncer).
 - `make ci` green on the commit you deploy.
+- Optional, for a one-command snapshot: `brew install doctl && doctl auth init` on the Mac (the token stays on the Mac).
 
-## 1. Dry run (connects to nothing)
+## 1. Dry run: what would change (writes nothing)
 
 ```bash
-scripts/db/remote-run.sh --dry-run --host db-alias --expect-ip 10.0.0.5 --config db-server.conf -- backup, install, verify, doctor
+scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --config db-server.conf -- upgrade --dry-run
 ```
 
-## 2. Backup with the old manager (already in /root)
+Shows the preflight result and a unified diff of the compose file, `stack.env` and the Postgres files.
+
+## 2. Upgrade
 
 ```bash
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- status, backup, doctor
-ssh db-alias 'sudo ls -l /opt/db/backups | tail -3'
+scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --config db-server.conf -- upgrade
 ```
 
-## 3. Keep the old manager and compose file for rollback
+You are asked, in order (every answer is validated; Enter takes the safe default):
+
+1. **Snapshot?** With doctl configured on the Mac, `remote-run.sh` offers it first and waits for it.
+   Otherwise the server offers one if `/root/.config/digitalocean-token` (chmod 600) exists, or asks you
+   to confirm that you skip it.
+2. **Apply these changes?** after the diff, the verified backup and the savepoint.
+
+Then: apply, `verify`, `doctor`. On any failure it rolls back the files and containers by itself and
+re-verifies. **Data is never restored automatically**; that stays a separate, confirmed `restore`.
+
+Unattended (cron, CI): `upgrade --yes --no-snapshot` (or `--snapshot` / `--snapshot-taken`).
+`--non-interactive` without a snapshot decision stops before changing anything.
+
+## 3. Afterwards
 
 ```bash
-ssh -t db-alias 'sudo cp -a /root/docker-db-server-manager.sh /root/docker-db-server-manager.sh.pre-1.2.0 && sudo cp -a /opt/db/docker-compose.yml /opt/db/docker-compose.yml.pre-1.2.0 && sudo cp -a /opt/db/.env /root/db-env.pre-1.2.0'
-```
-
-## 4. Install 1.2.0 (keeps `.env`, passwords and volumes)
-
-```bash
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --config db-server.conf -- install, verify, doctor
-```
-
-`install` rewrites the compose file (PgBouncer gets `AUTH_USER`/`AUTH_DBNAME`) and recreates only changed
-containers. The new `citext` default only affects fresh `template1`s; add it per database with
-`--extensions citext`.
-
-## 5. Verify
-
-```bash
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- verify, list-dbs, list-users
+scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- cron-install, doctor
 scripts/web/check-db-reach.sh --remote web-alias 10.0.0.5      # from the web server's side
-curl -sI https://<site>/up                                     # app still healthy
 ```
 
-## 6. Prove a non-bootstrap user pools through PgBouncer
+## Why still a snapshot?
 
-```bash
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- create-db rollout_probe --out /root/rollout_probe.creds
-ssh -t db-alias 'sudo bash -c ". /root/rollout_probe.creds; cd /opt/db; docker compose --env-file .env --env-file stack.env exec -T -e PGPASSWORD=\$DB_PASSWORD pgbouncer psql -h 127.0.0.1 -p 5432 -U rollout_probe -d rollout_probe -tAc \"select current_user\""'
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- drop-db rollout_probe --yes, drop-user rollout_probe --yes
-ssh db-alias 'sudo shred -u /root/rollout_probe.creds'
-```
+`upgrade` protects the stack: the verified backup covers the data, the savepoint covers files and images.
+It cannot undo damage to the host itself (a full disk, a broken Docker engine or kernel, a failed apt run).
+A droplet snapshot is the only undo for that, so the script recommends it and makes it one keypress.
 
-Expected output of the second command: `rollout_probe`.
+## Optional: Adminer (loopback only)
 
-## 7. Optional: Adminer (loopback only)
-
-Add `ENABLE_ADMINER=1` to `db-server.conf`, then:
-
-```bash
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --config db-server.conf -- install, doctor
-scripts/local/db-tunnel.sh --host db-alias adminer       # then open http://127.0.0.1:8081
-```
-
-`doctor` must show `adminer 8081: ok (127.0.0.1:8081, tunnel only)`. Details: [connections.md](../connections.md#2-admin-web-ui-adminer-optional).
+Add `ENABLE_ADMINER=1` to `db-server.conf`, run `upgrade` again, then
+`scripts/local/db-tunnel.sh --host db-alias adminer` and open http://127.0.0.1:8081.
+Details: [connections.md](../connections.md#2-admin-web-ui-adminer-optional).
 
 ## Rollback
 
-Data is never touched by `install`, so rollback is putting the old files back:
+Automatic on failure. To go back by hand after a *successful* upgrade, the newest savepoint has everything:
 
 ```bash
-ssh -t db-alias 'sudo cp -a /root/docker-db-server-manager.sh.pre-1.2.0 /root/docker-db-server-manager.sh && sudo cp -a /opt/db/docker-compose.yml.pre-1.2.0 /opt/db/docker-compose.yml && cd /opt/db && sudo docker compose --env-file .env --env-file stack.env up -d --wait --remove-orphans'
+ssh -t db-alias 'S=$(sudo ls -d /opt/db/upgrade-saves/* | tail -1); echo $S; cd /opt/db && sudo cp -a $S/docker-compose.yml $S/.env $S/stack.env . && sudo docker compose --env-file .env --env-file stack.env up -d --wait --remove-orphans'
 scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- verify
 ```
 
-If data is damaged (it shouldn't be): `restore /opt/db/backups/<ts> all` from step 2, or restore the droplet snapshot.
-Remove the `.pre-1.2.0` copies after a week of normal running (`/root/db-env.pre-1.2.0` holds passwords: `shred -u`).
+If data is damaged: `restore /opt/db/backups/<ts> all` (asks you to type RESTORE), or the droplet snapshot.
+Log of every run (redacted, chmod 600): `/var/log/docker-db-server-manager.log`.

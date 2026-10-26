@@ -1,6 +1,7 @@
 # Moving an existing DB server to this version
 
-> Moving to manager 1.2.0 (users, PgBouncer `auth_query`, Adminer)? Follow the [rollout plan](runbooks/rollout-plan.md).
+> Server already on this repository's manager? Just run `upgrade` (backup, savepoint, auto-rollback): see the
+> [rollout plan](runbooks/rollout-plan.md). The steps below are for a server set up with the old single-file script.
 
 For a DB server that was set up with the earlier, single-file version of the
 manager (values such as the Postgres user and image name were hardcoded). The

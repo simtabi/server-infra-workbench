@@ -106,6 +106,7 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | Command | Changes data? | Prompts | What it does |
 |---|---|---|---|
 | `init [file]` | no (writes a config file) | no | starter config for this host: detects the private IP and VPC range; no root needed |
+| `upgrade [--dry-run] [--snapshot\|--snapshot-taken\|--no-snapshot]` (alias `apply`) | no (backs up first) | snapshot, apply (or `--yes`) | guided upgrade of a running server: preflight, diff, snapshot offer, verified backup, savepoint, apply, verify + doctor, auto-rollback; see [Upgrade](#upgrade) |
 | `install` | no (keeps `.env` and volumes) | no | Docker, files, build, `up --wait`, ufw, `verify`, summary |
 | `reset` | **destroys** all DB data | `Type RESET` (or `--yes`) | new passwords, rebuild from scratch |
 | `status` | no | no | `docker compose ps` |
@@ -125,7 +126,7 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `uninstall [--purge]` | `--purge` deletes everything | `Type PURGE` | stop and remove |
 | `help` | no | no | detailed help |
 
-Options (anywhere on the line): `--yes`/`-y` (or `FORCE=1`), `--config FILE`
+Options (anywhere on the line): `--yes`/`-y` (or `FORCE=1`), `--non-interactive` (never prompt; fail safe), `--config FILE`
 (or `DBM_CONFIG`), `--version`.
 
 ```mermaid
@@ -351,8 +352,30 @@ traffic is unencrypted on the VPC ([roadmap](status.md#private-network-encryptio
 
 ## 10. Upgrades
 
+### Upgrade
+
+`upgrade` (alias `apply`) is the one command for a server that already has data. It runs on the server and:
+
+1. **Preflight**: validates the config (IPv4, CIDR, ports 1-65535 and unique, names, pinned image tags,
+   no `:latest`), free disk (`MIN_FREE_MB`), Docker, container health, and that DB ports are not public.
+2. **Plan**: prints a diff of what would change; `--dry-run` stops here.
+3. **Snapshot**: `--snapshot` takes a DigitalOcean snapshot through the API (token from `DIGITALOCEAN_TOKEN`
+   or `/root/.config/digitalocean-token`, chmod 600, never in the repo), `--snapshot-taken` records that you
+   took one (remote-run.sh does this with doctl), `--no-snapshot` skips with a warning. Without a flag it asks.
+4. **Backup** and **verify** it (every engine present, gzip intact, dump trailer present).
+5. **Savepoint** in `/opt/db/upgrade-saves/<ts>` (chmod 700, newest 5 kept): the previous manager and config,
+   compose file, `.env`, `stack.env`, Postgres files, PgBouncer config, image IDs (the Postgres image is pinned
+   as `:pre-upgrade`).
+6. **Apply** after a confirmation, then `verify` and `doctor`. On failure: **automatic rollback** of files and
+   containers, then verify again. Data is not restored automatically.
+
+A lock (`/run/lock/docker-db-server-manager.lock`) stops two mutating runs at once (stale locks are
+recovered); every run is logged, with secrets redacted, to `/var/log/docker-db-server-manager.log` (chmod 600).
+Prompts need a terminal; without one, use `--yes` plus a snapshot flag.
+
+
 Major Postgres versions need a dump and restore; see [status.md](status.md#postgres-major-upgrade).
-- **Minor versions** (same major tag): run `backup`, then `install`. The build uses `--pull`, so you get the newest image for each tag, and `up -d --wait` recreates any container whose image changed. MariaDB's `MARIADB_AUTO_UPGRADE=1` upgrades its system tables.
+- **Minor versions** (same major tag): run `upgrade`. The build uses `--pull`, so you get the newest image for each tag, and `up -d --wait` recreates any container whose image changed. MariaDB's `MARIADB_AUTO_UPGRADE=1` upgrades its system tables.
 - **Postgres major version** (e.g. to 19): data folders aren't compatible between majors. Run `backup`, change the version in the script (the Dockerfile `FROM`, `postgresql-NN-pgvector` and the image tag), run `reset`, then `restore <dir> postgres`.
 - **MySQL 9.x innovation releases** only support upgrading forward. Back up first.
 
