@@ -14,6 +14,11 @@
 - DigitalOcean cloud firewalls are an extra layer worth having: allow 22 from
   your IPs, 80/443 to the web droplet, and nothing public to the DB droplet.
 
+## Encryption on the private network
+
+Traffic between the web and DB droplets uses the DigitalOcean VPC without TLS.
+For options, see [status.md](status.md#private-network-encryption).
+
 ## Updates and reboots
 
 ```sh
@@ -52,6 +57,9 @@ Find stray copies: `find /home/ploi -maxdepth 3 -name '.env*' -printf '%m %p\n'`
 | SSH / fail2ban | `journalctl -u ssh`, `/var/log/fail2ban.log` |
 
 ## Monitoring (not built in)
+
+This is ranked gap 3 in [status.md](status.md#monitoring).
+
 
 Nothing here pages you. Cheap options: Ploi's server monitoring and email alerts,
 DigitalOcean monitoring alerts (CPU, disk, memory), an uptime check on

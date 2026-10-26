@@ -1,5 +1,28 @@
 # Troubleshooting log
 
+## 503 after deploy / first install never finished
+
+The site returns 503 (often through Cloudflare) or Laravel's maintenance page
+after a deploy. Usually the first deploy stopped before the app was installed.
+Check, on the web server, as `ploi`:
+
+| Check | Command | If it fails |
+|---|---|---|
+| Did the first install finish? | `ls <shared>/.first-install-done <app>/storage/installed` | Neither exists: the first install never completed. Read the last deploy log in Ploi → site → Deployments. It names the empty `.env` keys or the missing `install.env` |
+| Is `install.env` needed? | `ls -l <shared>/install.env` | With `INSTALL_ENV_KEYS` set: create it as `KEY=value` lines, `chmod 600`, deploy again. It's deleted after a good install |
+| Required `.env` keys set? | `grep -E '^(APP_KEY\|APP_URL\|DB_HOST\|DB_PASSWORD)=' <shared>/.env \| sed 's/=.*/=…/'` | Fill them in with Ploi's editor or `update-env-db.sh`, then deploy |
+| Ploi's editor shows the real `.env`? | `ls -l /home/ploi/<site>/.env` | Not a symlink to `<shared>/.env` (when the app root differs from the site root): deploy once with the current script, or `ln -sfn <shared>/.env /home/ploi/<site>/.env` |
+| Still in maintenance mode? | `ls <app>/storage/framework/down` | `php artisan up` |
+| What did Laravel log? | `tail -n 100 <app>/storage/logs/laravel.log` | Fix the error shown (DB auth, missing extension, cache path) |
+| Can the app reach the DB? | `scripts/web/check-db-reach.sh --env <shared>/.env` | See the DB server's `doctor` |
+| Are the daemons running? | `pgrep -af 'queue:work\|schedule:work'` | Add them in Ploi ([daemons.md](daemons.md)). Without them jobs and schedules never run, though pages still render |
+| PHP-FPM / nginx up? | `systemctl status php*-fpm nginx`, `/var/log/nginx/error.log` | Restart from Ploi |
+
+`<shared>` is `/home/ploi/<site>-shared`. `<app>` is the release (zero-downtime) or
+`/home/ploi/<site>/<APP_SUBDIR>` (in-place).
+
+## Log
+
 Real problems hit while building the reference deployment, and the fix for each.
 
 | Symptom | Cause | Fix |

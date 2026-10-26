@@ -56,3 +56,22 @@ site → Deploy script. Keep your SETTINGS block in `examples/myproject/` too.
 
 Not Laravel? Use `PRESET=generic` and set `BUILD_CMDS`, `FIRST_INSTALL_CMD`,
 `MIGRATE_CMD` and `HEALTHCHECK_CMD` to whatever your app needs; every hook is optional.
+
+## Post-setup checklist
+
+| ✔ | Check | Where / command |
+|---|---|---|
+| ☐ | A backup ran and is complete | Mac: `remote-run.sh … -- backup`, then on the DB server `sudo ls -l /opt/db/backups` (dated folders, no `.partial-*`) |
+| ☐ | A backup restores ([not automatic yet](status.md#restore-test)) | scratch droplet: `restore <dir> all`, then `verify` |
+| ☐ | Nightly backup cron installed | DB server: `cat /etc/cron.d/docker-db-server-backup` (contains `DBM_CONFIG=`) |
+| ☐ | Offsite copy (optional) | `BACKUP_HOOK` in the config |
+| ☐ | Unattended upgrades on, both servers | `systemctl is-active unattended-upgrades` ([security.md](security.md#updates-and-reboots)) |
+| ☐ | No pending reboot | `ls /var/run/reboot-required` (reboot if present) |
+| ☐ | Firewall: default deny, DB ports only from the VPC | DB server, as root: `sudo ufw status verbose`, `sudo /root/docker-db-server-manager.sh doctor` |
+| ☐ | DB ports not public | `doctor`, or `ss -tlnH` (only the private IP) |
+| ☐ | Queue worker and scheduler running | web: `pgrep -af 'queue:work\|schedule:work'` ([daemons.md](daemons.md)) |
+| ☐ | Ploi's `.env` editor edits the shared file | web: `ls -l /home/ploi/<site>/.env` (symlink to `<site>-shared/.env` when the app root differs) |
+| ☐ | `.env` files are 600 | web: `stat -c '%a %n' /home/ploi/<site>-shared/.env*` |
+| ☐ | First install finished | web: `ls /home/ploi/<site>-shared/.first-install-done` |
+| ☐ | Site responds | Mac: `curl -sI https://<site>` → `200`/`302` (for a 503, see [troubleshooting](troubleshooting.md#503-after-deploy--first-install-never-finished)) |
+| ☐ | Alerts set up ([gap](status.md#monitoring)) | uptime check + DO/Ploi alerts |

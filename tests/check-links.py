@@ -44,6 +44,8 @@ cache, bad, total = {}, 0, 0
 def anchors_of(p):
     if p not in cache:
         cache[p] = scan(p)[1]
+        # explicit HTML anchors: <a id="x"></a>
+        cache[p] = set(cache[p]) | set(re.findall(r'<a id="([^"]+)"', open(p, encoding="utf-8").read()))
     return cache[p]
 
 for f in sorted(md):
