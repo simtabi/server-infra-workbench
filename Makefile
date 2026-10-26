@@ -5,7 +5,7 @@
 SHELL   := /bin/bash
 SCRIPTS := $(shell find . -name '*.sh' -not -path './.git/*' | sort)
 
-.PHONY: help lint syntax shellcheck compose-check test ci
+.PHONY: help lint syntax shellcheck compose-check links mermaid test ci
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -19,11 +19,21 @@ shellcheck: ## shellcheck every script (install: brew install shellcheck / apt i
 
 lint: syntax shellcheck ## syntax + shellcheck
 
-compose-check: ## validate the compose examples (needs docker)
+compose-check: ## docker compose config + caddy validate for compose/caddy (needs docker)
 	@command -v docker >/dev/null 2>&1 || { echo "docker not installed - skipping"; exit 0; }
 	cd compose/caddy && SITE_DOMAIN=example.com docker compose config -q && echo "compose ok  compose/caddy"
+	@for f in compose/caddy/conf/Caddyfile compose/caddy/variants/*.Caddyfile; do \
+	  docker run --rm -e SITE_DOMAIN=example.com -v "$$PWD/$$f:/c/Caddyfile:ro" $${CADDY_IMAGE:-caddy:2.11} \
+	    caddy validate --config /c/Caddyfile --adapter caddyfile >/dev/null 2>&1 \
+	    && echo "caddy ok    $$f" || { echo "caddy validate FAILED: $$f"; exit 1; }; done
+
+links: ## check relative links and #anchors in all Markdown
+	python3 tests/check-links.py .
+
+mermaid: ## render every Mermaid block to /tmp/vhm-mermaid (needs node; downloads mermaid-cli)
+	bash tests/render-mermaid.sh
 
 test: ## offline smoke tests (no servers touched)
 	bash tests/smoke.sh
 
-ci: lint test ## the gate CI runs
+ci: lint test links compose-check ## the gate CI runs

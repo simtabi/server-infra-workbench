@@ -23,7 +23,5 @@ jobs:
         with:
           persist-credentials: false
       # ubuntu-latest ships shellcheck and docker; one gate, defined in the Makefile.
-      - name: Gate (bash -n, shellcheck, smoke tests)
+      - name: Gate (bash -n, shellcheck, smoke tests, links, compose + caddy validate)
         run: make ci
-      - name: Compose examples
-        run: make compose-check
