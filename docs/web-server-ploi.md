@@ -1,5 +1,16 @@
 # Web server (Ploi)
 
+This page covers a **native** Ploi site (nginx + PHP-FPM). For a Ploi **Docker**
+server with Caddy in front, see [web-server-caddy.md](web-server-caddy.md).
+
+## Contents
+
+- [Shared `.env`](#shared-env)
+- [Update `DB_*` settings](#update-db_-settings)
+- [Laravel + Postgres notes](#laravel--postgres-notes)
+- [Ploi Docker servers](#ploi-docker-servers)
+- [Daemons](#daemons)
+
 ## Shared `.env`
 
 The deploy script keeps the Laravel `.env` and `storage/` in
@@ -48,15 +59,16 @@ Then **redeploy** in Ploi: config is cached at deploy time (`config:cache`).
 
 ## Ploi Docker servers
 
-- On a Docker-type server, the **Applications** tab deploys docker compose
-  apps into `/home/ploi/containers/<name>`. It runs compose files, **not** bash
-  scripts, so it cannot run `docker-db-server-manager.sh`.
+- On a Docker-type server, Ploi creates containers from a docker compose file
+  in `/home/ploi/containers/<name>`, starts and stops them (`docker compose up`
+  / `down`) and shows their logs. It runs compose files, **not** bash scripts,
+  so it cannot run `docker-db-server-manager.sh`.
 - Do not create a Ploi Docker application for the DB stack: the manager owns
   its compose project in `/opt/db` (project name `db`), and a second copy
   managed by Ploi would fight over containers, ports and volumes. Use a plain
   droplet for the DB server and run the manager over SSH.
-- For a Docker web server, a reverse proxy in front of the app container is
-  needed; see [`compose/caddy`](../compose/caddy) (Caddy with automatic TLS).
+- A Docker web server needs something in front of the app container for
+  HTTP/TLS: Caddy, set up in [web-server-caddy.md](web-server-caddy.md).
 
 ## Daemons
 
