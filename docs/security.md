@@ -2,6 +2,9 @@
 
 ## Firewall and Docker
 
+How each client reaches the databases (SSH tunnels, the loopback-only Adminer UI, VPC-only ufw rules) is in
+[connections.md](connections.md).
+
 - **Docker-published ports bypass ufw.** Docker writes its own iptables rules
   ahead of ufw's, so `ufw deny 5432` does **not** block a port that a container
   publishes on `0.0.0.0`. The manager therefore publishes every DB port on the
@@ -68,6 +71,8 @@ Find stray copies: `find /home/ploi -maxdepth 3 -name '.env*' -printf '%m %p\n'`
 | SSH / fail2ban | `journalctl -u ssh`, `/var/log/fail2ban.log` |
 
 ## Monitoring (not built in)
+
+Setup commands: [connections.md](connections.md#8-monitoring).
 
 This is ranked gap 3 in [status.md](status.md#monitoring).
 

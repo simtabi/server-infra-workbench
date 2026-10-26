@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (manager 1.2.0, connections)
+
+- Optional Adminer web UI: `ENABLE_ADMINER` (default 0), `ADMINER_IMAGE=adminer:6.1.2-standalone` (pinned),
+  `ADMINER_PORT=8081`. Published on `127.0.0.1` only (never the private IP, no ufw rule), read-only container,
+  `no-new-privileges`; `doctor` fails if it listens anywhere but loopback.
+- User management: `create-user`, `grant`, `rotate-password`, `list-dbs`, `list-users`, `drop-db`, `drop-user`
+  (type DROP). Least privilege: per-database read-write or `--readonly`; `create-db --readonly-user`;
+  `PUBLIC` loses CONNECT on new databases and `PG_DB`; protected bootstrap users and system DBs. Passwords
+  from `openssl rand`, sent to the client on stdin (never in `ps`), printed once or `--out FILE` (chmod 600).
+- `create-db --extensions a,b` (pgvector, PostGIS, citext, hstore...); `citext` added to `PG_EXTENSIONS`.
+- `docs/runbooks/rollout-plan.md`: dry run, backup, rollback copies, install, verify, rollback; myapp checklist updated.
+
+### Fixed
+
+- `create-db` users could not log in through PgBouncer: PgBouncer now uses `AUTH_USER=PG_USER` + `auth_query`,
+  and the manager sends `RELOAD` after user changes (status gap 5 closed).
+
+### Added (continued)
+
+- `scripts/local/db-tunnel.sh`: SSH tunnels per engine (`postgres pgbouncer mysql mariadb adminer all`).
+- `docs/connections.md`: Mac GUI tools over SSH with real ports (5432, 6432, 3306, 3307), web to DB, PgBouncer vs
+  direct for migrations, Redis, off-site backups, GitHub deploy key, mail, monitoring, VPC-only ufw, admin UI
+  comparison, MongoDB decision (not needed; no toggle). Linked from docs/README and security.md.
+
 ### Changed (project-neutral core)
 
 - The core scripts, configs and docs no longer assume any one project. Project names live only in

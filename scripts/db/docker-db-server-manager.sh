@@ -30,7 +30,13 @@
 #    status             containers, health, ports
 #    verify             run all connection / extension checks
 #    env [engine]       print the DB_* lines for the web server's .env
-#    create-db <name> [engine]   new database + user with its own password
+#    create-db <name> [engine] [--extensions L] [--readonly-user] [--out F]
+#                       new database + owner user (own password, PgBouncer-ready)
+#    create-user <u> <db> [engine] [--readonly] [--out F]   extra user on a db
+#    grant <u> <db> [engine] [--readonly|--readwrite]
+#    drop-db <name> [engine] | drop-user <u> [engine]   (DESTRUCTIVE, type DROP)
+#    rotate-password <u> [engine] [--out F]
+#    list-dbs [engine|all] | list-users [engine|all]
 #    doctor             read-only security/health checks (exposure, ufw, updates)
 #    backup             dump all three engines to backups/<timestamp>/
 #    restore <dir> [postgres|mysql|mariadb|all]   load a backup (overwrites)
@@ -48,6 +54,8 @@
 #  ENGINES
 #    ENABLE_POSTGRES ENABLE_PGBOUNCER ENABLE_MYSQL ENABLE_MARIADB (1/0, default 1).
 #    Disabled engines get no container, port, firewall rule, backup or check.
+#    ENABLE_ADMINER (default 0): optional Adminer web UI on 127.0.0.1:$ADMINER_PORT
+#    only (never the VPC, no ufw rule); open it through an SSH tunnel.
 #
 #  ENVIRONMENT OVERRIDES (most common)
 #    PRIVATE_IP   bind address (default: eth1 IPv4; required if eth1 is missing)
@@ -55,6 +63,7 @@
 #    VPC_CIDR     ufw source range (default 10.0.0.0/8 - set your VPC range)
 #    PG_USER PG_DB PG_IMAGE PG_BASE_IMAGE PGVECTOR_PKG PGBOUNCER_IMAGE MYSQL_IMAGE
 #    MARIADB_IMAGE PG_PORT PGBOUNCER_PORT MYSQL_PORT MARIADB_PORT WEB_ENV CRON_TIME
+#    ADMINER_IMAGE ADMINER_PORT
 #    DB_DIR       install dir (default /opt/db)
 #    BACKUP_DIR   backup root (default $DB_DIR/backups)
 #    KEEP         backups kept by `backup` (default 7)
@@ -72,7 +81,7 @@ set -euo pipefail
 trap 'echo "!! ERROR: line $LINENO: \"$BASH_COMMAND\" failed" >&2' ERR
 
 TOOL_NAME="Docker DB Server Setup Manager"
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 # ---- configuration ------------------------------------------------------------
 # A config file is KEY=VALUE lines. It only fills in variables the environment
@@ -112,6 +121,8 @@ PG_PORT="${PG_PORT:-5432}"
 PGBOUNCER_PORT="${PGBOUNCER_PORT:-6432}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"
 MARIADB_PORT="${MARIADB_PORT:-3307}"
+ADMINER_IMAGE="${ADMINER_IMAGE:-adminer:6.1.2-standalone}"
+ADMINER_PORT="${ADMINER_PORT:-8081}"
 PRIVATE_IFACE="${PRIVATE_IFACE:-eth1}"
 CRON_TIME="${CRON_TIME:-15 3 * * *}"
 CRON_FILE="${CRON_FILE:-/etc/cron.d/docker-db-server-backup}"
@@ -121,7 +132,8 @@ ENABLE_POSTGRES="${ENABLE_POSTGRES:-1}"
 ENABLE_PGBOUNCER="${ENABLE_PGBOUNCER:-1}"
 ENABLE_MYSQL="${ENABLE_MYSQL:-1}"
 ENABLE_MARIADB="${ENABLE_MARIADB:-1}"
-PG_EXTENSIONS="${PG_EXTENSIONS:-vector postgis pg_trgm pgcrypto uuid-ossp pg_stat_statements}"
+ENABLE_ADMINER="${ENABLE_ADMINER:-0}"
+PG_EXTENSIONS="${PG_EXTENSIONS:-vector postgis pg_trgm pgcrypto uuid-ossp citext pg_stat_statements}"
 MIN_FREE_MB="${MIN_FREE_MB:-1024}"        # backup refuses to start below this
 BACKUP_HOOK="${BACKUP_HOOK:-}"            # optional: run after a good backup, e.g. rclone copy "$1" spaces:bucket/db
 LOGROTATE_FILE="${LOGROTATE_FILE:-/etc/logrotate.d/docker-db-server-backup}"
@@ -136,7 +148,7 @@ engines() { # enabled engine names, in order
   on "$ENABLE_MARIADB" && e="$e mariadb"; echo "${e# }"
 }
 check_engines() {
-  local v; for v in ENABLE_POSTGRES ENABLE_PGBOUNCER ENABLE_MYSQL ENABLE_MARIADB; do
+  local v; for v in ENABLE_POSTGRES ENABLE_PGBOUNCER ENABLE_MYSQL ENABLE_MARIADB ENABLE_ADMINER; do
     case "${!v}" in 0|1) ;; *) die "$v must be 0 or 1 (got ${!v})" ;; esac
   done
   [ -n "$(engines)" ] || die "every engine is disabled; enable at least one"
@@ -185,11 +197,24 @@ Commands:
       Prints DB_* lines to paste into $WEB_ENV on the web server.
         sudo ./docker-db-server-manager.sh env
 
-  create-db <name> [postgres|mysql|mariadb]
-      Creates database <name> and user <name> with a new random password and
-      prints its DB_* lines. Postgres DBs get the template1 extensions.
+  create-db <name> [engine] [--extensions citext,hstore] [--readonly-user] [--out FILE]
+      Creates database <name> owned by a new user <name> (random password; PUBLIC
+      gets no CONNECT). Postgres DBs inherit the template1 extensions
+      ($PG_EXTENSIONS); --extensions adds more. --readonly-user also makes <name>_ro.
+      Credentials print once (or go to a new chmod 600 FILE with --out).
         sudo ./docker-db-server-manager.sh create-db shop
-        sudo ./docker-db-server-manager.sh create-db blog mysql
+        sudo ./docker-db-server-manager.sh create-db shop --extensions citext,hstore --readonly-user
+        sudo ./docker-db-server-manager.sh create-db blog mysql --out /root/blog.creds
+
+  create-user <user> <db> [engine] [--readonly] [--out FILE]
+  grant <user> <db> [engine] [--readonly|--readwrite]
+  rotate-password <user> [engine] [--out FILE]
+  list-dbs [engine|all] | list-users [engine|all]
+  drop-db <name> [engine] | drop-user <user> [engine]   (DESTRUCTIVE, type DROP)
+      Least-privilege user management. Postgres users work through PgBouncer
+      ($PGBOUNCER_PORT) at once (auth_query). Protected: $PG_USER, $PG_DB, root, system DBs.
+        sudo ./docker-db-server-manager.sh create-user shop_report shop --readonly
+        sudo ./docker-db-server-manager.sh rotate-password shop
 
   doctor
       Read-only checks: DB ports bound only to the private IP, ufw state and
@@ -214,7 +239,7 @@ Commands:
       (log: $CRON_LOG).
         sudo ./docker-db-server-manager.sh cron-install
 
-  logs [postgres|pgbouncer|mysql|mariadb]
+  logs [postgres|pgbouncer|mysql|mariadb|adminer]
       Follows container logs (Ctrl-C to stop).
         sudo ./docker-db-server-manager.sh logs pgbouncer
 
@@ -228,6 +253,7 @@ Commands:
       This text.
 
 Engines: ENABLE_POSTGRES=$ENABLE_POSTGRES ENABLE_PGBOUNCER=$ENABLE_PGBOUNCER ENABLE_MYSQL=$ENABLE_MYSQL ENABLE_MARIADB=$ENABLE_MARIADB
+Admin UI: ENABLE_ADMINER=$ENABLE_ADMINER ($ADMINER_IMAGE on 127.0.0.1:$ADMINER_PORT only; open via SSH tunnel, see docs/connections.md)
 Options: --yes|-y (skip confirmation), --config FILE, --version
 Environment: PRIVATE_IP, EXPECTED_PRIVATE_IP, VPC_CIDR, DB_DIR, BACKUP_DIR, KEEP, FORCE=1,
              PG_USER, PG_DB, *_IMAGE, *_PORT, CRON_TIME, WEB_ENV (see config/db-server.env.example)
@@ -311,6 +337,8 @@ PG_PORT=$PG_PORT
 PGBOUNCER_PORT=$PGBOUNCER_PORT
 MYSQL_PORT=$MYSQL_PORT
 MARIADB_PORT=$MARIADB_PORT
+ADMINER_IMAGE=$ADMINER_IMAGE
+ADMINER_PORT=$ADMINER_PORT
 EOF
   )
 }
@@ -391,6 +419,10 @@ EOF
       MAX_CLIENT_CONN: "${PGBOUNCER_MAX_CLIENT_CONN}"
       DEFAULT_POOL_SIZE: "${PGBOUNCER_POOL_SIZE}"
       ADMIN_USERS: ${PG_USER}
+      # any Postgres login role can use the pooler: PgBouncer looks the role up
+      # through PG_USER (default auth_query on pg_authid), no userlist edits needed
+      AUTH_USER: ${PG_USER}
+      AUTH_DBNAME: postgres
       LISTEN_PORT: "5432"
     ports: ["${PRIVATE_IP}:${PGBOUNCER_PORT}:5432"]
     healthcheck:
@@ -434,6 +466,22 @@ EOF
       timeout: 5s
       retries: 60
       start_period: 30s
+
+EOF
+  fi
+  if on "$ENABLE_ADMINER"; then cat <<'EOF'
+  adminer:
+    # optional web UI. Loopback only: never the private IP, never public.
+    # Open with: ssh -N -L 8081:127.0.0.1:${ADMINER_PORT} <user>@<db-public-ip>
+    # Login = a real database user + password (Adminer refuses empty passwords).
+    image: ${ADMINER_IMAGE}
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports: ["127.0.0.1:${ADMINER_PORT}:8080"]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
 
 EOF
   fi
@@ -525,31 +573,255 @@ cmd_env() { # [engine]: postgres (default when enabled), mysql, mariadb
   esac
 }
 
-cmd_create_db() { # <name> [engine]
-  need_root; need_stack; load_env
-  local name="${1:-}" e="${2:-$(engines | cut -d' ' -f1)}" pw port
-  [[ "$name" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || die "usage: create-db <name> [engine]  (name: a-z 0-9 _, max 63)"
-  pw="$(openssl rand -hex 24)"
-  case "$e" in
-    postgres) on "$ENABLE_POSTGRES" || die "postgres is disabled"
-      dc exec -T postgres psql -v ON_ERROR_STOP=1 -U "$PG_USER" -d postgres -tAc "select 1 from pg_roles where rolname='$name'" | grep -q 1 \
-        && die "role $name already exists in postgres"
-      dc exec -T postgres psql -q -v ON_ERROR_STOP=1 -U "$PG_USER" -d postgres \
-        -c "CREATE ROLE \"$name\" LOGIN PASSWORD '$pw';" -c "CREATE DATABASE \"$name\" OWNER \"$name\";"
-      port="$PG_PORT"; e=pgsql ;;
-    mysql|mariadb)
-      local svc="$e" cli=mysql rootvar=MYSQL_ROOT_PASSWORD
-      if [ "$e" = mariadb ]; then on "$ENABLE_MARIADB" || die "mariadb is disabled"; cli=mariadb; rootvar=MARIADB_ROOT_PASSWORD; port="$MARIADB_PORT"
-      else on "$ENABLE_MYSQL" || die "mysql is disabled"; port="$MYSQL_PORT"; fi
-      dc exec -T -e N="$name" -e PW="$pw" "$svc" sh -c "exec $cli -h 127.0.0.1 -uroot -p\"\$$rootvar\" 2>/dev/null -e \"
-        CREATE DATABASE \\\`\$N\\\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-        CREATE USER '\$N'@'%' IDENTIFIED BY '\$PW';
-        GRANT ALL PRIVILEGES ON \\\`\$N\\\`.* TO '\$N'@'%';\"" ;;
-    *) die "usage: create-db <name> [postgres|mysql|mariadb]" ;;
+# ---- databases and users ------------------------------------------------------
+# All SQL goes to the client on stdin, so generated passwords never appear in
+# process arguments (ps), shell history or logs. Passwords are printed once to
+# stdout, or written to a new chmod 600 file with --out FILE; never stored here.
+U_ENGINE="" U_RO=0 U_OUT="" U_EXT="" U_POS=()
+parse_user_args() { # fills U_* from: [engine] [--engine E] [--readonly] [--out FILE] [--extensions a,b]
+  U_ENGINE="" U_RO=0 U_OUT="" U_EXT="" U_POS=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      postgres|pgsql|mysql|mariadb) U_ENGINE="${1/pgsql/postgres}" ;;
+      --engine) U_ENGINE="${2:-}"; shift ;;
+      --readonly|--ro) U_RO=1 ;;
+      --readwrite|--rw) U_RO=0 ;;
+      --out) U_OUT="${2:-}"; shift ;;
+      --extensions) U_EXT="${2:-}"; U_EXT="${U_EXT//,/ }"; shift ;;
+      --yes|-y) ;;
+      -*) die "unknown option: $1" ;;
+      *) U_POS+=("$1") ;;
+    esac; shift
+  done
+  [ -n "$U_ENGINE" ] || U_ENGINE="$(engines | cut -d' ' -f1)"
+  case "$U_ENGINE" in
+    postgres) on "$ENABLE_POSTGRES" || die "postgres is disabled" ;;
+    mysql) on "$ENABLE_MYSQL" || die "mysql is disabled" ;;
+    mariadb) on "$ENABLE_MARIADB" || die "mariadb is disabled" ;;
+    *) die "engine must be postgres, mysql or mariadb (got $U_ENGINE)" ;;
   esac
-  echo "# created database and user '$name' ($e). Save these now; the password is not stored on this server."
-  printf 'DB_CONNECTION=%s\nDB_HOST=%s\nDB_PORT=%s\nDB_DATABASE=%s\nDB_USERNAME=%s\nDB_PASSWORD=%s\n' "$e" "$PRIVATE_IP" "$port" "$name" "$name" "$pw"
-  [ "$e" != pgsql ] || ! on "$ENABLE_PGBOUNCER" || echo "# note: PgBouncer only knows $PG_USER; connect this user directly on $PG_PORT"
+}
+valid_ident() { # name, what
+  local max=63; [ "$U_ENGINE" = postgres ] || max=32
+  [[ "$1" =~ ^[a-z_][a-z0-9_]*$ ]] && [ "${#1}" -le "$max" ] || die "bad $2 name '$1' (a-z 0-9 _, start with a letter or _, max $max)"
+}
+valid_exts() { local x; for x in $1; do [[ "$x" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "bad extension name: $x"; done; }
+protected_db() { case "$1" in postgres|template0|template1|mysql|sys|information_schema|performance_schema|"$PG_DB") return 0 ;; esac; return 1; }
+protected_user() { case "$1" in postgres|root|mysql|mariadb.sys|mysql.sys|mysql.session|mysql.infoschema|healthcheck|"$PG_USER") return 0 ;; esac; return 1; }
+new_password() { openssl rand -hex 24; }
+
+pg_q() { # [db] ; SQL on stdin
+  dc exec -T postgres psql -q -X -v ON_ERROR_STOP=1 -U "$PG_USER" -d "${1:-postgres}" -tA -f -
+}
+my_q() { # engine ; SQL on stdin
+  local cli=mysql rv=MYSQL_ROOT_PASSWORD
+  [ "$1" = mariadb ] && cli=mariadb rv=MARIADB_ROOT_PASSWORD
+  dc exec -T "$1" sh -c "MYSQL_PWD=\"\$$rv\" exec $cli -h 127.0.0.1 -uroot -N -B"
+}
+pgbouncer_reload() { # new roles work through auth_query at once; RELOAD also refreshes config
+  on "$ENABLE_PGBOUNCER" || return 0
+  printf 'RELOAD;\n' | dc exec -T -e PGPASSWORD="$PG_PASSWORD" pgbouncer \
+    psql -X -q -h 127.0.0.1 -p 5432 -U "$PG_USER" -d pgbouncer -f - >/dev/null 2>&1 \
+    || warn "PgBouncer RELOAD failed (it still picks up new roles via auth_query)"
+}
+engine_port() {
+  case "$1" in
+    postgres) if on "$ENABLE_PGBOUNCER"; then echo "$PGBOUNCER_PORT"; else echo "$PG_PORT"; fi ;;
+    mysql) echo "$MYSQL_PORT" ;; mariadb) echo "$MARIADB_PORT" ;;
+  esac
+}
+print_creds() { # engine db user password
+  local conn="$1"; [ "$1" = postgres ] && conn=pgsql
+  local body
+  body="$(printf 'DB_CONNECTION=%s\nDB_HOST=%s\nDB_PORT=%s\nDB_DATABASE=%s\nDB_USERNAME=%s\nDB_PASSWORD=%s\n' \
+    "$conn" "$PRIVATE_IP" "$(engine_port "$1")" "$2" "$3" "$4")"
+  if [ "$1" = postgres ] && on "$ENABLE_PGBOUNCER"; then
+    body="$body
+# DB_PORT is PgBouncer; direct Postgres (migrations in transaction pooling, admin) is $PG_PORT"
+  fi
+  if [ -n "$U_OUT" ]; then
+    [ -e "$U_OUT" ] && die "refusing to overwrite $U_OUT"
+    (umask 077; printf '%s\n' "$body" > "$U_OUT"); chmod 600 "$U_OUT"
+    echo "# credentials for '$3' written to $U_OUT (chmod 600). Move them to the app's .env, then: shred -u $U_OUT"
+  else
+    echo "# credentials for '$3' - shown once, not stored on this server:"
+    printf '%s\n' "$body"
+  fi
+}
+
+pg_grant_sql() { # user db readonly(0/1) -> SQL for the target db
+  local u="$1" d="$2" ro="$3" owner
+  owner="$(printf "select pg_get_userbyid(datdba) from pg_database where datname='%s';\n" "$d" | pg_q)"
+  [ -n "$owner" ] || die "database $d does not exist in postgres"
+  if [ "$ro" = 1 ]; then cat <<SQL
+GRANT CONNECT ON DATABASE "$d" TO "$u";
+GRANT USAGE ON SCHEMA public TO "$u";
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO "$u";
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO "$u";
+ALTER DEFAULT PRIVILEGES FOR ROLE "$owner" IN SCHEMA public GRANT SELECT ON TABLES TO "$u";
+ALTER DEFAULT PRIVILEGES FOR ROLE "$owner" IN SCHEMA public GRANT SELECT ON SEQUENCES TO "$u";
+SQL
+  else cat <<SQL
+GRANT CONNECT, TEMPORARY ON DATABASE "$d" TO "$u";
+GRANT USAGE, CREATE ON SCHEMA public TO "$u";
+GRANT ALL ON ALL TABLES IN SCHEMA public TO "$u";
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO "$u";
+ALTER DEFAULT PRIVILEGES FOR ROLE "$owner" IN SCHEMA public GRANT ALL ON TABLES TO "$u";
+ALTER DEFAULT PRIVILEGES FOR ROLE "$owner" IN SCHEMA public GRANT ALL ON SEQUENCES TO "$u";
+SQL
+  fi
+}
+my_grant_sql() { # user db readonly
+  if [ "$3" = 1 ]; then echo "GRANT SELECT, SHOW VIEW ON \`$2\`.* TO '$1'@'%';"
+  else echo "GRANT ALL PRIVILEGES ON \`$2\`.* TO '$1'@'%';"; fi
+}
+pg_role_exists() { [ "$(printf "select 1 from pg_roles where rolname='%s';\n" "$1" | pg_q)" = 1 ]; }
+my_user_exists() { [ "$(printf "select count(*) from mysql.user where user='%s';\n" "$1" | my_q "$2")" != 0 ]; }
+
+cmd_list_dbs() { # [engine|all]
+  need_root; need_stack; load_env
+  local e list; list="$(engines)"; [ -n "${1:-}" ] && [ "$1" != all ] && list="$1"
+  for e in $list; do
+    log "$e databases"
+    case "$e" in
+      postgres) printf '%s\n' "select datname || '  owner=' || pg_get_userbyid(datdba) || '  size=' || pg_size_pretty(pg_database_size(datname)) from pg_database where not datistemplate order by 1;" | pg_q ;;
+      mysql|mariadb) echo "select concat(schema_name, '  size=', coalesce(round(sum(t.data_length+t.index_length)/1048576,1),0), 'MB') from information_schema.schemata s left join information_schema.tables t on t.table_schema=s.schema_name where schema_name not in ('mysql','sys','information_schema','performance_schema') group by schema_name order by 1;" | my_q "$e" ;;
+      *) die "unknown engine: $e" ;;
+    esac
+  done
+}
+cmd_list_users() { # [engine|all]
+  need_root; need_stack; load_env
+  local e list; list="$(engines)"; [ -n "${1:-}" ] && [ "$1" != all ] && list="$1"
+  for e in $list; do
+    log "$e users"
+    case "$e" in
+      postgres) echo "select rolname || case when rolsuper then '  (superuser)' else '' end || '  dbs=' || coalesce((select string_agg(datname, ',') from pg_database d where has_database_privilege(r.rolname, d.datname, 'CONNECT') and not datistemplate and datname<>'postgres'),'') from pg_roles r where rolcanlogin order by 1;" | pg_q ;;
+      mysql|mariadb) echo "select concat(user,'@',host) from mysql.user where user not in ('mariadb.sys','mysql.sys','mysql.session','mysql.infoschema','healthcheck','') order by 1;" | my_q "$e" ;;
+      *) die "unknown engine: $e" ;;
+    esac
+  done
+}
+
+cmd_create_db() { # <name> [engine] [--extensions a,b] [--readonly-user] [--out FILE]
+  local ro_user=0 a args=()
+  for a in "$@"; do [ "$a" = --readonly-user ] && ro_user=1 || args+=("$a"); done
+  parse_user_args "${args[@]+"${args[@]}"}"
+  local name="${U_POS[0]:-}"; [ -n "$name" ] || die "usage: create-db <name> [engine] [--extensions citext,hstore] [--readonly-user] [--out FILE]"
+  valid_ident "$name" database; valid_exts "$U_EXT"
+  [ -z "$U_EXT" ] || [ "$U_ENGINE" = postgres ] || die "--extensions is for postgres only"
+  need_root; need_stack; load_env
+  local pw x; pw="$(new_password)"
+  case "$U_ENGINE" in
+    postgres)
+      pg_role_exists "$name" && die "role $name already exists in postgres"
+      { printf "CREATE ROLE \"%s\" LOGIN PASSWORD '%s';\n" "$name" "$pw"
+        printf 'CREATE DATABASE "%s" OWNER "%s";\n' "$name" "$name"
+        printf 'REVOKE ALL ON DATABASE "%s" FROM PUBLIC;\n' "$name"
+        # keep the new user out of the main app database too (idempotent)
+        printf 'REVOKE CONNECT, TEMPORARY ON DATABASE "%s" FROM PUBLIC;\n' "$PG_DB"; } | pg_q
+      # template1 already gave it PG_EXTENSIONS; --extensions adds more (needs superuser, so done here)
+      if [ -n "$U_EXT" ]; then
+        for x in $U_EXT; do printf 'CREATE EXTENSION IF NOT EXISTS "%s";\n' "$x"; done | pg_q "$name"
+      fi
+      echo "# extensions in $name: $(echo "select string_agg(extname, ' ' order by extname) from pg_extension;" | pg_q "$name")"
+      pgbouncer_reload ;;
+    mysql|mariadb)
+      my_user_exists "$name" "$U_ENGINE" && die "user $name already exists in $U_ENGINE"
+      { printf 'CREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n' "$name"
+        printf "CREATE USER '%s'@'%%' IDENTIFIED BY '%s';\n" "$name" "$pw"
+        my_grant_sql "$name" "$name" 0; } | my_q "$U_ENGINE" ;;
+  esac
+  local out="$U_OUT"
+  print_creds "$U_ENGINE" "$name" "$name" "$pw"
+  if [ "$ro_user" = 1 ]; then
+    [ -z "$out" ] || U_OUT="$out.readonly"
+    cmd_create_user "${name}_ro" "$name" "$U_ENGINE" --readonly ${U_OUT:+--out "$U_OUT"}
+  fi
+}
+
+cmd_create_user() { # <user> <db> [engine] [--readonly] [--out FILE]
+  parse_user_args "$@"
+  local u="${U_POS[0]:-}" d="${U_POS[1]:-}"
+  [ -n "$u" ] && [ -n "$d" ] || die "usage: create-user <user> <db> [engine] [--readonly] [--out FILE]"
+  valid_ident "$u" user; valid_ident "$d" database
+  need_root; need_stack; load_env
+  local pw; pw="$(new_password)"
+  case "$U_ENGINE" in
+    postgres)
+      pg_role_exists "$u" && die "role $u already exists"
+      printf "CREATE ROLE \"%s\" LOGIN PASSWORD '%s';\n" "$u" "$pw" | pg_q
+      pg_grant_sql "$u" "$d" "$U_RO" | pg_q "$d"
+      pgbouncer_reload ;;
+    mysql|mariadb)
+      my_user_exists "$u" "$U_ENGINE" && die "user $u already exists in $U_ENGINE"
+      { printf "CREATE USER '%s'@'%%' IDENTIFIED BY '%s';\n" "$u" "$pw"; my_grant_sql "$u" "$d" "$U_RO"; } | my_q "$U_ENGINE" ;;
+  esac
+  echo "# user $u on $d ($U_ENGINE): $([ "$U_RO" = 1 ] && echo read-only || echo read-write)"
+  print_creds "$U_ENGINE" "$d" "$u" "$pw"
+}
+
+cmd_grant() { # <user> <db> [engine] [--readonly|--readwrite]
+  parse_user_args "$@"
+  local u="${U_POS[0]:-}" d="${U_POS[1]:-}"
+  [ -n "$u" ] && [ -n "$d" ] || die "usage: grant <user> <db> [engine] [--readonly|--readwrite]"
+  valid_ident "$u" user; valid_ident "$d" database; protected_user "$u" && die "refusing to change grants of $u"
+  need_root; need_stack; load_env
+  case "$U_ENGINE" in
+    postgres) pg_role_exists "$u" || die "no role $u"; pg_grant_sql "$u" "$d" "$U_RO" | pg_q "$d" ;;
+    mysql|mariadb) my_user_exists "$u" "$U_ENGINE" || die "no user $u"; my_grant_sql "$u" "$d" "$U_RO" | my_q "$U_ENGINE" ;;
+  esac
+  echo "granted $u $([ "$U_RO" = 1 ] && echo read-only || echo read-write) on $d ($U_ENGINE)"
+}
+
+cmd_drop_db() { # <name> [engine] (DESTRUCTIVE)
+  parse_user_args "$@"; local d="${U_POS[0]:-}"
+  [ -n "$d" ] || die "usage: drop-db <name> [engine] [--yes]"
+  valid_ident "$d" database; protected_db "$d" && die "refusing to drop protected database $d"
+  need_root; need_stack; load_env
+  echo "About to DROP database $d on $U_ENGINE (take a backup first: backup)."; confirm DROP
+  case "$U_ENGINE" in
+    postgres) printf 'DROP DATABASE IF EXISTS "%s" WITH (FORCE);\n' "$d" | pg_q ;;
+    mysql|mariadb) printf 'DROP DATABASE IF EXISTS `%s`;\n' "$d" | my_q "$U_ENGINE" ;;
+  esac
+  echo "dropped database $d ($U_ENGINE)"
+}
+
+cmd_drop_user() { # <user> [engine] (DESTRUCTIVE)
+  parse_user_args "$@"; local u="${U_POS[0]:-}"
+  [ -n "$u" ] || die "usage: drop-user <user> [engine] [--yes]"
+  valid_ident "$u" user; protected_user "$u" && die "refusing to drop protected user $u"
+  need_root; need_stack; load_env
+  echo "About to DROP user $u on $U_ENGINE. Objects it owns are reassigned to $PG_USER (postgres)."; confirm DROP
+  case "$U_ENGINE" in
+    postgres)
+      pg_role_exists "$u" || die "no role $u"
+      local d; for d in $(echo "select datname from pg_database where datallowconn;" | pg_q); do
+        printf 'REASSIGN OWNED BY "%s" TO "%s";\nDROP OWNED BY "%s";\n' "$u" "$PG_USER" "$u" | pg_q "$d"
+      done
+      printf 'DROP ROLE "%s";\n' "$u" | pg_q; pgbouncer_reload ;;
+    mysql|mariadb) printf "DROP USER IF EXISTS '%s'@'%%';\n" "$u" | my_q "$U_ENGINE" ;;
+  esac
+  echo "dropped user $u ($U_ENGINE)"
+}
+
+cmd_rotate_password() { # <user> [engine] [--out FILE]
+  parse_user_args "$@"; local u="${U_POS[0]:-}"
+  [ -n "$u" ] || die "usage: rotate-password <user> [engine] [--out FILE]"
+  valid_ident "$u" user
+  [ "$U_ENGINE" = postgres ] && [ "$u" = "$PG_USER" ] && die "$PG_USER's password is shared with PgBouncer; rotate it with reset, or by hand (docs/db-server.md)"
+  protected_user "$u" && die "refusing to rotate $u here"
+  need_root; need_stack; load_env
+  local pw db; pw="$(new_password)"
+  case "$U_ENGINE" in
+    postgres) pg_role_exists "$u" || die "no role $u"
+      printf "ALTER ROLE \"%s\" PASSWORD '%s';\n" "$u" "$pw" | pg_q
+      db="$(printf "select coalesce((select datname from pg_database where datname='%s'), '%s');\n" "$u" "$PG_DB" | pg_q)" ;;
+    mysql|mariadb) my_user_exists "$u" "$U_ENGINE" || die "no user $u"
+      printf "ALTER USER '%s'@'%%' IDENTIFIED BY '%s';\n" "$u" "$pw" | my_q "$U_ENGINE"; db="$u" ;;
+  esac
+  echo "# password rotated for $u ($U_ENGINE). Update the app's .env now; old password no longer works."
+  print_creds "$U_ENGINE" "$db" "$u" "$pw"
 }
 
 cmd_doctor() { # read-only
@@ -562,6 +834,12 @@ cmd_doctor() { # read-only
     else echo "  $p: ok ($l)"; fi
   done
   echo "  (Docker-published ports bypass ufw; binding to the private IP is what keeps them off the internet.)"
+  if on "$ENABLE_ADMINER"; then
+    l="$(ss -Htln "sport = :$ADMINER_PORT" 2>/dev/null | awk '{print $4}' | tr '\n' ' ')"
+    if [ -z "$l" ]; then echo "  adminer $ADMINER_PORT: not listening"
+    elif echo "$l" | grep -qvE '^(127\.0\.0\.1:[0-9]+[[:space:]]*)+$'; then echo "  adminer $ADMINER_PORT: NOT loopback-only ($l) - PROBLEM"; bad=1
+    else echo "  adminer $ADMINER_PORT: ok ($l, tunnel only)"; fi
+  fi
   log "Firewall"
   if command -v ufw >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
     ufw status verbose | grep -E '^(Status|Default):' | sed 's/^/  /'
@@ -602,6 +880,8 @@ ENABLE_POSTGRES=$ENABLE_POSTGRES
 ENABLE_PGBOUNCER=$ENABLE_PGBOUNCER
 ENABLE_MYSQL=$ENABLE_MYSQL
 ENABLE_MARIADB=$ENABLE_MARIADB
+# Optional Adminer web UI on 127.0.0.1 only (SSH tunnel)
+ENABLE_ADMINER=$ENABLE_ADMINER
 # Bootstrap Postgres user and database
 PG_USER=$PG_USER
 PG_DB=$PG_DB
@@ -619,6 +899,7 @@ summary() {
   on "$ENABLE_PGBOUNCER" && echo "PgBouncer (session mode) : $PRIVATE_IP:$PGBOUNCER_PORT"
   on "$ENABLE_MYSQL"     && echo "MySQL ($MYSQL_IMAGE)     : $PRIVATE_IP:$MYSQL_PORT  (root)"
   on "$ENABLE_MARIADB"   && echo "MariaDB ($MARIADB_IMAGE) : $PRIVATE_IP:$MARIADB_PORT  (root)"
+  on "$ENABLE_ADMINER"   && echo "Adminer ($ADMINER_IMAGE) : 127.0.0.1:$ADMINER_PORT only - tunnel: ssh -N -L 8081:127.0.0.1:$ADMINER_PORT <user>@<db-public-ip>"
   echo "Root passwords are in $DB_DIR/.env (chmod 600) - not printed."
   echo
   cmd_env
@@ -789,6 +1070,13 @@ case "$CMD" in
   env)          cmd_env "$@" ;;
   init)         cmd_init "$@" ;;
   create-db)    cmd_create_db "$@" ;;
+  create-user)  cmd_create_user "$@" ;;
+  grant)        cmd_grant "$@" ;;
+  drop-db)      cmd_drop_db "$@" ;;
+  drop-user)    cmd_drop_user "$@" ;;
+  rotate-password) cmd_rotate_password "$@" ;;
+  list-dbs)     cmd_list_dbs "$@" ;;
+  list-users)   cmd_list_users "$@" ;;
   doctor)       cmd_doctor ;;
   backup)       cmd_backup ;;
   restore)      cmd_restore "$@" ;;

@@ -68,6 +68,22 @@ baks=("$T"/app.env.bak.*); newest="${baks[${#baks[@]}-1]}"
 # --- check-db-reach --------------------------------------------------------------
 if scripts/web/check-db-reach.sh 127.0.0.1 9 >/dev/null 2>&1; then fail "closed port reported open"; else ok "check-db-reach reports a closed port"; fi
 
+# --- adminer toggle + tunnel helper ----------------------------------------------
+grep -q 'adminer:' "$T/e1000/docker-compose.yml" && fail "adminer on by default" || ok "adminer off by default"
+mkdir -p "$T/adm"; PRIVATE_IP=10.0.0.5 DB_DIR="$T/adm" ENABLE_ADMINER=1 \
+  bash -c 'source <(sed "/^# ---- main/,\$d" "$1"); dc() { :; }; write_files >/dev/null' _ "$M"
+grep -qF '"127.0.0.1:${ADMINER_PORT}:8080"' "$T/adm/docker-compose.yml" && ! grep -q 'PRIVATE_IP}:${ADMINER' "$T/adm/docker-compose.yml" \
+  && ok "adminer binds to 127.0.0.1 only" || fail "adminer binds to 127.0.0.1 only"
+grep -Eq '^ADMINER_IMAGE=adminer:[0-9]+\.[0-9]+\.[0-9]+' "$T/adm/stack.env" && ok "adminer image is pinned" || fail "adminer image is pinned"
+grep -q 'AUTH_USER: ${PG_USER}' "$T/adm/docker-compose.yml" && ok "pgbouncer auth_user set (create-db users pool)" || fail "pgbouncer auth_user"
+for c in "create-user x" "grant 'a;b' db" "drop-db postgres" "drop-user root mysql" "create-db shop --extensions 'x;y'"; do
+  if eval "PRIVATE_IP=10.0.0.5 \"\$M\" $c" >/dev/null 2>&1; then fail "unsafe args accepted: $c"; fi
+done; ok "user commands reject unsafe/protected args"
+TN=scripts/local/db-tunnel.sh
+"$TN" --print --host u@h --private-ip 10.0.0.5 mysql mariadb adminer | grep -q '127.0.0.1:13306:10.0.0.5:3306 -L 127.0.0.1:13307:10.0.0.5:3307 -L 127.0.0.1:8081:127.0.0.1:8081 u@h' \
+  && ok "db-tunnel builds forwards" || fail "db-tunnel builds forwards"
+if "$TN" --print --host u@h postgres 2>/dev/null; then fail "db-tunnel without private ip"; else ok "db-tunnel needs --private-ip for engines"; fi
+
 # --- remote-run -------------------------------------------------------------
 "$R" --dry-run --host h --expect-ip 10.0.0.5 -- verify, env | grep 'sudo /root/docker-db-server-manager.sh env' >/dev/null \
   && ok "remote-run builds the command list" || fail "remote-run builds the command list"

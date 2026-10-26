@@ -14,6 +14,8 @@
 | 9 | [Troubleshooting](troubleshooting.md) | something failed; real errors and their fixes |
 | 10 | [Security and operations](security.md) | firewall, Docker vs ufw, updates, logs, monitoring |
 | 11 | [Status](status.md) | what's done and what's still open |
+| 12 | [Connections](connections.md) | TablePlus/psql over SSH, web to DB, Adminer UI, Redis, backups off-site, deploy key, mail, MongoDB |
+| 13 | [Rollout plan](runbooks/rollout-plan.md) | applying a new manager version (users, PgBouncer auth, Adminer) to a live server |
 
 ## Diagrams
 
@@ -28,6 +30,7 @@
 | Upgrade procedure | [upgrading.md](upgrading.md#steps-from-your-workstation) |
 | SSH key flow | [ssh-access.md](ssh-access.md#key-flow) |
 | Which machine am I on? | [ssh-access.md](ssh-access.md#which-machine-am-i-on) |
+| All connections (Mac, web, DB, off-site) | [connections.md](connections.md#overview) |
 
 Diagrams are [Mermaid](https://mermaid.js.org); GitHub renders them inline.
 
@@ -35,9 +38,10 @@ Diagrams are [Mermaid](https://mermaid.js.org); GitHub renders them inline.
 
 | Script | Runs on | Main commands / flags |
 |---|---|---|
-| [`docker-db-server-manager.sh`](../scripts/db/docker-db-server-manager.sh) | DB server (root) | `init install reset status verify doctor env create-db backup restore cron-install cron-remove logs uninstall help`; `--yes --config --version` |
+| [`docker-db-server-manager.sh`](../scripts/db/docker-db-server-manager.sh) | DB server (root) | `init install reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user backup restore cron-install cron-remove logs uninstall help`; `--yes --config --version` |
 | [`remote-run.sh`](../scripts/db/remote-run.sh) | workstation | `--host --expect-ip --config --script --no-upload --dry-run -- <cmd>, <cmd>` |
 | [`update-env-db.sh`](../scripts/web/update-env-db.sh) | web server or workstation | `--env --site --from --set --remote --no-backup --dry-run` |
 | [`check-db-reach.sh`](../scripts/web/check-db-reach.sh) | web server or workstation | `<db-ip> [ports]`, `--env FILE`, `--remote ALIAS` |
+| [`db-tunnel.sh`](../scripts/local/db-tunnel.sh) | workstation | `<postgres|pgbouncer|mysql|mariadb|adminer|all> --host --private-ip --background --print` |
 | [`ploi-deploy.sh`](../scripts/deploy/ploi-deploy.sh) | pasted into Ploi | SETTINGS block, see [deploy.md](deploy.md#settings) |
 | [`compose/caddy`](../compose/caddy) | Docker web server | `docker compose up -d`, `caddy reload`, see [web-server-caddy.md](web-server-caddy.md#day-2-reload-logs-upgrades) |

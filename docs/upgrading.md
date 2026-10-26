@@ -1,5 +1,7 @@
 # Moving an existing DB server to this version
 
+> Moving to manager 1.2.0 (users, PgBouncer `auth_query`, Adminer)? Follow the [rollout plan](runbooks/rollout-plan.md).
+
 For a DB server that was set up with the earlier, single-file version of the
 manager (values such as the Postgres user and image name were hardcoded). The
 current version has generic defaults (`PG_USER=app`, `PG_DB=app`,

@@ -112,7 +112,12 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `verify` | no | no | health, extensions, logins for each enabled engine |
 | `doctor` | no | no | host checks: ports only on the private IP, ufw default deny, unattended-upgrades, reboot-required, free disk, age of the newest backup, cron |
 | `env [engine]` | no | no | prints the `DB_*` lines (contains the password) |
-| `create-db <name> [postgres\|mysql\|mariadb]` | creates a database + user | no | random password, prints the `DB_*` lines for the new app |
+| `create-db <name> [engine] [--extensions a,b] [--readonly-user] [--out F]` | creates a database + owner user | no | random password, PgBouncer-ready, prints the `DB_*` lines once |
+| `create-user <u> <db> [engine] [--readonly] [--out F]` | creates a user | no | read-write (default) or read-only on one database |
+| `grant <u> <db> [engine] [--readonly\|--readwrite]` | changes grants | no | adds access to another database |
+| `rotate-password <u> [engine] [--out F]` | changes a password | no | new random password, printed once |
+| `list-dbs [engine\|all]` / `list-users [engine\|all]` | no | no | databases with owner and size; login users and the DBs they can reach |
+| `drop-db <name> [engine]` / `drop-user <u> [engine]` | **deletes** | `Type DROP` (or `--yes`) | protected: `PG_USER`, `PG_DB`, `root`, system databases |
 | `backup` | writes `BACKUP_DIR/<ts>/` | no | one gzip dump per enabled engine plus MySQL/MariaDB users and grants, prunes to `KEEP`, then `BACKUP_HOOK` |
 | `restore <dir> [postgres\|mysql\|mariadb\|all]` | **overwrites** | `Type RESTORE` (or `--yes`) | loads the dumps |
 | `cron-install` / `cron-remove` | cron file only | no | daily `backup` at `CRON_TIME` |
@@ -208,11 +213,36 @@ Postgres. Turning an engine off later and running `install` removes its containe
 (`--remove-orphans`) but keeps its volume until `uninstall --purge`.
 
 ### `create-db <name> [engine]`
-Creates a database and a user of the same name with a random password on one engine
-(default: the first enabled of postgres, mysql, mariadb) and prints the `DB_*` lines.
-The name must match `^[a-z_][a-z0-9_]{0,62}$`; an existing user is refused, so
-re-running is safe. Postgres users made this way connect **directly on 5432**: the
-PgBouncer userlist only holds `PG_USER` (roadmap: [status.md](status.md#create-db-pgbouncer)).
+Creates database `<name>` owned by a new user `<name>` with a random password, on one engine
+(default: the first enabled of postgres, mysql, mariadb). Names: `a-z 0-9 _`, max 63 (Postgres) or 32
+(MySQL/MariaDB). An existing user is refused, so re-running is safe.
+
+- **Isolation:** `PUBLIC` loses `CONNECT` on the new database and on `PG_DB`, so app users can't open each
+  other's databases. MySQL/MariaDB users get `ALL` on their own schema only.
+- **PgBouncer:** PgBouncer looks up any login role through `PG_USER` (`auth_user` + its default
+  `auth_query`), so new Postgres users work on `PGBOUNCER_PORT` at once; the manager also sends `RELOAD`.
+  The printed `DB_PORT` is the PgBouncer port.
+- **Extensions:** every new Postgres database copies `template1`, which `install` filled with
+  `PG_EXTENSIONS` (default `vector postgis pg_trgm pgcrypto uuid-ossp citext pg_stat_statements`).
+  `--extensions citext,hstore` adds more to just this database (comma-separated; must exist in the image:
+  contrib modules, PostGIS, pgvector). JSONB is built in and needs nothing. Servers installed before
+  `citext` was in the default get it with `--extensions citext`.
+- **Read-only user:** `--readonly-user` also creates `<name>_ro` with `SELECT` on current and future tables.
+- **Secrets:** SQL goes to the client on stdin (passwords never appear in `ps`). Credentials print once,
+  or go to a new chmod 600 file with `--out FILE` (copy them into the app's `.env`, then `shred -u FILE`).
+
+```bash
+sudo /root/docker-db-server-manager.sh create-db shop --extensions citext,hstore --readonly-user --out /root/shop.creds
+sudo /root/docker-db-server-manager.sh create-user shop_report shop --readonly
+sudo /root/docker-db-server-manager.sh grant shop_report blog mysql --readonly
+sudo /root/docker-db-server-manager.sh rotate-password shop
+sudo /root/docker-db-server-manager.sh list-users all
+sudo /root/docker-db-server-manager.sh drop-user shop_report      # type DROP
+```
+
+`rotate-password` refuses `PG_USER` (its password is shared with PgBouncer's config); rotate that with
+`reset` on a new server, or by hand: `ALTER ROLE`, update `PG_PASSWORD` in `/opt/db/.env`, `install`.
+`drop-user` on Postgres reassigns the user's objects to `PG_USER` in every database, then drops the role.
 
 ### `doctor`
 Read-only health check of the host (run as root for the ufw part). Every line is

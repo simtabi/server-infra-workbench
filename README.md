@@ -15,10 +15,11 @@ in [`examples/`](examples).
 
 | Path | What |
 |---|---|
-| [`scripts/db/docker-db-server-manager.sh`](scripts/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP. each engine optional. `init install reset status verify doctor env create-db logs backup restore cron-install cron-remove uninstall help` |
+| [`scripts/db/docker-db-server-manager.sh`](scripts/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP. each engine optional. `init install reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user logs backup restore cron-install cron-remove uninstall help` |
 | [`scripts/db/remote-run.sh`](scripts/db/remote-run.sh) | Run the manager on the DB server from your workstation, with a wrong-server guard |
 | [`scripts/web/update-env-db.sh`](scripts/web/update-env-db.sh) | Back up a shared Laravel `.env` and replace its `DB_*` keys idempotently (password masked in output); local or `--remote` |
 | [`scripts/deploy/ploi-deploy.sh`](scripts/deploy/ploi-deploy.sh) | Ploi deploy script for any PHP/Node app: `laravel` or `generic` preset, optional hooks (first install, migrations, post-deploy, health check), zero-downtime or in-place |
+| [`scripts/local/db-tunnel.sh`](scripts/local/db-tunnel.sh) | SSH tunnels from the Mac per engine (`postgres pgbouncer mysql mariadb adminer all`) for TablePlus, psql, Adminer |
 | [`scripts/web/check-db-reach.sh`](scripts/web/check-db-reach.sh) | TCP check from the web server to every DB port (no passwords needed) |
 | [`compose/caddy`](compose/caddy) | Laravel (php-fpm, queue, scheduler) behind Caddy with automatic HTTPS, for a Ploi Docker web server; reverse-proxy and smoke-test variants |
 | [`config/`](config) | `.env.example`-style templates for every script |
@@ -38,6 +39,8 @@ Start at the [docs index](docs/README.md) (diagrams and command reference includ
 6. [Web server with Caddy (Ploi Docker)](docs/web-server-caddy.md): install, Caddyfile, DNS, HTTPS, staging/prod
 7. [Deploy script](docs/deploy.md), including the Ploi placeholder caveat
 8. [Daemons](docs/daemons.md): queue worker and scheduler in Supervisor
+- [Connections](docs/connections.md): TablePlus/psql over SSH, Adminer, web to DB, Redis, off-site backups, mail, MongoDB verdict
+- [Rollout plan](docs/runbooks/rollout-plan.md): apply a new manager version to a live server safely
 9. [Troubleshooting](docs/troubleshooting.md): real failures and fixes
 10. [Security and operations](docs/security.md) and [status](docs/status.md)
 
