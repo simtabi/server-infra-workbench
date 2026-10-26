@@ -2,6 +2,24 @@
 
 [`scripts/db/docker-db-server-manager.sh`](../scripts/db/docker-db-server-manager.sh) builds and runs a dedicated database droplet (DigitalOcean, Ubuntu) for a Laravel app. It installs, resets, checks, backs up and restores the stack, and it can uninstall it. Every name, port, image and path below is a default you can change (see [Configuration](#5-configuration)); `<user>`/`<db>` mean `PG_USER`/`PG_DB`.
 
+## Contents
+
+0. [Runbook](#0-runbook-from-your-workstation) ·
+1. [Overview](#1-overview) ·
+2. [Requirements](#2-requirements) ·
+3. [Quick start](#3-quick-start) ·
+4. [Commands](#4-commands) ·
+5. [Configuration](#5-configuration) ·
+6. [Extensions](#6-postgresql-extensions) ·
+7. [Connecting Laravel](#7-connecting-from-the-web-server-laravel) ·
+8. [PgBouncer](#8-pgbouncer-notes) ·
+9. [Security](#9-security) ·
+10. [Upgrades](#10-upgrades) ·
+11. [Troubleshooting](#11-troubleshooting) ·
+12. [Uninstall](#12-uninstall)
+
+Moving an existing server to this version: [upgrading.md](upgrading.md).
+
 ## 0. Runbook (from your workstation)
 
 > Run these on your **laptop**. If your prompt says `ploi@<db-host>`, you are on the
@@ -85,6 +103,36 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 
 ## 4. Commands
 
+| Command | Changes data? | Prompts | What it does |
+|---|---|---|---|
+| `install` | no (keeps `.env` and volumes) | no | Docker, files, build, `up --wait`, ufw, `verify`, summary |
+| `reset` | **destroys** all DB data | `Type RESET` (or `--yes`) | new passwords, rebuild from scratch |
+| `status` | no | no | `docker compose ps` |
+| `verify` | no | no | health, extensions, logins via PgBouncer/Postgres/MySQL/MariaDB |
+| `env` | no | no | prints the `DB_*` lines (contains the password) |
+| `backup` | writes `BACKUP_DIR/<ts>/` | no | three gzip dumps, prunes to `KEEP` |
+| `restore <dir> [postgres\|mysql\|mariadb\|all]` | **overwrites** | `Type RESTORE` (or `--yes`) | loads the dumps |
+| `cron-install` / `cron-remove` | cron file only | no | daily `backup` at `CRON_TIME` |
+| `logs [service]` | no | no | follow the last 200 lines |
+| `uninstall [--purge]` | `--purge` deletes everything | `Type PURGE` | stop and remove |
+| `help` | no | no | detailed help |
+
+Options (anywhere on the line): `--yes`/`-y` (or `FORCE=1`), `--config FILE`
+(or `DBM_CONFIG`), `--version`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Empty: fresh droplet
+    Empty --> Running: install
+    Running --> Running: install (idempotent) / verify / status / env / backup
+    Running --> Running: restore dir (overwrites data)
+    Running --> Running: reset --yes (new passwords, empty data)
+    Running --> Stopped: uninstall
+    Stopped --> Running: install (volumes and .env kept)
+    Running --> Empty: uninstall --purge
+    Stopped --> Empty: uninstall --purge
+```
+
 ### `install`
 This installs or enables Docker, keeps an existing `.env` (or creates one with new passwords), writes the files, builds the image, waits until all services are healthy, adds the firewall rules, runs `verify` and prints the summary. It does not delete any data, so it's safe to run again.
 
@@ -129,10 +177,10 @@ Runs `docker compose ps`. All four services should show `Up (healthy)`.
 
 ### `verify`
 Runs these checks:
-- `pg_isready`
+- `pg_isready` against Postgres
 - the extension list for `<db>` and for `template1`
 - a password login through PgBouncer, reached over the Docker network (`host=pgbouncer port=5432`). It deliberately does **not** use `PRIVATE_IP:6432`: from inside a container that is hairpin traffic to the host's own private IP, which ufw drops (the source is a Docker bridge address, not in `VPC_CIDR`), so the check timed out although the web server could connect fine
-- a direct password login at `PRIVATE_IP:5432`
+- a direct password login over TCP at `127.0.0.1:5432` inside the Postgres container
 - `mysqladmin ping` plus the MySQL version
 - MariaDB `healthcheck.sh` and `mariadb-admin ping` plus the version
 
@@ -142,6 +190,16 @@ It ends with `ALL CHECKS PASSED`, and any failure stops it with a line like `!! 
 Prints the `DB_*` lines for `WEB_ENV` (the shared Laravel `.env`; see [web-server-ploi.md](web-server-ploi.md)). This output **contains the Postgres password**.
 
 ### `backup`
+
+```mermaid
+flowchart LR
+    cron["cron CRON_TIME<br/>or manual backup"] --> dump["pg_dumpall --clean<br/>mysqldump / mariadb-dump<br/>(user DBs only)"]
+    dump --> files[("BACKUP_DIR/&lt;ts&gt;/<br/>postgres.sql.gz, mysql.sql.gz, mariadb.sql.gz")]
+    files --> test["gzip -t each file"] --> prune["keep newest KEEP"]
+    files -.->|"copy off-server"| off[("Spaces / volume")]
+    files --> restore["restore &lt;dir&gt; [engine]<br/>type RESTORE"]
+    restore --> stop["stop PgBouncer"] --> load["load dump"] --> start["start PgBouncer"]
+```
 ```sh
 ./docker-db-server-manager.sh backup
 KEEP=14 BACKUP_DIR=/mnt/volume/db ./docker-db-server-manager.sh backup

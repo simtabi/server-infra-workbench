@@ -16,3 +16,4 @@ Real problems hit while building the reference deployment, and the fix for each.
 | `sudo` rejects the password | Wrong password (DB/Ploi-login password, or stray whitespace from copy-paste) | Use the sudo password from Ploi's provisioning email, type it, or `passwd ploi` from the DO web console |
 | Login banner: `*** System restart required ***` | Kernel/security updates pending | `sudo reboot` before running the setup |
 | A `10.10.x.x` address in the banner instead of the VPC IP | DO's anchor IP on `eth0` | Normal. The VPC IP is on `eth1` |
+| Caddy: certificate not issued, 502, `File not found.` | DNS/ports, container network, or `php_fastcgi` root | See [web-server-caddy.md](web-server-caddy.md#troubleshooting) |
