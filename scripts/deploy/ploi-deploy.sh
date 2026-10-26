@@ -31,10 +31,12 @@ INSTALL_COMMAND="php artisan migrate --force"
 INSTALL_NEEDS_ADMIN=0
 TENANTS_MIGRATE=0                         # 1 = also run tenants:migrate (stancl/tenancy)
 DOCTOR_COMMAND=""                         # optional health check, e.g. php artisan app:doctor
+# Keys that must be non-empty in the shared .env before the deploy continues.
+REQUIRED_VARS="APP_URL DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD"
+TENANCY_DOMAIN_KEY=""                     # e.g. TENANCY_CENTRAL_DOMAINS: set to SITE_DOMAIN on first run
 # ------------------------------------------------------------------------------
 SHARED="${SHARED:-/home/ploi/$SITE_DOMAIN-shared}"     # survives every release
 OLD_ENV="${OLD_ENV:-/home/ploi/$SITE_DOMAIN/$APP_SUBDIR/.env}"  # picked up if you already made one
-REQUIRED_VARS="APP_URL TENANCY_CENTRAL_DOMAINS DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD"
 
 say()  { echo "==> $*"; }
 stop() { echo; echo "!! $*"; exit 1; }
@@ -81,7 +83,7 @@ if [ ! -f "$SHARED/.env" ]; then
     env_set APP_ENV   "$APP_ENV_NAME"     "$SHARED/.env"
     env_set APP_DEBUG false               "$SHARED/.env"
     env_set APP_URL   "https://$SITE_DOMAIN"   "$SHARED/.env"
-    env_set TENANCY_CENTRAL_DOMAINS "$SITE_DOMAIN" "$SHARED/.env"
+    if [ -n "$TENANCY_DOMAIN_KEY" ]; then env_set "$TENANCY_DOMAIN_KEY" "$SITE_DOMAIN" "$SHARED/.env"; fi
     env_set SESSION_SECURE_COOKIE true    "$SHARED/.env"
     env_set DB_PASSWORD ""                "$SHARED/.env"
   fi
