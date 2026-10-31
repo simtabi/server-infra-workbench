@@ -22,7 +22,7 @@
 | Progress UX | one contract for shell, PHP and Python: steps, bars, spinners; plain lines off a TTY, `NO_COLOR`, `--quiet` |
 | Docs | [lessons learned](lessons-learned.md), [checklists](checklists/README.md) per phase (command, verify, why), [privileges](reference/privileges.md) with the reason per row, ADRs 0001-0013, the [live rollout runbook](runbooks/live-rollout.md) |
 | Add-ons | Gotenberg; Garage, SeaweedFS, RustFS (experimental) object stores; [add-ons](tools/addons.md) |
-| Quality | pinned shellcheck, smoke tests, runnable examples, deploy sandbox, nine Docker integration suites in `make it` (upgrade, add-ons, server tools, DB features, PITR posix and S3, Garage cluster, monitoring, WireGuard) with a leak guard, secrets check (scanner + gitleaks), link, table and documented-command checks, generated config-keys check, compose validation, client-data check, Pint, PHPStan max, PHPUnit (mock HTTP server), Python unittest, CI and `make ci-local` ([tests](../tests/README.md)) |
+| Quality | pinned shellcheck, smoke tests, runnable examples, deploy sandbox, nine Docker integration suites in `make it` (upgrade, add-ons, server tools, DB features, PITR posix and S3, Garage cluster, monitoring, WireGuard) with a leak guard, secrets check (scanner + gitleaks), link, table and documented-command checks, generated config-keys and config-examples checks, compose validation, client-data check, Pint, PHPStan max, PHPUnit (mock HTTP server), Python unittest, CI and `make ci-local` ([tests](../tests/README.md)) |
 
 ## Open / Roadmap (ranked)
 

@@ -458,7 +458,7 @@ doctor_one() {
       local gid nodes; gid="$(g node id -q 2>/dev/null | head -1 | cut -c1-16)"
       g layout show 2>/dev/null | sed '/STAGED ROLE CHANGES/,$d' | grep "^${gid:-none} " >/dev/null && ok "layout applied (this node has a role)" || bad "layout not applied for this node (re-run install; with replication > 1 it applies when the last node joins)"
       nodes="$(g status 2>/dev/null | sed -n '/HEALTHY NODES/,/^$/p' | grep -cE '^[0-9a-f]{16} ' || true)"
-      [ "${nodes:-0}" -ge "${GARAGE_REPLICATION:-1}" ] && ok "healthy nodes: $nodes (replication ${GARAGE_REPLICATION:-1})" || bad "healthy nodes: ${nodes:-0}, replication ${GARAGE_REPLICATION:-1} needs at least that many" 
+      [ "${nodes:-0}" -ge "${GARAGE_REPLICATION:-1}" ] && ok "healthy nodes: $nodes (replication ${GARAGE_REPLICATION:-1})" || bad "healthy nodes: ${nodes:-0}, replication ${GARAGE_REPLICATION:-1} needs at least that many"
       if g bucket info "$STORAGE_BUCKET" 2>/dev/null | grep "vsw-app-$STORAGE_BUCKET" >/dev/null; then ok "bucket $STORAGE_BUCKET has key vsw-app-$STORAGE_BUCKET"
       else bad "bucket $STORAGE_BUCKET or its app key is missing (re-run install)"; fi ;;
     seaweedfs|rustfs)
