@@ -39,7 +39,7 @@ final class ConsoleNewCommandsTest extends TestCase
     {
         $this->stdout = self::memory();
         $this->stderr = self::memory();
-        $env = ['DIGITALOCEAN_TOKEN' => 'do-token-abcdef', 'PLOI_API_TOKEN' => 'ploi-token-abcdef', 'HCLOUD_TOKEN' => 'hcloud-token-abcdef'];
+        $env = ['DIGITALOCEAN_TOKEN' => self::fake('do'), 'PLOI_API_TOKEN' => self::fake('ploi'), 'HCLOUD_TOKEN' => self::fake('hcloud')];
 
         return new Application(
             new ProviderFactory($this->options(), new Credentials('/nonexistent/credentials', $env), null, $this->ssh, [], '/tmp'),
@@ -176,7 +176,7 @@ final class ConsoleNewCommandsTest extends TestCase
     {
         self::assertSame(0, $this->app()->run(['keys', 'providers', '--config', '/nonexistent/keys.json']));
         self::assertMatchesRegularExpression('/hetzner\s+yes/', $this->out());
-        self::assertStringNotContainsString('hcloud-token-abcdef', $this->out());
+        self::assertStringNotContainsString(self::fake('hcloud'), $this->out());
 
         $this->http->json(['ssh_keys' => [['id' => 1, 'name' => 'lap', 'fingerprint' => 'aa:bb']], 'meta' => ['pagination' => ['next_page' => null]]]);
         self::assertSame(0, $this->app()->run(['keys', 'account', 'list', '--provider', 'hetzner', '--config', '/nonexistent/keys.json']));

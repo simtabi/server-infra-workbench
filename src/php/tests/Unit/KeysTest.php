@@ -18,15 +18,19 @@ use Simtabi\VpsServerWorkbench\Tests\TestCase;
 
 final class KeysTest extends TestCase
 {
-    private const array ENV = [
-        'DIGITALOCEAN_TOKEN' => 'do-token-abcdef', 'VULTR_API_KEY' => 'vultr-token-abcdef', 'HCLOUD_TOKEN' => 'hcloud-token-abcdef',
-        'LINODE_TOKEN' => 'linode-token-abcdef', 'SCW_SECRET_KEY' => 'scw-token-abcdef', 'SCW_PROJECT_ID' => 'proj-0001',
-    ];
+    /** @return array<string, string> */
+    private static function env(): array
+    {
+        return [
+            'DIGITALOCEAN_TOKEN' => self::fake('do'), 'VULTR_API_KEY' => self::fake('vultr'), 'HCLOUD_TOKEN' => self::fake('hcloud'),
+            'LINODE_TOKEN' => self::fake('linode'), 'SCW_SECRET_KEY' => self::fake('scw'), 'SCW_PROJECT_ID' => 'proj-0001',
+        ];
+    }
 
     /** @param array<string, string> $env */
-    private function keys(string $provider, array $env = self::ENV, ?KeyProviders $providers = null): \Simtabi\VpsServerWorkbench\Keys\AccountKeys
+    private function keys(string $provider, ?array $env = null, ?KeyProviders $providers = null): \Simtabi\VpsServerWorkbench\Keys\AccountKeys
     {
-        return ($providers ?? new KeyProviders)->make($provider, $this->options(), new Credentials('/nonexistent', $env));
+        return ($providers ?? new KeyProviders)->make($provider, $this->options(), new Credentials('/nonexistent', $env ?? self::env()));
     }
 
     // ---- public keys ------------------------------------------------------------------------
@@ -110,7 +114,7 @@ final class KeysTest extends TestCase
         }
         $this->expectException(CredentialException::class);
         $this->expectExceptionMessage('SCW_PROJECT_ID');
-        $this->keys('scaleway', ['SCW_SECRET_KEY' => 'scw-token-abcdef']);
+        $this->keys('scaleway', ['SCW_SECRET_KEY' => self::fake('scw')]);
     }
 
     public function test_digitalocean_list_paginates_and_add_posts(): void
@@ -128,7 +132,7 @@ final class KeysTest extends TestCase
         $created = $pending->confirm();
         self::assertSame('3', $created->id);
         self::assertSame(['GET /v2/account/keys?per_page=200', 'GET /v2/account/keys?page=2&per_page=200', 'GET /v2/account/keys?per_page=200', 'POST /v2/account/keys'], $this->http->log());
-        self::assertSame('Bearer do-token-abcdef', $this->http->last()->getHeaderLine('Authorization'));
+        self::assertSame('Bearer '.self::fake('do'), $this->http->last()->getHeaderLine('Authorization'));
     }
 
     public function test_add_is_a_noop_when_the_key_material_is_already_there(): void
@@ -204,7 +208,7 @@ final class KeysTest extends TestCase
         $this->http->json(['ssh_keys' => $full])->json(['ssh_keys' => []])->json(['id' => 'new', 'name' => 'lap', 'public_key' => $line]);
         $pending = $this->keys('scaleway')->add('lap', $line);
         self::assertSame(['GET /iam/v1alpha1/ssh-keys?page_size=100&project_id=proj-0001', 'GET /iam/v1alpha1/ssh-keys?page=2&page_size=100&project_id=proj-0001'], $this->http->log());
-        self::assertSame('scw-token-abcdef', $this->http->last()->getHeaderLine('X-Auth-Token'));
+        self::assertSame(self::fake('scw'), $this->http->last()->getHeaderLine('X-Auth-Token'));
         self::assertSame('', $this->http->last()->getHeaderLine('Authorization'));
         self::assertSame(['name' => 'lap', 'public_key' => $line, 'project_id' => 'proj-0001'], $pending->plan()['payload']);
         self::assertSame('new', $pending->confirm()->id);
@@ -214,7 +218,7 @@ final class KeysTest extends TestCase
     {
         $this->http->json(['ssh_keys' => [], 'links' => []]);
         $this->keys('digitalocean')->add('laptop', FakeKeys::ed25519('x'))->plan();
-        self::assertStringNotContainsString('do-token-abcdef', print_r($this->audit->entries, true));
+        self::assertStringNotContainsString(self::fake('do'), print_r($this->audit->entries, true));
     }
 
     // ---- extra providers from config ---------------------------------------------------------
@@ -230,9 +234,9 @@ final class KeysTest extends TestCase
         $providers = KeyProviders::load($dir.'/keys.json');
         self::assertSame('https://api.digitalocean.com/v2', $providers->spec('digitalocean')->baseUrl, 'built-ins win');
         $this->http->json(['items' => [['id' => 5, 'name' => 'x', 'public_key' => 'k']]]);
-        $list = $this->keys('acme', ['ACME_TOKEN' => 'acme-token-abcdef'], $providers)->list();
+        $list = $this->keys('acme', ['ACME_TOKEN' => self::fake('acme')], $providers)->list();
         self::assertSame('5', $list[0]->id);
-        self::assertSame('acme-token-abcdef', $this->http->last()->getHeaderLine('X-Api-Key'));
+        self::assertSame(self::fake('acme'), $this->http->last()->getHeaderLine('X-Api-Key'));
         self::assertSame('workbench', $this->http->last()->getHeaderLine('X-Client'));
         self::assertSame('GET /v1/keys', $this->http->log()[0]);
         self::assertSame(['acme'], array_values(array_diff($providers->names(), array_keys(KeyProviders::builtins()))));
@@ -243,7 +247,7 @@ final class KeysTest extends TestCase
         $spec = KeyApiSpec::fromConfig(['name' => 'flat', 'base_url' => 'https://api.flat.test', 'token_env' => 'FLAT_TOKEN', 'list_path' => '/keys', 'list_field' => '']);
         $providers = new KeyProviders([$spec]);
         $this->http->json([['id' => 1, 'name' => 'a', 'public_key' => 'p']]);
-        $keys = $this->keys('flat', ['FLAT_TOKEN' => 'flat-token-abcdef'], $providers);
+        $keys = $this->keys('flat', ['FLAT_TOKEN' => self::fake('flat')], $providers);
         self::assertSame('a', $keys->list()[0]->name);
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage("rename isn't configured");

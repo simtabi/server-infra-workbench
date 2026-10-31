@@ -25,8 +25,9 @@ final class ConsoleTest extends TestCase
     private bool $answer = false;
 
     /** @param array<string, string> $env */
-    private function app(array $env = ['DIGITALOCEAN_TOKEN' => 'do-token-abcdef', 'CLOUDFLARE_API_TOKEN' => 'cf-token-abcdef', 'PLOI_API_TOKEN' => 'ploi-token-abcdef', 'GCP_PROJECT' => 'proj-123']): Application
+    private function app(?array $env = null): Application
     {
+        $env ??= ['DIGITALOCEAN_TOKEN' => self::fake('do'), 'CLOUDFLARE_API_TOKEN' => self::fake('cf'), 'PLOI_API_TOKEN' => self::fake('ploi'), 'GCP_PROJECT' => 'proj-123'];
         $this->stdout = self::memory();
         $this->stderr = self::memory();
 
@@ -132,15 +133,15 @@ final class ConsoleTest extends TestCase
         self::assertSame(0, $this->app()->run(['credentials']));
         self::assertMatchesRegularExpression('/PLOI_API_TOKEN\s+env/', $this->out());
         self::assertMatchesRegularExpression('/GOOGLE_APPLICATION_CREDENTIALS\s+missing/', $this->out());
-        self::assertStringNotContainsString('ploi-token-abcdef', $this->out());
+        self::assertStringNotContainsString(self::fake('ploi'), $this->out());
     }
 
     public function test_api_errors_exit_1_with_redacted_message(): void
     {
-        $this->http->json(['message' => 'Unauthenticated. token do-token-abcdef'], 401);
+        $this->http->json(['message' => 'Unauthenticated. token '.self::fake('do')], 401);
         self::assertSame(Application::FAILED, $this->app()->run(['do', 'droplets']));
         self::assertStringContainsString('HTTP 401', $this->err());
-        self::assertStringNotContainsString('do-token-abcdef', $this->err());
+        self::assertStringNotContainsString(self::fake('do'), $this->err());
     }
 
     public function test_cf_upsert_and_gcp_instances(): void

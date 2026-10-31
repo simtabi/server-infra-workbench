@@ -12,7 +12,7 @@ final class PloiTest extends TestCase
 {
     private function ploi(): Ploi
     {
-        return Ploi::make('ploi-token-abcdef', $this->options());
+        return Ploi::make(self::fake('ploi'), $this->options());
     }
 
     public function test_fluent_server_sites_chain(): void

@@ -19,7 +19,7 @@ final class DigitalOceanTest extends TestCase
 {
     private function do(): DigitalOcean
     {
-        return DigitalOcean::make(self::TOKEN, $this->options());
+        return DigitalOcean::make(self::token(), $this->options());
     }
 
     /** @return array<string, mixed> */
@@ -46,7 +46,7 @@ final class DigitalOceanTest extends TestCase
         self::assertSame('10.0.0.5', $droplets[1]->privateIpv4);
         self::assertSame('203.0.113.7', $droplets[1]->publicIpv4);
         self::assertSame(['GET /v2/droplets?per_page=200', 'GET /v2/droplets?page=2&per_page=200'], $this->http->log());
-        self::assertSame('Bearer '.self::TOKEN, $this->http->last()->getHeaderLine('Authorization'));
+        self::assertSame('Bearer '.self::token(), $this->http->last()->getHeaderLine('Authorization'));
     }
 
     public function test_snapshot_is_pending_until_confirmed(): void

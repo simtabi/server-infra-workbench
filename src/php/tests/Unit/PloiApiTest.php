@@ -13,7 +13,7 @@ final class PloiApiTest extends TestCase
 {
     private function server(): \Simtabi\VpsServerWorkbench\Ploi\ServerResource
     {
-        return Ploi::make('ploi-token-abcdef', $this->options())->servers()->find(12);
+        return Ploi::make(self::fake('ploi'), $this->options())->servers()->find(12);
     }
 
     public function test_site_create_is_idempotent_and_validates(): void

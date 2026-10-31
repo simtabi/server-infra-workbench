@@ -15,7 +15,7 @@ final class DigitalOceanResizeMonitoringTest extends TestCase
 {
     private function do(): DigitalOcean
     {
-        return DigitalOcean::make(self::TOKEN, $this->options());
+        return DigitalOcean::make(self::token(), $this->options());
     }
 
     /** @return array<string, mixed> */

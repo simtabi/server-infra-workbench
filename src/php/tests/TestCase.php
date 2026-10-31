@@ -14,7 +14,29 @@ use Simtabi\VpsServerWorkbench\Tests\Fixtures\RecordingSleeper;
 
 abstract class TestCase extends Base
 {
-    protected const string TOKEN = 'dop_v1_'.'0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    /** Repo rule: no hardcoded secrets, not even in tests. Every run gets fresh values. */
+    private static ?string $doToken = null;
+
+    /** A DigitalOcean-shaped token (dop_v1_ + 64 hex), generated once per test run. */
+    protected static function token(): string
+    {
+        return self::$doToken ??= 'dop_v1_'.bin2hex(random_bytes(32));
+    }
+
+    /** @var array<string, string> */
+    private static array $fakes = [];
+
+    /** A named fake credential (e.g. fake('do') -> "do-<random hex>"), stable within one run so tests can assert on it. */
+    protected static function fake(string $name): string
+    {
+        return self::$fakes[$name] ??= $name.'-'.bin2hex(random_bytes(12));
+    }
+
+    /** A fresh random secret, e.g. for redaction tests: prefix + 24 hex chars. */
+    protected static function secret(string $prefix = 's-'): string
+    {
+        return $prefix.bin2hex(random_bytes(12));
+    }
 
     protected MockHttpClient $http;
 

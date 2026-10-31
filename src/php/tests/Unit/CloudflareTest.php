@@ -18,7 +18,7 @@ final class CloudflareTest extends TestCase
 
     private function cf(): Cloudflare
     {
-        return Cloudflare::make('cf-token-abcdef', $this->options());
+        return Cloudflare::make(self::fake('cf'), $this->options());
     }
 
     private function zone(): self

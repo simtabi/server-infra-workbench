@@ -112,7 +112,7 @@ final class ProgressTest extends TestCase
 
     public function test_labels_are_redacted(): void
     {
-        $token = 'dop_v1_'.str_repeat('a', 64);
+        $token = 'dop_v1_'.bin2hex(random_bytes(32)); // generated: no hardcoded secrets, even in tests
         (new Progress($this->stream, Progress::PLAIN))->finished('call with '.$token, 1);
         self::assertStringNotContainsString($token, $this->written());
     }
