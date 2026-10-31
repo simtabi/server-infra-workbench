@@ -41,6 +41,16 @@ stub sshd
 mkdir -p "$T/root/home/ploi"; bash "$H" --firewall --only firewall >"$T/o"
 grep -q 'Ploi server - skipped' "$T/o" && ok "harden: firewall left to Ploi on a Ploi server" || fail "ploi firewall"
 bash "$H" --role mail >/dev/null 2>&1 && fail "bad role" || ok "harden: validates --role"
+# docker group = root-equivalent: report, allow-list, confirmed fix
+fresh; printf 'root:x:0:\ndocker:x:999:ploi,deploy\n' > "$T/root/etc/group"
+bash "$H" --only dockergroup >"$T/o" 2>&1 || true
+grep -q 'warn  dockergroup: ploi deploy in the docker group' "$T/o" && grep -q 'nothing to change' "$T/o" && ok "harden: reports non-root docker group members (warn, no change by default)" || { cat "$T/o"; fail "docker group report"; }
+bash "$H" --only dockergroup --docker-allow ploi,deploy >"$T/o" 2>&1; grep -q 'ok    dockergroup: only root and allowed' "$T/o" && ok "harden: DOCKER_GROUP_ALLOW exempts intended users" || { cat "$T/o"; fail "docker allow"; }
+DOCKER_GROUP_ALLOW=Bad bash "$H" --only dockergroup >/dev/null 2>&1 && fail "bad allow list" || ok "harden: validates DOCKER_GROUP_ALLOW"
+if bash "$H" --only dockergroup --fix-docker-group --check >/dev/null 2>&1; then fail "--check with docker fix pending"; fi
+DOCKER_GROUP_ALLOW=deploy bash "$H" --only dockergroup --fix-docker-group --yes >"$T/o" 2>&1
+grep -qx 'docker:x:999:deploy' "$T/root/etc/group" && ls "$T/root/etc/group".bak.* >/dev/null 2>&1 && grep -q 'item=dockergroup' "$T/log/audit.log" \
+  && ok "harden --fix-docker-group --yes: removes only non-allowed users, backup + audit" || { cat "$T/o" "$T/root/etc/group"; fail "docker fix"; }
 
 # --- update -------------------------------------------------------------------------
 fresh

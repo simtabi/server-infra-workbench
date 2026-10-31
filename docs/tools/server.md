@@ -67,6 +67,7 @@ bin/workbench server harden --host web-1 --role web --check   # exit 1 if anythi
 | `fail2ban` | sshd jail: 5 failures in 10 min, 1 h ban, systemd backend | Fewer brute-force attempts and less log noise |
 | `sysctl` | `/etc/sysctl.d/90-workbench.conf`: syncookies, rp_filter, no redirects/source routing, `kptr_restrict`, `dmesg_restrict` | Drops spoofed and redirected packets |
 | `journald` | Cap at 500 MB, one month | An uncapped journal can fill a small disk and stop the DB |
+| `dockergroup` | Reports non-root members of the `docker` group as a warning. `--fix-docker-group` removes them (`gpasswd -d`, after the usual confirmation); `--docker-allow a,b` keeps intended users | The `docker` group is root without a password: `docker run -v /:/host` owns the server, so a leaked deploy key becomes root. Reporting by default keeps `harden --yes` from breaking a workflow that relies on it |
 | `firewall` | Only with `--firewall` (`--allow 80,443`): ufw allows OpenSSH first, then default-deny inbound. **Skipped on Ploi servers** (Ploi owns ufw) | Defence in depth behind the DO cloud firewall |
 
 **Lockout guard:** the `ssh` item is refused when neither root nor any `/home/*` user has an `authorized_keys`

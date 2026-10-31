@@ -102,6 +102,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `MY_APP_HOST` | `%` | host part of MySQL/MariaDB app users (ports are VPC-only) |
 | `BINLOG_DAYS` | `7` | MySQL/MariaDB binlog retention on the server |
 | `STATE_DIR` | `/var/lib/vps-server-workbench/db` | status stamps for doctor/monitoring |
+| `DOCKER_GROUP_ALLOW` | (empty) | users allowed in the docker group; doctor warns about any other non-root member |
 
 ## environments
 

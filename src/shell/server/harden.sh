@@ -21,6 +21,9 @@
 #                Only with --firewall, and never on a Ploi server (Ploi owns ufw).
 #                Note: Docker-published ports bypass ufw; bind DB ports to the
 #                private IP and use a DO cloud firewall (workbench do firewall-apply).
+#    dockergroup members of the docker group other than root are reported (warn):
+#                docker group = root on the host. --fix-docker-group removes them
+#                (gpasswd -d, confirmed); DOCKER_GROUP_ALLOW=user,... exempts users.
 #
 #  USAGE
 #    harden.sh                       plan only (same as --dry-run)
@@ -33,6 +36,8 @@
 #    --only a,b  --skip a,b
 #    --firewall           include the ufw item   --allow 80,443   extra ports
 #    --root-login no      PermitRootLogin no (default: prohibit-password)
+#    --fix-docker-group   remove non-allowed users from the docker group
+#    --docker-allow a,b   users allowed in the docker group (same as DOCKER_GROUP_ALLOW)
 #    --dry-run, -n  --yes, -y  --check  --host H  -h, --help
 # =============================================================================
 set -euo pipefail
@@ -42,7 +47,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../lib/common.sh"
 usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
 
-ROLE=base ONLY="" SKIP="" FIREWALL=0 ALLOW="" ROOT_LOGIN=prohibit-password CHECK=0 HOST=""
+ROLE=base ONLY="" SKIP="" FIREWALL=0 FIX_DOCKER=0 ALLOW="" ROOT_LOGIN=prohibit-password CHECK=0 HOST=""
 ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -50,6 +55,8 @@ while [ $# -gt 0 ]; do
     --only) ONLY="${2:?}"; shift 2 ;;
     --skip) SKIP="${2:?}"; shift 2 ;;
     --firewall) FIREWALL=1; shift ;;
+    --fix-docker-group) FIX_DOCKER=1; shift ;;
+    --docker-allow) DOCKER_GROUP_ALLOW="${2:?}"; shift 2 ;;
     --allow) ALLOW="${2:?}"; shift 2 ;;
     --root-login) ROOT_LOGIN="${2:?}"; shift 2 ;;
     --check) CHECK=1; DRY=1; shift ;;
@@ -69,7 +76,9 @@ if [ -n "$HOST" ]; then
   remote "$HOST" "$0" "${rest[@]+"${rest[@]}"}"; exit $?
 fi
 
-ITEMS="ssh updates fail2ban sysctl journald"
+ITEMS="ssh updates fail2ban sysctl journald dockergroup"
+DOCKER_GROUP_ALLOW="${DOCKER_GROUP_ALLOW:-}"
+[[ -z "$DOCKER_GROUP_ALLOW" || "$DOCKER_GROUP_ALLOW" =~ ^[a-z_][a-z0-9_-]*(,[a-z_][a-z0-9_-]*)*$ ]] || CODE=2 die "DOCKER_GROUP_ALLOW takes user names like ploi,deploy"
 [ "$FIREWALL" = 1 ] && ITEMS="$ITEMS firewall"
 want() { local i="$1"
   [ -n "$ONLY" ] && { [[ ",$ONLY," == *",$i,"* ]] || return 1; }
@@ -119,6 +128,15 @@ F_JOURNAL="$R/etc/systemd/journald.conf.d/90-workbench.conf"
 
 same() { [ -f "$1" ] && cmp -s "$1" <("$2"); }
 pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed'; }
+docker_members() { # non-root members of the docker group that are not allowed, one per line
+  local line u; line="$(grep -E '^docker:' "$R/etc/group" 2>/dev/null | head -1 || true)"
+  [ -n "$line" ] || return 0
+  for u in $(printf '%s' "${line##*:}" | tr ',' ' '); do
+    [ "$u" = root ] && continue
+    [[ ",$DOCKER_GROUP_ALLOW," == *",$u,"* ]] && continue
+    printf '%s\n' "$u"
+  done
+}
 key_count() { cat "$R"/root/.ssh/authorized_keys "$R"/home/*/.ssh/authorized_keys 2>/dev/null | grep -cE '^[^#]*(ssh-(ed25519|rsa)|ecdsa-sha2-|sk-)' || true; }
 
 PENDING=()
@@ -146,6 +164,15 @@ plan_item() { # plan_item NAME : prints the state, queues the item when it needs
     journald)
       if same "$F_JOURNAL" journal_conf; then ok "journald: capped at 500M"
       else todo "journald: write $F_JOURNAL, restart journald"; PENDING+=(journald); why "an uncapped journal can fill a small droplet's disk and stop the DB"; fi ;;
+    dockergroup)
+      local m; m="$(docker_members | tr '\n' ' ')"; m="${m% }"
+      if ! grep -qE '^docker:' "$R/etc/group" 2>/dev/null; then ok "dockergroup: no docker group on this host"
+      elif [ -z "$m" ]; then ok "dockergroup: only root${DOCKER_GROUP_ALLOW:+ and allowed ($DOCKER_GROUP_ALLOW)} in the docker group"
+      elif [ "$FIX_DOCKER" = 1 ]; then todo "dockergroup: remove $m from the docker group (gpasswd -d)"; PENDING+=(dockergroup)
+        why "the docker group can start a privileged container and own the host; deploy users don't need it"
+      else warn "dockergroup: $m in the docker group (root-equivalent); fix: --fix-docker-group, or allow: --docker-allow ${m// /,}"
+        why "anyone in the docker group can mount / into a container; a leaked deploy key becomes root"
+      fi ;;
     firewall)
       if ploi_managed; then warn "firewall: Ploi server - skipped (manage rules in Ploi > Network)"; return 0; fi
       if have ufw && ufw status 2>/dev/null | grep -q 'Status: active'; then ok "firewall: ufw active (review: ufw status verbose)"
@@ -174,6 +201,18 @@ apply_item() {
       f2b_conf | write_file "$F_F2B" 644; systemctl restart fail2ban 2>/dev/null || true ;;
     sysctl) sysctl_conf | write_file "$F_SYSCTL" 644; sysctl --system >/dev/null 2>&1 || warn "sysctl --system reported errors" ;;
     journald) journal_conf | write_file "$F_JOURNAL" 644; systemctl restart systemd-journald 2>/dev/null || true ;;
+    dockergroup)
+      local u
+      for u in $(docker_members); do
+        if [ -z "$R" ] && have gpasswd; then gpasswd -d "$u" docker >/dev/null
+        else # sysroot (tests) or no gpasswd: same edit on the file, refused unless it is whole
+          local t; t="$(mktemp)"
+          awk -F: -v OFS=: -v u="$u" '$1=="docker"{n=split($4,a,",");o="";for(i=1;i<=n;i++){if(a[i]==u)continue;if(o!="")o=o ",";o=o a[i]};$4=o}{print}' "$R/etc/group" > "$t" \
+            && [ "$(wc -l < "$t")" = "$(wc -l < "$R/etc/group")" ] || { rm -f "$t"; die "could not edit $R/etc/group; nothing changed"; }
+          write_file "$R/etc/group" 644 < "$t"; rm -f "$t"
+        fi
+        say "        removed $u from docker (takes effect at that user's next login; running sessions keep it)"
+      done ;;
     firewall)
       have ufw || DEBIAN_FRONTEND=noninteractive apt-get install -y -q ufw
       ufw allow OpenSSH >/dev/null

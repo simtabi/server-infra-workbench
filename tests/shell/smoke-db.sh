@@ -125,4 +125,7 @@ PATH="$T/mbin:$PATH" PEER_REGIONS=nyc1 L eval 'doctor_network; echo "bad=$D_BAD"
 grep -q 'peer region nyc1: same region' "$T/net.out" && grep -q 'bad=0' "$T/net.out" && ok "doctor: same region is ok" || { cat "$T/net.out"; fail "same region"; }
 PATH="$T/mbin:$PATH" PRIVATE_IP=10.0.0.5 VPC_CIDR=10.16.0.0/20 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
 grep -q 'outside VPC_CIDR' "$T/net.out" && ok "doctor: PRIVATE_IP outside VPC_CIDR is a PROBLEM" || { cat "$T/net.out"; fail "vpc cidr"; }
+printf 'root:x:0:\ndocker:x:999:root,ploi,deploy\n' > "$T/group"
+[ "$(GROUP_FILE="$T/group" L docker_group_members)" = "ploi deploy" ] && [ "$(GROUP_FILE="$T/group" DOCKER_GROUP_ALLOW=ploi L docker_group_members)" = deploy ] \
+  && ok "doctor: non-root docker group members found, DOCKER_GROUP_ALLOW honoured" || fail "docker group members"
 echo "smoke-db: all $pass checks passed"

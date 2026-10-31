@@ -154,6 +154,7 @@ MARIADB_ED25519="${MARIADB_ED25519:-0}"             # 1 = new MariaDB users use 
 MY_APP_HOST="${MY_APP_HOST:-%}"                     # host part of MySQL/MariaDB app users (ports are VPC-only)
 BINLOG_DAYS="${BINLOG_DAYS:-7}"                     # MySQL/MariaDB binlog retention on the server
 STATE_DIR="${STATE_DIR:-/var/lib/vps-server-workbench/db}"   # status stamps for doctor/monitoring
+DOCKER_GROUP_ALLOW="${DOCKER_GROUP_ALLOW:-}"         # users allowed in the docker group (doctor warns about others)
 # ---- environments (approved design; see docs/database-environments.md) --
 APP="${APP:-}"                                      # empty = no environment layout
 ENVS="${ENVS:-tst dev trn stg prd}"
@@ -1102,6 +1103,7 @@ cmd_logs() { need_stack; dc logs -f --tail=200 "$@"; }
 
 # env-init: the interactive setup wizard (or flags). Writes config KEY=VALUE lines only;
 # nothing on the server changes until env-apply / upgrade. Exit 2 = a value is missing.
+# shellcheck disable=SC2317  # the v_* validators are called indirectly by ask ("$4")
 cmd_env_init() {
   local out="" dry=0 a k v
   local w_app="$APP" w_eng="" w_envs="" w_tenants="" w_protect="" w_prd="" w_pitr="" w_off="" w_tls="" w_mail="" w_allow=""
@@ -2413,7 +2415,14 @@ doctor_host() {
     [ "$sn" = "$DOCKER_SUBNET" ] && d_ok "docker network $DOCKER_NETWORK $sn" || d_bad "docker network $DOCKER_NETWORK is $sn, config says $DOCKER_SUBNET"
   fi
   docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep -E '(^| |,)0\.0\.0\.0:' | grep -v '^vsw-rt-' | while read -r l; do echo "  warn  another container publishes on all interfaces: $l"; done || true
+  local dm; dm="$(docker_group_members)"
+  [ -z "$dm" ] && d_ok "docker group: no non-root members" \
+    || d_warn "docker group has $dm (root-equivalent). Fix: bin/workbench server harden --host <db> --only dockergroup --fix-docker-group (or keep them: --docker-allow ${dm// /,} and DOCKER_GROUP_ALLOW in the manager config)"
   return 0
+}
+docker_group_members() { # non-root, non-allowed members of the docker group, space-separated
+  local u out="" m; m="$(awk -F: '$1=="docker"{gsub(",", " ", $4); print $4}' "${GROUP_FILE:-/etc/group}" 2>/dev/null)"
+  for u in $m; do [ "$u" = root ] || in_list "$u" "${DOCKER_GROUP_ALLOW//,/ }" || out="$out $u"; done; echo "${out# }"
 }
 doctor_postgres() {
   on "$ENABLE_POSTGRES" && stack_up postgres || return 0
