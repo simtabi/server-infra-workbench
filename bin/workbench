@@ -3,7 +3,7 @@
 #
 #   bin/workbench list                       every tool and where it lives
 #   bin/workbench <area> <tool> [args...]    run src/shell/<area>/<tool>.sh    e.g. bin/workbench db remote-run --help
-#                                            server harden|update, web diagnose: plan first, --yes to apply
+#                                            server init|harden|update|inventory, web diagnose: plan first, --yes to apply
 #   bin/workbench do|cf|ploi|gcp ...         platform APIs (PHP core)      e.g. bin/workbench do snapshot 123 --dry-run
 #   bin/workbench keys [...]                 SSH keys: provider accounts + servers (menu without args)
 #   bin/workbench health <url>...            check health endpoints (status, body, latency)

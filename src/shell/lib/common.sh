@@ -66,6 +66,8 @@ write_file() { # write_file PATH MODE < content ; atomic, keeps a backup when th
 }
 
 remote() { # remote HOST TOOL_PATH ARGS... : copy the tool + this file over ssh, run with sudo, clean up
+  # (REMOTE_EXTRA=(files) are copied next to the tool, e.g. a tool it calls;
+  #  REMOTE_NOTTY=1 runs without a tty and with sudo -n, so stdout can be captured)
   local host="$1" tool="$2"; shift 2
   local here rdir q="" a; here="$(dirname "$tool")/../lib/common.sh"
   [[ "$host" =~ ^[A-Za-z0-9@._:-]+$ ]] || die "bad --host: $host"
@@ -75,8 +77,10 @@ remote() { # remote HOST TOOL_PATH ARGS... : copy the tool + this file over ssh,
   ssh "$host" "mkdir -p '$rdir/tool' '$rdir/lib'" || die "ssh $host failed"
   scp -q "$tool" "$host:$rdir/tool/" || die "scp to $host failed"
   scp -q "$here" "$host:$rdir/lib/common.sh" || die "scp to $host failed"
+  for a in "${REMOTE_EXTRA[@]+"${REMOTE_EXTRA[@]}"}"; do scp -q "$a" "$host:$rdir/tool/" || die "scp to $host failed"; done
+  local t=-t s=sudo; [ "${REMOTE_NOTTY:-0}" = 1 ] && { t=-T; s="sudo -n"; }
   # shellcheck disable=SC2029
-  ssh -t "$host" "sudo bash '$rdir/tool/$(basename "$tool")'$q; rc=\$?; rm -rf '$rdir'; exit \$rc"
+  ssh "$t" "$host" "$s bash '$rdir/tool/$(basename "$tool")'$q; rc=\$?; rm -rf '$rdir'; exit \$rc"
 }
 
 summary() { printf '\n%s: %d ok, %d warn, %d fail, %d to change\n' "$TOOL" "$c_ok" "$c_warn" "$c_fail" "$c_todo"; }

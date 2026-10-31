@@ -14,6 +14,44 @@ Shell tools that run **on a droplet** (or from your workstation with `--host`, w
 
 Exit codes: `0` fine, `1` a failure was found or a step failed, `2` usage error, `3` not confirmed.
 
+## `server init`: first boot
+
+```bash
+bin/workbench server init --host db-1 --role db                 # plan
+bin/workbench server init --host db-1 --role db --yes           # apply (copies init.sh + harden.sh)
+bin/workbench server init --host web-1 --role web --yes         # Ploi web server: timezone, swap, base tools, harden
+```
+
+| Item | What it does | Why |
+|---|---|---|
+| `timezone` | `timedatectl set-timezone UTC` (`--timezone Area/City`) | Logs, cron and backups line up across servers |
+| `swap` | `/swapfile` (`--swap 2G`, `0` = never) when there is no swap, `/etc/fstab` entry; db role: `vm.swappiness=10` | A small droplet with no swap gets OOM-killed (usually the DB) on a spike |
+| `packages` | `ca-certificates curl gnupg jq unzip htop` | What the other tools and you expect to find |
+| `docker` | db role only, never on a Ploi server: Docker's apt repo (`signed-by` keyring), `docker-ce`, compose and buildx plugins; `/etc/docker/daemon.json` with 10 MB x 3 log rotation and `live-restore` (an existing, different file is left alone with a warning) | The DB manager runs its stack with compose; unrotated logs fill disks |
+| `harden` | runs `server harden --role <role>` (plus `--firewall` when asked and not Ploi) | One baseline everywhere |
+
+Web servers are provisioned by **Ploi** (PHP, nginx, firewall); `init --role web` without Ploi warns and
+does only the generic items.
+
+## `server inventory`
+
+```bash
+bin/workbench server inventory --host db-1 --pull --client acme   # -> local/acme/inventory/db-1/ (gitignored)
+bin/workbench server inventory --json                             # on the server, to stdout
+bin/workbench server inventory --host db-1 --install-cron --yes   # daily 05:17 into /var/lib/vps-server-workbench/inventory
+```
+
+Records OS, kernel, timezone, pending upgrades and reboot, CPU/RAM/swap/disk, IPv4 addresses, listening TCP
+sockets, Ploi sites (names only), PHP/nginx/Docker/compose/DB-manager versions, containers (image + state),
+service states and the security baseline (ssh drop-in, ufw, fail2ban, key count). It **never reads `.env`
+values, keys or passwords**.
+
+The canonical form is a sorted `key<TAB>value` file (`inventory.txt`) so two runs diff cleanly;
+`inventory.json` and `inventory.md` are generated from it. Each `--pull` or `--out` run keeps a dated copy
+and writes `changes-<timestamp>.diff` when something changed (a new listening port, a container image,
+a reboot pending). `--pull` runs without a tty, so it needs passwordless `sudo` for the ssh user.
+Inventories contain IPs and hostnames: they stay under `local/<client>/` or `inventory/`, both gitignored.
+
 ## `server harden`
 
 ```bash
@@ -83,4 +121,7 @@ lessons learned (LESSONS_LINK).
 ## Testing
 
 `tests/shell/smoke-server.sh` (part of `make test`) runs every tool against a fake root (`VSW_SYSROOT`)
-with stub commands on `PATH`.
+with stub commands on `PATH`. `tests/shell/server-it.sh` (part of `make it`) runs `init`, `harden`,
+`inventory`, `update --dry-run` and `env` for real as root in a throwaway Ubuntu 24.04 container: real apt,
+real `sshd -t`/`sshd -T` (including the rollback of a broken drop-in), real audit log and cron install.
+Swap, the Docker install and `--host` are covered by the offline stubs only.

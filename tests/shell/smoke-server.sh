@@ -98,4 +98,65 @@ grep -q 'missing: REDIS_PORT' "$T/o" && grep -q 'extra (not in the reference): E
   && ok "env check: missing, extra and superuser user reported" || { cat "$T/o"; fail "env check findings"; }
 bash "$E" init --env prd --site shop.example.com --set 'bad-key=1' >/dev/null 2>&1 && fail "bad key" || ok "env init: rejects bad keys"
 
+# --- server init ------------------------------------------------------------------------------
+I=src/shell/server/init.sh
+stub timedatectl 'case "$1" in show) echo Etc/UTC;; esac'
+stub swapon 'case "$1" in --show) ;; esac'
+stub fallocate 'touch "$3"'
+stub mkswap
+stub curl 'while [ $# -gt 0 ]; do [ "$1" = -o ] && { echo FAKE-GPG > "$2"; }; shift; done'
+initroot() { fresh; mkdir -p "$T/root/proc" "$T/root/etc"; printf 'MemTotal:       2014000 kB\nSwapTotal: 0 kB\n' > "$T/root/proc/meminfo"
+  printf 'PRETTY_NAME="Ubuntu 24.04.3 LTS"\nVERSION_CODENAME=noble\n' > "$T/root/etc/os-release"
+  echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTestsOnly t' > "$T/root/root/.ssh/authorized_keys"
+  echo 'Include /etc/ssh/sshd_config.d/*.conf' > "$T/root/etc/ssh/sshd_config"; }
+initroot
+bash "$I" >/dev/null 2>&1 && fail "init without role" || ok "init: --role is required"
+stub docker 'case "$1" in compose) exit 1;; ps) ;; esac'
+bash "$I" --role db --dry-run >"$T/o"
+grep -q 'todo  timezone: Etc/UTC -> UTC' "$T/o" && grep -q 'todo  swap: create /swapfile 2G (RAM 1966 MB)' "$T/o" && grep -q "todo  docker: add Docker's apt repo (noble)" "$T/o" \
+  && grep -q 'todo  harden:' "$T/o" && [ ! -e "$T/root/swapfile" ] && ! grep -q 'apt-get' "$T/calls" && ok "init --dry-run (db): timezone, swap, docker, harden planned; nothing done" || { cat "$T/o"; fail "init plan"; }
+bash "$I" --role db >/dev/null 2>&1 && fail "init without yes" || ok "init: not confirmed without --yes"
+bash "$I" --role db --yes >"$T/o" 2>&1 || { cat "$T/o"; fail "init apply"; }
+grep -q 'timedatectl set-timezone UTC' "$T/calls" && [ -f "$T/root/swapfile" ] && grep -q '^/swapfile none swap' "$T/root/etc/fstab" && grep -q 'vm.swappiness = 10' "$T/root/etc/sysctl.d/91-workbench-swap.conf" \
+  && grep -q 'docker-compose-plugin' "$T/calls" && grep -q 'signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable' "$T/root/etc/apt/sources.list.d/docker.list" \
+  && grep -q '"live-restore": true' "$T/root/etc/docker/daemon.json" && [ -f "$T/root/etc/ssh/sshd_config.d/10-workbench.conf" ] && grep -q 'tool=init.*outcome=succeeded' "$T/log/audit.log" \
+  && ok "init --yes (db): tz, swap+fstab+swappiness, Docker repo+compose, daemon.json, harden, audit" || { cat "$T/o"; fail "init results"; }
+stub docker 'case "$1" in ps) ;; esac'; stub timedatectl 'case "$1" in show) echo UTC;; esac'; stub swapon 'case "$1" in --show) echo "/swapfile file 2G";; esac'
+stub dpkg-query 'echo "install ok installed"'
+bash "$I" --role db --yes >"$T/o" 2>&1; grep -q 'nothing to change' "$T/o" && ok "init: rerun is a no-op" || { cat "$T/o"; fail "init idempotent"; }
+stub dpkg-query; stub timedatectl 'case "$1" in show) echo Etc/UTC;; esac'
+initroot; mkdir -p "$T/root/home/ploi"
+bash "$I" --role web --firewall --dry-run >"$T/o"
+grep -q 'docker: not for role web' "$T/o" && ! grep -q 'firewall' "$T/o" && ok "init (web, Ploi): no Docker, firewall left to Ploi" || { cat "$T/o"; fail "init ploi"; }
+bash "$I" --role db --dry-run >"$T/o"; grep -q 'looks like a Ploi server' "$T/o" && ok "init: refuses Docker DB stack on a Ploi server" || fail "init ploi db"
+bash "$I" --role db --swap 3X >/dev/null 2>&1 && fail "bad swap" || ok "init: validates --swap"
+
+# --- server inventory -------------------------------------------------------------------------
+V=src/shell/server/inventory.sh
+initroot; mkdir -p "$T/root/home/ploi/shop.example.com"; touch "$T/root/home/ploi/shop.example.com/artisan"
+printf 'APP_KEY=base64:secretvalue\nDB_PASSWORD=not-a-real-password\n' > "$T/root/home/ploi/shop.example.com/.env"
+stub docker 'case "$1" in ps) echo "pg|postgres:18|Up 3 days (healthy)";; --version) echo "Docker version 28.5.1, build x";; compose) echo "Docker Compose version v2.40.0";; esac'
+stub ss "printf 'LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 200 10.0.0.5:5432 0.0.0.0:*\n'"
+bash "$V" --json >"$T/o"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); f=d["facts"]; assert f["os.name"]=="Ubuntu 24.04.3 LTS" and f["size.mem_mb"]=="1966" and f["containers.pg"].startswith("postgres:18") and f["sites.shop.example.com"]=="laravel" and f["ver.docker"]=="28.5.1"' "$T/o" \
+  && ok "inventory --json: valid JSON with OS, size, containers, sites, versions" || { cat "$T/o"; fail "inventory json"; }
+! grep -qE 'secretvalue|not-a-real-password' "$T/o" && ok "inventory: never reads .env values" || fail "inventory leaked"
+bash "$V" --out /var/lib/vsw/inv >/dev/null; [ -f "$T/root/var/lib/vsw/inv/inventory.md" ] && grep -q '| mem_mb | 1966 |' "$T/root/var/lib/vsw/inv/inventory.md" && ok "inventory --out: txt/json/md written" || fail "inventory out"
+stub ss "printf 'LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 200 10.0.0.5:5432 0.0.0.0:*\nLISTEN 0 511 0.0.0.0:6379 0.0.0.0:*\n'"
+bash "$V" --out /var/lib/vsw/inv >"$T/o"; grep -q 'changes since the last inventory' "$T/o" && grep -q '^+net.listen.0.0.0.0:6379' "$T/root/var/lib/vsw/inv"/changes-*.diff \
+  && grep -q 'tool=inventory.*outcome=changed' "$T/log/audit.log" && ok "inventory: diff vs the last run, audited" || fail "inventory diff"
+bash "$V" --install-cron --dry-run >/dev/null; [ ! -e "$T/root/etc/cron.d/vsw-inventory" ] && bash "$V" --install-cron --yes >/dev/null \
+  && grep -q 'inventory.sh --out /var/lib/vps-server-workbench/inventory' "$T/root/etc/cron.d/vsw-inventory" && [ -x "$T/root/usr/local/lib/vps-server-workbench/server/inventory.sh" ] \
+  && ok "inventory --install-cron: plan, then tool copy + /etc/cron.d" || fail "inventory cron"
+cat > "$T/bin/ssh" <<STUB
+#!/bin/sh
+case "\$*" in *mktemp*) echo "$T/remote";; *"mkdir -p"*) mkdir -p "$T/remote/tool" "$T/remote/lib";; *) VSW_SYSROOT="$T/root" bash "$T/remote/tool/inventory.sh" --txt;; esac
+STUB
+printf '#!/bin/sh\n[ "$1" = -q ] && shift\nfor a; do last="$a"; done; cp "$1" "%s/remote/${last#*:%s/remote/}"\n' "$T" "$T" > "$T/bin/scp"; chmod +x "$T/bin/ssh" "$T/bin/scp"
+export VSW_REPO_ROOT="$T/repo"; mkdir -p "$VSW_REPO_ROOT"; L="$VSW_REPO_ROOT/local/smoketest-client"
+bash "$V" --host db-1 --pull --client smoketest-client >"$T/o" 2>&1 && grep -q 'first inventory' "$T/o" && [ -f "$L/inventory/db-1/inventory.json" ] && [ ! -e local/smoketest-client ] \
+  && bash "$V" --host db-1 --pull --client smoketest-client >"$T/o" 2>&1 && grep -q 'no changes' "$T/o" \
+  && ok "inventory --pull: saved to local/<client>/inventory/<host>/, diff on the next pull" || { cat "$T/o"; fail "inventory pull"; }
+rm -f "$T/bin/ssh" "$T/bin/scp"; unset VSW_REPO_ROOT
+
 printf '\nsmoke-server: %d passed, 0 failed\n' "$pass"
