@@ -25,6 +25,14 @@ final class Help
                 workbench do snapshot <droplet-id> [--name N] [--wait] [--timeout S]   take a snapshot (write)
                 workbench do snapshot-delete <snapshot-id> --force   delete a snapshot (destructive)
                 workbench do account                            check the token
+                workbench do resize <droplet-id> --size S [--disk] [--timeout S]   shutdown, resize, power on (write;
+                        downtime; --disk is permanent and needs --force). Snapshot first.
+                workbench do alerts [list]                      monitoring alert policies
+                workbench do alerts standard --email a@x (--droplet ID[,ID] | --tag T)   cpu>85% 10m, memory>90% 10m,
+                        disk>85% 5m; creates only the missing ones (write)
+                workbench do alerts create --type cpu|memory|disk|load1|load5|load15|bandwidth-out --value N
+                        [--window 5m|10m|30m|1h] [--below] --email a@x (--droplet ID | --tag T)   (write)
+                workbench do alerts delete <uuid> --force       (destructive)
                 workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image ubuntu-24-04-x64]
                         [--vpc UUID] [--tag T[,T]] [--backups] [--user-data FILE]   create a droplet (write; idempotent by name)
                 workbench do firewalls                          cloud firewalls (WORLD-OPEN marks non-web ports open to all)

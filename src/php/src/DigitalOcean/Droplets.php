@@ -6,7 +6,10 @@ namespace Simtabi\VpsServerWorkbench\DigitalOcean;
 
 use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Action;
 use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Droplet;
+use Simtabi\VpsServerWorkbench\DigitalOcean\Data\DropletStatus;
 use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Snapshot;
+use Simtabi\VpsServerWorkbench\Exception\ActionFailedException;
+use Simtabi\VpsServerWorkbench\Exception\TimeoutException;
 use Simtabi\VpsServerWorkbench\Exception\ValidationException;
 use Simtabi\VpsServerWorkbench\Http\Transport;
 use Simtabi\VpsServerWorkbench\Safety\PendingAction;
@@ -130,5 +133,50 @@ final readonly class Droplets
             fn (): Droplet => Droplet::fromArray(Data::map($this->transport->send('POST', '/v2/droplets', [], $body)->json, 'droplet')),
             note: "billed hourly from creation (size {$size}); see: workbench plans --regions {$region}",
         );
+    }
+
+    /**
+     * Resize a droplet: graceful shutdown (power off if that fails), resize, power on, then return the droplet.
+     * The droplet is down for the whole run (usually 1-5 minutes for CPU/RAM only). With $disk the disk grows
+     * too: that cannot be undone (the droplet can never move to a smaller disk), so the action is destructive
+     * and needs --force. Without $disk you can size down again later. Take a snapshot first.
+     *
+     * @return PendingAction<Droplet>
+     */
+    public function resize(int|string $id, string $size, bool $disk = false, int $timeoutSeconds = 1800): PendingAction
+    {
+        $id = Validate::id($id, 'droplet id');
+        if (preg_match('/^[a-z0-9][a-z0-9.-]{0,63}$/', $size) !== 1) {
+            throw new ValidationException(sprintf('size "%s" must be a DigitalOcean size slug (e.g. s-2vcpu-4gb; see: workbench plans)', $size));
+        }
+        $droplet = $this->find($id);
+        $path = "/v2/droplets/{$id}/actions";
+        $target = sprintf('%d "%s" %s -> %s%s', $id, $droplet->name, $droplet->size, $size, $disk ? ' (disk too, permanent)' : ' (CPU/RAM only)');
+        if ($droplet->size === $size) {
+            return $this->transport->pending('resize droplet', $target, 'NONE', $path, [], static fn (): Droplet => $droplet);
+        }
+        $body = ['type' => 'resize', 'size' => $size, 'disk' => $disk];
+        $run = function () use ($id, $path, $body, $droplet, $timeoutSeconds): Droplet {
+            $act = fn (array $b): Action => $this->actions->track(Action::fromArray(Data::map($this->transport->send('POST', $path, [], $b)->json, 'action')))->wait($timeoutSeconds);
+            if ($droplet->status !== DropletStatus::Off) {
+                try {
+                    $act(['type' => 'shutdown']);
+                } catch (ActionFailedException|TimeoutException) {
+                    $act(['type' => 'power_off']);
+                }
+            }
+            try {
+                $act($body);
+            } finally {
+                if ($droplet->status !== DropletStatus::Off) {
+                    $act(['type' => 'power_on']);
+                }
+            }
+
+            return $this->find($id);
+        };
+
+        return $this->transport->pending('resize droplet', $target, 'POST', $path, $body, $run, destructive: $disk,
+            note: 'downtime: shutdown, resize, power on (a few minutes). Snapshot first: workbench do snapshot '.$id.' --wait'.($disk ? '. Disk resize is permanent' : '. CPU/RAM only, reversible'));
     }
 }

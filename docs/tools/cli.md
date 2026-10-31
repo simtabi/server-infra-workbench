@@ -34,6 +34,18 @@ Requires PHP 8.4+ and `composer install --working-dir=src/php` (the dispatcher s
 | `workbench do snapshot <droplet-id> [--name N] [--wait] [--timeout S]` | **Write.** Snapshot a droplet (default name `workbench-<id>-<UTC time>`) |
 | `workbench do snapshot-delete <snapshot-id>` | **Destructive.** Needs `--force` |
 | `workbench do account` | Check the token (prints the account record) |
+| `workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I] [--vpc UUID] [--tag T] [--backups] [--user-data FILE]` | **Write.** Create a droplet; a no-op when one with that name exists |
+| `workbench do resize <id> --size S [--disk] [--timeout S]` | **Write, downtime.** Shut down (falls back to power off), resize, power back on (always attempted, even when the resize fails). CPU/RAM-only by default so you can size back down; `--disk` grows the disk permanently and needs `--force`. Snapshot first |
+| `workbench do alerts [list]` | Monitoring alert policies |
+| `workbench do alerts standard --email a@x (--droplet ID[,ID] \| --tag T)` | **Write.** CPU > 85% for 10m, memory > 90% for 10m, disk > 85% for 5m. Creates only the missing ones (matched by description), so it is safe to rerun |
+| `workbench do alerts create --type cpu\|memory\|disk\|load1\|load5\|load15\|bandwidth-out --value N [--window 5m\|10m\|30m\|1h] [--below] --email a@x (--droplet ID \| --tag T)` | **Write.** One custom policy |
+| `workbench do alerts delete <uuid>` | **Destructive.** Needs `--force` |
+| `workbench do firewalls` | Cloud firewalls (`WORLD-OPEN` marks non-web ports open to everyone) |
+| `workbench do firewall-apply db\|web --vpc VPC_ID\|CIDR [--ssh-from CIDR] [--ports P] [--droplet ID] [--tag T]` | **Write.** Create or update a preset firewall |
+| `workbench do firewall-delete <id>` | **Destructive.** Needs `--force` |
+| `workbench do uptime [checks]` / `state <id>` / `alerts <id>` | Uptime checks, their per-region state and alerts |
+| `workbench do uptime check-create <name> <url>` / `alert-create <id> down\|down_global\|latency\|ssl_expiry --email a@x` | **Write.** Uptime checks and their alerts |
+| `workbench do uptime check-delete <id>` | **Destructive.** Needs `--force` |
 | `workbench cf zones` | List zones |
 | `workbench cf dns list <zone> [--type T] [--name N]` | DNS records in a zone (name or id) |
 | `workbench cf dns upsert <zone> <type> <name> <content> [--ttl 1] [--proxied] [--priority P] [--comment C]` | **Write.** Create, update, or report "no change". Short names expand (`db` → `db.example.com`); refuses when several records match |
@@ -41,6 +53,11 @@ Requires PHP 8.4+ and `composer install --working-dir=src/php` (the dispatcher s
 | `workbench cf verify` | Check the token is active |
 | `workbench ploi servers` / `server <id>` / `sites <server-id>` | Read servers and sites |
 | `workbench ploi deploy <server-id> <site-id>` | **Write.** Run the site's deploy script |
+| `workbench ploi site-create <server-id> <domain>` / `site-delete` | **Write** / **destructive** |
+| `workbench ploi deploy-script <server-id> <site-id>` / `deploy-script-set ... --file deploy.sh` | Print, or replace (no-op when identical) |
+| `workbench ploi daemons <server-id>` / `daemon-create --command C` / `daemon-delete` | Queue workers and other daemons |
+| `workbench keys ...` | SSH keys on provider accounts and servers; see `workbench help keys` |
+| `workbench health <url>... [--expect 200] [--contains T] [--max-ms 1500]` | Health-endpoint check; exit 1 when any fails |
 | `workbench gcp instances [--zone Z]` | Instances, all zones unless `--zone` |
 | `workbench gcp snapshots` / `firewalls` | Snapshots; firewall rules (`WORLD-OPEN` marks rules open to `0.0.0.0/0`) |
 | `workbench gcp snapshot <zone> <disk> [--name N] [--wait]` | **Write.** Snapshot a persistent disk |
@@ -79,6 +96,9 @@ bin/workbench credentials
 bin/workbench do droplets --tag db --json | jq -r '.[] | "\(.name) \(.privateIpv4)"'
 bin/workbench do snapshot 123456 --name db-pre-upgrade --dry-run      # see exactly what would be sent
 bin/workbench do snapshot 123456 --name db-pre-upgrade --yes --wait   # take it and wait for completion
+bin/workbench do resize 123456 --size s-2vcpu-4gb --dry-run          # plan: shutdown, resize, power on
+bin/workbench do resize 123456 --size s-2vcpu-4gb --yes              # ~1-5 min of downtime (estimate)
+bin/workbench do alerts standard --email ops@example.com --tag db --dry-run
 bin/workbench cf dns upsert example.com A db 203.0.113.10 --ttl 300 --dry-run
 bin/workbench cf dns upsert example.com A db 203.0.113.10 --ttl 300 --yes
 bin/workbench ploi deploy 42 1001 --yes

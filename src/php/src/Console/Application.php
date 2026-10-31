@@ -10,6 +10,7 @@ use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Firewall;
 use Simtabi\VpsServerWorkbench\DigitalOcean\Data\UptimeAlert;
 use Simtabi\VpsServerWorkbench\DigitalOcean\Data\UptimeCheck;
 use Simtabi\VpsServerWorkbench\DigitalOcean\FirewallPreset;
+use Simtabi\VpsServerWorkbench\DigitalOcean\Monitoring;
 use Simtabi\VpsServerWorkbench\DigitalOcean\RunningAction;
 use Simtabi\VpsServerWorkbench\Exception\ApiException;
 use Simtabi\VpsServerWorkbench\Exception\ConfirmationRequiredException;
@@ -143,6 +144,21 @@ final class Application
                 $in->flag('backups'),
                 $this->readFile($in->value('user-data')),
             ), fn (Droplet $d): int => $this->showOne($in, $d, 'droplet created (it boots in about a minute; see: workbench do droplet '.$d->id.')')),
+            'resize' => $this->write($in, $do()->droplets()->resize($in->arg(1, 'droplet-id'), $in->value('size') ?? throw new ValidationException('--size is required (e.g. s-2vcpu-4gb; see: workbench plans)'), $in->flag('disk'), $in->int('timeout', 1800)),
+                fn (Droplet $d): int => $this->showOne($in, $d, 'droplet resized and powered on')),
+            'alerts' => match ($in->optionalArg(1)) {
+                'list', null => $this->show($in, $do()->monitoring()->policies(), ['uuid' => 'UUID', 'description' => 'DESCRIPTION', 'enabled' => 'ENABLED', 'emails' => 'EMAILS']),
+                'create' => $this->write($in, $do()->monitoring()->apply([Monitoring::body(
+                    $in->value('type') ?? throw new ValidationException('--type is required ('.implode('|', array_keys(Monitoring::TYPES)).')'),
+                    (float) ($in->value('value') ?? throw new ValidationException('--value is required (e.g. 85 for 85%)')),
+                    $in->value('window') ?? '5m', $in->list('email'), $in->ints('droplet'), $in->list('tag'),
+                    $in->flag('below') ? 'LessThan' : 'GreaterThan',
+                )]), fn (array $p): int => $this->show($in, $p, ['uuid' => 'UUID', 'description' => 'DESCRIPTION'])),
+                'standard' => $this->write($in, $do()->monitoring()->apply(Monitoring::standard($in->list('email'), $in->ints('droplet'), $in->list('tag'))),
+                    fn (array $p): int => $p === [] ? $this->done($in, true, 'all standard alert policies already exist') : $this->show($in, $p, ['uuid' => 'UUID', 'description' => 'DESCRIPTION'])),
+                'delete' => $this->write($in, $do()->monitoring()->delete($in->arg(2, 'policy-uuid')), fn (bool $ok): int => $this->done($in, $ok, 'alert policy deleted')),
+                default => $this->usage('do'),
+            },
             'firewalls' => $this->show($in, $do()->firewalls()->list(), ['id' => 'ID', 'name' => 'NAME', 'status' => 'STATUS', 'dropletIds' => 'DROPLETS', 'tags' => 'TAGS', 'openToWorld' => 'WORLD-OPEN']),
             'firewall-apply' => $this->write($in, $do()->firewalls()->apply(FirewallPreset::build(
                 $in->arg(1, 'db|web'),

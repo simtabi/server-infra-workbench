@@ -71,13 +71,13 @@ $gcp->snapshots()->create('us-east1-b', 'db-disk', 'db-pre-upgrade')->confirm()-
 
 | Entry point | Reads | Writes (return `PendingAction`) |
 |---|---|---|
-| `DigitalOcean::make($token?)` | `droplets()->list(?tag)`, `->find(id)`, `->snapshots(id)`, `snapshots()->list(type)`, `->find(id)`, `actions()->find(id)`, `account()` | `droplets()->snapshot(id, ?name)` → `RunningAction` (`->wait()`); `snapshots()->delete(id)` **destructive** |
+| `DigitalOcean::make($token?)` | `droplets()->list(?tag)`, `->find(id)`, `->snapshots(id)`, `snapshots()->list(type)`, `->find(id)`, `actions()->find(id)`, `account()`, `monitoring()->policies()` | `droplets()->snapshot(id, ?name)` → `RunningAction` (`->wait()`); `droplets()->create(...)`; `droplets()->resize(id, size, disk=false)` (shutdown, resize, power on; **destructive** with `disk`); `monitoring()->apply(Monitoring::standard(emails, ids, tags))` (creates only missing policies), `monitoring()->delete(uuid)` **destructive**; firewalls and uptime checks; `snapshots()->delete(id)` **destructive** |
 | `Cloudflare::make($token?)` | `zones()->list(?name)`, `->find(zone)`, `dns(zone)->list(?type, ?name)`, `verifyToken()` | `dns(zone)->upsert(type, name, content, ttl, proxied, priority, comment)`; `->delete(id)` **destructive** |
 | `Ploi::make($token?)` | `servers()->list()`, `->get(id)`, `->find(id)->get()`, `->find(id)->sites()->list()`, `->find(id)` | `servers()->find(id)->sites()->deploy(siteId)` |
 | `Gcp::make($project?, $tokens?)` | `instances()->list(?zone)`, `->find(zone, name)`, `snapshots()->list()`, `firewalls()->list()` | `snapshots()->create(zone, disk, ?name)` → `RunningOperation`; `->delete(name)` **destructive** |
 
 Lists follow pagination for you (DigitalOcean `links.pages.next`, Cloudflare `result_info`, Ploi `links.next`,
-GCP `nextPageToken`) and return typed, immutable DTOs (`Droplet`, `Snapshot`, `Action`, `Zone`, `DnsRecord`,
+GCP `nextPageToken`) and return typed, immutable DTOs (`Droplet`, `Snapshot`, `Action`, `AlertPolicy`, `Zone`, `DnsRecord`,
 `Server`, `Site`, `Instance`, `Firewall`, `Operation`) with enums for statuses and record types. DTOs are `readonly` and
 `JsonSerializable` (the CLI's `--json` output is exactly that).
 

@@ -56,6 +56,11 @@ final readonly class DigitalOcean
         return new Uptime($this->transport);
     }
 
+    public function monitoring(): Monitoring
+    {
+        return new Monitoring($this->transport);
+    }
+
     public function actions(): Actions
     {
         return new Actions($this->transport);

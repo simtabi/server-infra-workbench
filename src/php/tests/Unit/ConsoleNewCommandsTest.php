@@ -98,6 +98,23 @@ final class ConsoleNewCommandsTest extends TestCase
         self::assertSame([], $this->http->requests);
     }
 
+    public function test_resize_and_alert_commands(): void
+    {
+        $droplet = ['droplet' => ['id' => 7, 'name' => 'db-1', 'status' => 'active', 'region' => ['slug' => 'nyc3'], 'size_slug' => 's-1vcpu-2gb', 'memory' => 2048, 'vcpus' => 1, 'disk' => 50, 'networks' => ['v4' => []], 'tags' => [], 'created_at' => '2026-01-01T00:00:00Z']];
+        $this->http->json($droplet);
+        self::assertSame(0, $this->app()->run(['do', 'resize', '7', '--size', 's-2vcpu-4gb', '--dry-run']));
+        self::assertStringContainsString('s-1vcpu-2gb -> s-2vcpu-4gb', $this->out());
+        self::assertSame(Application::USAGE, $this->app()->run(['do', 'resize', '7']));
+        $this->http->json($droplet);
+        self::assertSame(Application::NOT_CONFIRMED, $this->app()->run(['do', 'resize', '7', '--size', 's-2vcpu-4gb', '--disk', '--yes']));
+        self::assertSame(['GET /v2/droplets/7', 'GET /v2/droplets/7'], $this->http->log());
+
+        $this->http->json(['policies' => [], 'links' => []]);
+        self::assertSame(0, $this->app()->run(['do', 'alerts', 'standard', '--email', 'ops@example.com', '--tag', 'db', '--dry-run']));
+        self::assertStringContainsString('3 new of 3', $this->out());
+        self::assertSame(Application::USAGE, $this->app()->run(['do', 'alerts', 'standard', '--tag', 'db']));
+    }
+
     public function test_uptime_commands(): void
     {
         $this->http->json(['checks' => [['id' => 'c1', 'name' => 'app', 'type' => 'https', 'target' => 'https://app.example.com/up']], 'links' => []]);

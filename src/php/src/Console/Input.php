@@ -9,11 +9,11 @@ use Simtabi\VpsServerWorkbench\Exception\ValidationException;
 /** argv split into positionals and known options. Unknown options are an error, never ignored. */
 final readonly class Input
 {
-    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose', 'backups'];
+    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose', 'backups', 'disk', 'below'];
 
     public const array VALUES = ['name', 'type', 'ttl', 'zone', 'project', 'priority', 'comment', 'tag', 'timeout',
         // do firewalls / droplets / uptime
-        'vpc', 'ssh-from', 'droplet', 'ports', 'region', 'size', 'image', 'ssh-keys', 'user-data', 'regions', 'email', 'threshold', 'period',
+        'vpc', 'ssh-from', 'droplet', 'ports', 'region', 'size', 'image', 'ssh-keys', 'user-data', 'regions', 'email', 'threshold', 'period', 'value', 'window',
         // health
         'expect', 'contains', 'max-ms',
         // ploi
