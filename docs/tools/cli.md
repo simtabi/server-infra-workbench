@@ -20,6 +20,13 @@ bin/workbench web check-db-reach 10.0.0.5
 bin/workbench tunnels db-tunnel --help
 ```
 
+| Command | Page |
+|---|---|
+| `server init --role db\|web\|base`, `server harden`, `server update --reboot-window`, `server inventory`, `web diagnose` | [server.md](server.md) |
+| `env init\|check --env dev\|stg\|prd` | [env.md](env.md) |
+| `ssh fixkeys` (console lockout recovery; normally pasted, not run through the dispatcher) | [ssh-keys.md](ssh-keys.md) |
+| `addon plan\|install\|status ...` | [addons.md](addons.md) |
+
 Area and tool names must match `[a-z0-9-]+`, so nothing outside `shell/` can be reached.
 
 ## Platform APIs: `workbench do|cf|ploi|gcp`

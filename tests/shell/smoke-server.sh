@@ -159,4 +159,32 @@ bash "$V" --host db-1 --pull --client smoketest-client >"$T/o" 2>&1 && grep -q '
   && ok "inventory --pull: saved to local/<client>/inventory/<host>/, diff on the next pull" || { cat "$T/o"; fail "inventory pull"; }
 rm -f "$T/bin/ssh" "$T/bin/scp"; unset VSW_REPO_ROOT
 
+# --- ssh fixkeys (self-contained; --root = a mounted disk) ------------------------------------
+K=src/shell/ssh/fixkeys.sh FR="$T/fk"
+fakekey() { python3 -c 'import base64,struct,sys; r=bytes([int(sys.argv[1])])*32; b=struct.pack(">I",11)+b"ssh-ed25519"+struct.pack(">I",32)+r; print("ssh-ed25519 "+base64.b64encode(b).decode()+" "+sys.argv[2])' "$1" "$2"; }
+k1="$(fakekey 1 alice@laptop)" k2="$(fakekey 2 bob@desk)"
+mkdir -p "$FR/etc" "$FR/home/deploy"; echo 'deploy:x:1000:1000::/home/deploy:/bin/bash' > "$FR/etc/passwd"; chmod 775 "$FR/home/deploy"
+export FIXKEYS_TTY="$T/fktty"; : > "$FIXKEYS_TTY"
+FK() { bash "$K" --root "$FR" --user deploy "$@"; }
+AKF="$FR/home/deploy/.ssh/authorized_keys"
+FK add 'ssh-ed25519 AAAAnotakey x' >/dev/null 2>&1 && fail "invalid key accepted"; [ ! -f "$AKF" ] && ok "fixkeys: ssh-keygen rejects an invalid key" || fail "fixkeys invalid"
+FK add '-----BEGIN OPENSSH ''PRIVATE KEY-----' >"$T/o" 2>&1 || true; grep -q 'PRIVATE key' "$T/o" && ok "fixkeys: refuses a pasted private key" || fail "fixkeys private"
+FK add "$k1" >/dev/null 2>&1 || true; [ ! -f "$AKF" ] && ok "fixkeys add: not confirmed -> nothing written" || fail "fixkeys confirm"
+FK add "$k1" --yes >/dev/null 2>&1 && FK add "$k2" --yes >/dev/null 2>&1
+[ "$(grep -c ssh-ed25519 "$AKF")" = 2 ] && [ "$(stat -c %a "$AKF" 2>/dev/null || stat -f %Lp "$AKF")" = 600 ] && [ "$(stat -c %a "$FR/home/deploy/.ssh" 2>/dev/null || stat -f %Lp "$FR/home/deploy/.ssh")" = 700 ] \
+  && ok "fixkeys add --yes: two keys, .ssh 700, file 600" || fail "fixkeys add"
+FK add "from=\"10.0.0.0/8\" $k1" --yes >"$T/o" 2>&1; grep -q 'already present' "$T/o" && ok "fixkeys: exact key match ignores options (no duplicate)" || fail "fixkeys dup"
+FK list >"$T/o" 2>&1; grep -q '2. bob@desk  ssh-ed25519  SHA256:' "$T/o" && ok "fixkeys list: labels, types, fingerprints" || fail "fixkeys list"
+FK diagnose >"$T/o" 2>&1; grep -q 'FIX   home is 775' "$T/o" && ok "fixkeys diagnose: group-writable home flagged" || fail "fixkeys diagnose"
+FK perms >/dev/null 2>&1; [ "$(stat -c %a "$FR/home/deploy" 2>/dev/null || stat -f %Lp "$FR/home/deploy")" = 755 ] && ok "fixkeys perms: home go-w" || fail "fixkeys perms"
+FK list >"$T/o" 2>&1; fp2="$(sed -n 's/.*bob@desk  ssh-ed25519  //p' "$T/o")"
+FK remove "$fp2" --yes >/dev/null 2>&1; ! grep -q bob@desk "$AKF" && grep -q alice@laptop "$AKF" && ok "fixkeys remove by fingerprint (backup kept)" || fail "fixkeys remove"
+FK remove 1 --yes >/dev/null 2>&1 || true; grep -q alice@laptop "$AKF" && ok "fixkeys: last key needs typed EMPTY (--yes is not enough)" || fail "fixkeys last key"
+ls "$AKF".bak.* >/dev/null 2>&1 && grep -q 'tool=fixkeys .*outcome=removed .*fp=SHA256:' "$FR/var/log/vps-server-workbench/audit.log" && ! grep -q AAAA "$FR/var/log/vps-server-workbench/audit.log" \
+  && ok "fixkeys: backups + audit with fingerprints only" || fail "fixkeys audit"
+echo 1 > "$FIXKEYS_TTY"; b1="$(grep -l bob@desk "$AKF".bak.* | head -1)"; FK restore "$(basename "$b1")" --yes >/dev/null 2>&1; [ "$(grep -c ssh-ed25519 "$AKF")" = 2 ] && ok "fixkeys restore: a backup put back" || fail "fixkeys restore"
+FK restore /etc/passwd --yes >/dev/null 2>&1 && fail "restore of an arbitrary file" || ok "fixkeys restore: only <file>.bak.* accepted"
+printf '2\n%s\ny\nq\n' "$(fakekey 3 carol@ipad)" > "$FIXKEYS_TTY"; FK >/dev/null 2>&1 || true; grep -q carol@ipad "$AKF" && ok "fixkeys menu: prompts read from FIXKEYS_TTY, not stdin" || fail "fixkeys menu"
+unset FIXKEYS_TTY
+
 printf '\nsmoke-server: %d passed, 0 failed\n' "$pass"

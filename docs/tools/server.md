@@ -71,7 +71,7 @@ bin/workbench server harden --host web-1 --role web --check   # exit 1 if anythi
 
 **Lockout guard:** the `ssh` item is refused when neither root nor any `/home/*` user has an `authorized_keys`
 entry. After applying, keep the session open and test a new login. If you do get locked out, see
-the lockout recipe (LOCKOUT_LINK).
+[the lockout recipe](../recipes/recover-ssh-lockout.md).
 
 Docker-published ports bypass ufw (Docker writes its own iptables rules). `harden` warns when a container
 publishes on `0.0.0.0`. Bind DB ports to the private IP (the manager does) and use a DO cloud firewall

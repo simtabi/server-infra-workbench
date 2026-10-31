@@ -51,5 +51,17 @@ mkdir -p /srv/app; printf 'DB_HOST=10.0.0.5\nDB_PASSWORD=it pass $x#1\nDB_USERNA
 bash $S/env/env.sh init --env stg --path /srv/app/.env --from /tmp/db.env --url https://stg.example.test --yes > /tmp/o 2>&1 || { cat /tmp/o; fail "env init"; }
 [ "$(stat -c %a /srv/app/.env)" = 600 ] && grep -q "^DB_PASSWORD='it pass \$x#1'$" /srv/app/.env && ! grep -q 'it pass' /tmp/o && ok "env init: real openssl APP_KEY, 600, quoted, values not shown" || fail "env init result"
 bash $S/env/env.sh check --env stg --path /srv/app/.env >/dev/null && ok "env check: clean" || fail "env check"
+
+# fixkeys as root: real chown, real ssh-keygen, real sshd -T (incl. a custom AuthorizedKeysFile)
+useradd -m -s /bin/bash deploy; chmod 775 /home/deploy; ssh-keygen -q -t ed25519 -N '' -C it@deploy -f /tmp/itkey
+K=$S/ssh/fixkeys.sh; export FIXKEYS_TTY=/dev/null
+bash $K add --user deploy --key-file /tmp/itkey.pub --yes >/dev/null 2>&1 && [ "$(stat -c '%U %a' /home/deploy/.ssh/authorized_keys)" = "deploy 600" ] \
+  && [ "$(stat -c '%U %a' /home/deploy/.ssh)" = "deploy 700" ] && ok "fixkeys add: owned by deploy, 700/600" || fail "fixkeys add"
+bash $K diagnose --user deploy > /tmp/o 2>&1; grep -q 'FIX   home is 775' /tmp/o && grep -q 'sshd  pubkeyauthentication yes' /tmp/o && ok "fixkeys diagnose: effective sshd -T settings, home perms" || { cat /tmp/o; fail "fixkeys diagnose"; }
+bash $K perms --user deploy >/dev/null 2>&1; [ "$(stat -c %a /home/deploy)" = 755 ] && ok "fixkeys perms: home fixed" || fail "fixkeys perms"
+printf 'AuthorizedKeysFile /etc/ssh/keys/%%u\n' > /etc/ssh/sshd_config.d/05-keys.conf; mkdir -p /etc/ssh/keys
+bash $K add --user deploy --key-file /tmp/itkey.pub --yes > /tmp/o 2>&1; grep -q 'AuthorizedKeysFile /etc/ssh/keys/deploy' /tmp/o && [ -s /etc/ssh/keys/deploy ] && [ "$(stat -c '%U %a' /etc/ssh/keys)" = "root 755" ] \
+  && ok "fixkeys: follows sshd -T AuthorizedKeysFile (%u)" || { cat /tmp/o; fail "fixkeys akf"; }
+rm /etc/ssh/sshd_config.d/05-keys.conf; unset FIXKEYS_TTY
 echo "server-it: $pass passed, 0 failed"
 INNER
