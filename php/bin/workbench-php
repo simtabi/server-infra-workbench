@@ -1,0 +1,23 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Simtabi\VpsServerWorkbench\Console\Application;
+
+if (PHP_VERSION_ID < 80400) {
+    fwrite(STDERR, 'workbench: PHP 8.4 or newer is required, this is ' . PHP_VERSION . "\n");
+    exit(1);
+}
+
+$autoload = dirname(__DIR__) . '/vendor/autoload.php';
+if (! is_file($autoload)) {
+    fwrite(STDERR, "workbench: PHP dependencies are not installed; run: composer install --working-dir=php\n");
+    exit(1);
+}
+require $autoload;
+
+/** @var list<string> $args */
+$args = array_values(array_slice($argv, 1));
+
+exit((new Application)->run($args));
