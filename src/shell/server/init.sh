@@ -34,7 +34,9 @@ TOOL=init
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=src/shell/lib/common.sh
 . "$HERE/../lib/common.sh"
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
+# usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
+# title box, so --help printed one line; awk counts the rules instead.
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); print}' "$0"; }
 
 ROLE="" TZ_WANT=UTC SWAP=2G ONLY="" SKIP="" FIREWALL=0 HOST=""
 ARGS=("$@")

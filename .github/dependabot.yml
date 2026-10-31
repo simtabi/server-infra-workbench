@@ -2,7 +2,7 @@ version: 2
 
 updates:
   - package-ecosystem: composer
-    directory: /php
+    directory: /src/php
     schedule:
       interval: weekly
       day: monday
@@ -28,12 +28,7 @@ updates:
       minor-and-patch:
         update-types: [minor, patch]
 
-  - package-ecosystem: docker-compose
-    directory: /stacks/caddy
-    schedule:
-      interval: weekly
-      day: monday
-      time: '06:00'
-      timezone: America/New_York
-    commit-message:
-      prefix: chore(images)
+# No docker-compose entry: every image in stacks/ is `${X_IMAGE:-repo:tag}` so the pin lives in one
+# env/conf key, and Dependabot does not resolve Compose interpolation (dependabot-core#15238), so it had
+# nothing to update (and the composer entry pointed at a stale /php path). Image upgrades go through the tools'
+# `upgrade --dry-run` and the pins in *.env.example / config (docs/release.md).

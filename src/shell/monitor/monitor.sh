@@ -33,7 +33,8 @@ type progress_step >/dev/null 2>&1 || progress_step() { printf '==> %s\n' "$*" >
 log()  { printf '==> %s\n' "$*"; }
 warn() { printf '!! WARNING: %s\n' "$*" >&2; }
 die()  { printf '!! %s\n' "$*" >&2; exit "${CODE:-1}"; }
-usage() { sed -n '2,20p' "$SELF" | sed 's/^# \{0,1\}//'; }
+# usage: the header comment block (up to the first code line), minus shellcheck directives
+usage() { awk 'NR==1{next} !/^#/{exit} /^# shellcheck /{next} {sub(/^# ?/,""); print}' "$SELF"; }
 perm() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 owner_uid() { stat -c %u "$1" 2>/dev/null || stat -f %u "$1"; }
 hex() { openssl rand -hex "$1"; }

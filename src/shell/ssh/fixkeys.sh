@@ -50,7 +50,9 @@ own_ok() { [ -z "$UID_GID" ] || [ "$1" = "$UID_GID" ]; }
 gw() { [ -n "$1" ] && [ $(( 8#$1 & 8#022 )) -ne 0 ]; }   # group/other writable
 fmode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null; }
 fowner() { stat -c '%u:%g' "$1" 2>/dev/null || stat -f '%u:%g' "$1" 2>/dev/null; }
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
+# usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
+# title box, so --help printed one line; awk counts the rules instead.
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); print}' "$0"; }
 
 CMD="" ARG="" AK_USER="" FILE="" ROOT="" KEYFILE="" YES=0
 while [ $# -gt 0 ]; do

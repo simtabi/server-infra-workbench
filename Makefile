@@ -8,13 +8,15 @@ SCRIPTS := $(shell find . -name '*.sh' -not -path './.git/*' -not -path '*/vendo
 PHP_OK   = command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'
 PY_OK    = command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))'
 
-.PHONY: help lint syntax shellcheck fmt-check compose-check links mermaid test it ci secrets-check \
+.PHONY: help lint syntax shellcheck fmt-check compose-check links mermaid test it ci ci-local secrets-check docs-commands \
         php-install php-lint php-test php py-lint py-test python
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
 
 GITLEAKS_IMAGE := zricethezav/gitleaks:v8.30.1
+SHELLCHECK_VERSION := 0.11.0
+SHELLCHECK_IMAGE := koalaman/shellcheck:v$(SHELLCHECK_VERSION)
 
 secrets-check: ## no hardcoded secrets: repo scanner (tracked files) + gitleaks (full history, .gitleaks.toml)
 	python3 tests/security/no-hardcoded-secrets.py --self-test
@@ -26,9 +28,18 @@ secrets-check: ## no hardcoded secrets: repo scanner (tracked files) + gitleaks 
 syntax: ## bash -n on every script
 	@for f in $(SCRIPTS); do bash -n "$$f" || exit 1; echo "bash -n ok  $$f"; done
 
-shellcheck: ## shellcheck every script (install: brew install shellcheck / apt install shellcheck)
-	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck is not installed"; exit 1; }
-	shellcheck -x $(SCRIPTS)
+# One shellcheck version everywhere: a local binary of exactly this version, otherwise the pinned image.
+# ubuntu-latest ships an older shellcheck, so CI and laptops used to disagree on findings.
+shellcheck: ## shellcheck every script with the pinned version (local binary if it matches, else docker)
+	@v="$$(shellcheck --version 2>/dev/null | sed -n 's/^version: //p')"; \
+	  if [ "$$v" = "$(SHELLCHECK_VERSION)" ] && [ -z "$(SHELLCHECK_DOCKER)" ]; then echo "shellcheck $$v (local)"; shellcheck -x $(SCRIPTS); \
+	  elif command -v docker >/dev/null 2>&1; then echo "shellcheck $(SHELLCHECK_VERSION) ($(SHELLCHECK_IMAGE))"; \
+	    docker run --rm -v "$$PWD:/mnt" -w /mnt $(SHELLCHECK_IMAGE) -x $(SCRIPTS); \
+	  else echo "need shellcheck $(SHELLCHECK_VERSION) (found: $${v:-none}) or docker"; exit 1; fi
+
+ci-local: ## the CI gate exactly as the workflow runs it (pinned shellcheck image, same make ci)
+	@echo "php: $$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo missing) (CI 8.4)  python: $$(python3 -c 'import platform;print(platform.python_version())' 2>/dev/null || echo missing) (CI 3.14)"
+	$(MAKE) ci SHELLCHECK_DOCKER=1
 
 lint: syntax shellcheck ## syntax + shellcheck
 
@@ -87,6 +98,9 @@ links: ## check relative links and #anchors in all Markdown
 	python3 tests/docs/check-links.py .
 	python3 tests/docs/gen-config-keys.py --check
 
+docs-commands: php-install ## every documented bin/workbench / src/shell command, subcommand and --flag exists (vs --help)
+	python3 tests/docs/check-commands.py .
+
 mermaid: ## render every Mermaid block to /tmp/vsw-mermaid (needs node; downloads mermaid-cli)
 	bash tests/docs/render-mermaid.sh
 
@@ -108,4 +122,4 @@ it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (ve
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
 	tests/shell/client-check.sh
 
-ci: secrets-check lint test client-check php python links compose-check ## the gate CI runs
+ci: secrets-check lint test client-check php python links docs-commands compose-check ## the gate CI runs

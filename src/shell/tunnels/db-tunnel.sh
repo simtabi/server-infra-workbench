@@ -25,7 +25,8 @@ MYSQL_PORT="${MYSQL_PORT:-3306}"; MARIADB_PORT="${MARIADB_PORT:-3307}"; ADMINER_
 LOCAL_PG="${LOCAL_PG:-15432}"; LOCAL_PGBOUNCER="${LOCAL_PGBOUNCER:-16432}"
 LOCAL_MYSQL="${LOCAL_MYSQL:-13306}"; LOCAL_MARIADB="${LOCAL_MARIADB:-13307}"; LOCAL_ADMINER="${LOCAL_ADMINER:-8081}"
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+# usage: the header comment block (up to the first code line), minus shellcheck directives
+usage() { awk 'NR==1{next} !/^#/{exit} /^# shellcheck /{next} {sub(/^# ?/,""); print}' "$0"; }
 die() { printf '!! %s\n' "$*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do

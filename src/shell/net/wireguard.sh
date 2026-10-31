@@ -40,7 +40,9 @@ TOOL=wireguard
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=src/shell/lib/common.sh
 . "$HERE/../lib/common.sh"
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
+# usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
+# title box, so --help printed one line; awk counts the rules instead.
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); print}' "$0"; }
 
 is_ip() { local IFS=. x; [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1; for x in $1; do [ "$x" -le 255 ] || return 1; done; }
 is_key() { [[ "$1" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$ ]]; }

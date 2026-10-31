@@ -1223,7 +1223,6 @@ cmd_logs() { need_stack; dc logs -f --tail=200 "$@"; }
 
 # env-init: the interactive setup wizard (or flags). Writes config KEY=VALUE lines only;
 # nothing on the server changes until env-apply / upgrade. Exit 2 = a value is missing.
-# shellcheck disable=SC2317  # the v_* validators are called indirectly by ask ("$4")
 cmd_env_init() {
   local out="" dry=0 a k v
   local w_app="$APP" w_eng="" w_envs="" w_tenants="" w_protect="" w_prd="" w_pitr="" w_off="" w_tls="" w_mail="" w_allow=""

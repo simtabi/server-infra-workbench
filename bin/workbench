@@ -22,7 +22,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)"
 
-usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
+# usage: the header comment block (up to the first code line), minus shellcheck directives
+usage() { awk 'NR==1{next} !/^#/{exit} /^# shellcheck /{next} {sub(/^# ?/,""); print}' "$0"; }
 die() { echo "workbench: $*" >&2; exit "${CODE:-2}"; }
 
 list() {

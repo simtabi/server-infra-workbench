@@ -58,7 +58,7 @@ services:
     depends_on: [app]
 
   whoami:                         # optional smoke test: docker compose --profile smoke up -d
-    image: traefik/whoami
+    image: ${WHOAMI_IMAGE:-traefik/whoami:v1.12.0}   # pinned like every image (Dependabot cannot read ${VAR:-default})
     profiles: [smoke]
     networks: [web]
 
