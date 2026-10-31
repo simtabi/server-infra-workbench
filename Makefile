@@ -116,9 +116,10 @@ test: ## offline smoke tests (no servers touched)
 	python3 stacks/monitor/prometheus/grafana/dashboards.py --check
 	bash examples/run.sh --all
 
-it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (verify-full, metrics, migrate-managed, pg-major-upgrade), PITR restore (posix and S3 via Garage + TLS), monitoring, WireGuard between two hosts (~25 min)
+it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (verify-full, metrics, migrate-managed, pg-major-upgrade), PITR restore (posix and S3 via Garage + TLS), a 3-node Garage cluster, monitoring, WireGuard between two hosts (~25 min)
 	bash tests/shell/run-suites.sh tests/shell/upgrade-it.sh tests/shell/addons-it.sh tests/shell/server-it.sh \
-	  tests/shell/db-features-it.sh tests/shell/pitr-it.sh tests/shell/pitr-s3-it.sh tests/shell/monitor-it.sh tests/shell/wg-it.sh
+	  tests/shell/db-features-it.sh tests/shell/pitr-it.sh tests/shell/pitr-s3-it.sh \
+	  tests/shell/garage-cluster-it.sh tests/shell/monitor-it.sh tests/shell/wg-it.sh
 
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
 	tests/shell/client-check.sh

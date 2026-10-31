@@ -14,7 +14,9 @@
 # object storage
 # STORAGE_BUCKET=app
 # GARAGE_CAPACITY=20GB
-# GARAGE_ZONE=dc1
+# GARAGE_ZONE=dc1                      # one zone per node in a cluster: dc1, dc2, dc3
+# GARAGE_REPLICATION=1                  # 1 | 3; fixed at the FIRST install (Garage cannot change it later); >1 needs ADDON_NETWORK=host
+# GARAGE_PEERS=                         # joining a cluster: <id>@<vpc-ip>:3901,... from `addon.sh garage-node-id` on the running nodes
 # ADDON_NETWORK=host                    # Garage only: host (default) | bridge
 
 # Gotenberg

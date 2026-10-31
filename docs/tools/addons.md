@@ -14,6 +14,7 @@ app: Gotenberg for PDFs and one S3-compatible object store. The templates and th
 | `status [name]` | `docker compose ps` per add-on | nothing |
 | `doctor [name]` | see [checks](../../stacks/addons/README.md#doctor-checks); exits 1 on a problem | nothing |
 | `laravel-env <name> [--out FILE]` | writes the Laravel keys to FILE (600, backs up an existing one); prints key names only | FILE |
+| `garage-node-id` | this node's Garage `<id>@<addr>` for `GARAGE_PEERS` on the next node ([cluster](../../stacks/addons/garage/README.md#three-node-cluster)) | nothing |
 | `remove <name> [--delete-data] [--yes]` | `compose down`; keeps files and credentials in `.removed-<name>-<ts>/` unless `--delete-data` (you type `delete <name> data`, or pass `--force`) | `/opt/vsw-addons` |
 
 Flags: `--accept-experimental` (RustFS), `--force`, `-h`. Exit codes: 0 ok, 1 refused or failed, 2 usage.
@@ -53,5 +54,9 @@ Flags: `--accept-experimental` (RustFS), `--force`, `-h`. Exit codes: 0 ok, 1 re
 - `tests/shell/addons-it.sh` (Docker, in `make it`, about 1 minute): Gotenberg (PDF, SSRF guard, basic auth),
   Garage (layout, bucket, least-privilege key, idempotent re-install, remove), SeaweedFS (bucket-scoped
   identity, admin login), and a scan that no secret reaches any output.
-- Not container-tested: Garage in host networking mode (the tests use bridge on Docker Desktop), RustFS
-  install, multi-node Garage.
+- `tests/shell/addons-it.sh` also installs RustFS: the experimental gate, the bucket made with the generated
+  root key, signed put/get, anonymous denied, the console on 127.0.0.1, and `laravel-env` without the root key.
+- `tests/shell/garage-cluster-it.sh` (Docker, in `make it`, about 1 minute): three Garage nodes in **host
+  networking** mode (S3, RPC and admin on 127.0.0.1 only, no published ports), `GARAGE_REPLICATION=3`, joins
+  with `GARAGE_PEERS` and a copied `secrets.env`, layout applied by the third node, a cross-node read, one node
+  down (quorum 2 of 3), catch-up, doctor, and the replication-change refusal.

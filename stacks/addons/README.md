@@ -121,7 +121,8 @@ Object storage on one droplet is not a backup: the droplet's snapshots and the d
 - **Copy the bucket off the node**, for example nightly with rclone to DO Spaces or another provider:
   `rclone sync garage:app spaces:app-backup --s3-no-check-bucket`. Configure the remotes through
   `RCLONE_CONFIG_*` environment variables in a 600 file and never put the keys in the crontab.
-- **Garage**: run three nodes in different zones (`garage layout assign -z zoneN`) for redundancy. LMDB
+- **Garage**: a [three-node cluster](garage/README.md#three-node-cluster) in three zones keeps every object on
+  three nodes (it is still not a backup: a delete replicates too). LMDB
   metadata snapshots every 6 hours (`metadata_auto_snapshot_interval`) let you recover from a crash.
 - **SeaweedFS**: `weed filer.backup` or `filer.sync` replicate to another cluster or to S3.
 - **Credentials**: keep a copy of `secrets.env` in your password manager. Without it, the data is still

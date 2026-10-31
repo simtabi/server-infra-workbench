@@ -2,7 +2,7 @@
 # Integration test of src/shell/addons/addon.sh against throwaway containers (Docker/OrbStack).
 # Not part of `make ci` (needs Docker, ~2 min): run by `make it`. Covers Gotenberg (PDF, SSRF guard,
 # basic auth), Garage (layout, bucket, least-privilege key, idempotent re-install) and SeaweedFS
-# (bucket-scoped identity). RustFS gates are covered offline in smoke-addons.sh.
+# (bucket-scoped identity) and RustFS (experimental gate, root-key bucket, console on loopback).
 # shellcheck disable=SC2015
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -27,6 +27,8 @@ GARAGE_S3_PORT=23900
 GARAGE_ADMIN_PORT=23903
 SEAWEED_S3_PORT=28333
 SEAWEED_ADMIN_PORT=22535
+RUSTFS_PORT=29000
+RUSTFS_CONSOLE_PORT=29001
 STORAGE_BUCKET=itbucket
 CONF
 export ADDON_CONF="$W/addons.conf" ADDON_ALLOW_NONROOT=1
@@ -83,6 +85,23 @@ echo "s3.bucket.create -name other" | (cd "$W/root/seaweedfs" && docker compose 
   && [ "$(curl -s -o /dev/null -w '%{http_code}' "$ep/itbucket/a.txt")" = 403 ] && ok "seaweedfs: app key denied on another bucket and bucket delete; anonymous denied" || fail "seaweedfs least privilege"
 [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:22535/)" != 200 ] && ok "seaweedfs: admin UI on 127.0.0.1 asks for a login" || fail "seaweedfs admin auth"
 ad doctor seaweedfs > "$W/sd.out" 2>&1 && grep -q '0 problem' "$W/sd.out" && ok "seaweedfs: doctor clean" || { cat "$W/sd.out"; fail "seaweedfs doctor"; }
+
+# ---- rustfs (experimental) ---------------------------------------------------------------
+ad remove seaweedfs --yes > "$W/sr.out" 2>&1 || { cat "$W/sr.out"; fail "seaweedfs remove"; }
+if ad install rustfs --yes > "$W/r0.out" 2>&1; then fail "rustfs installed without --accept-experimental"; fi
+grep -q EXPERIMENTAL "$W/r0.out" && [ ! -e "$W/root/rustfs/docker-compose.yml" ] && ok "rustfs: refused without --accept-experimental, nothing written" || { cat "$W/r0.out"; fail "rustfs gate"; }
+ad install rustfs --yes --accept-experimental > "$W/r1.out" 2>&1 && grep -q 'rustfs: bucket itbucket' "$W/r1.out" \
+  && ok "rustfs: install (pinned $(sed -n 's/^RUSTFS_IMAGE=//p' "$W/root/rustfs/stack.env")), bucket created with the generated root key" || { tail -30 "$W/r1.out"; fail "rustfs install"; }
+printf 'AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\nAWS_DEFAULT_REGION=us-east-1\n' "$(sed -n 's/^RUSTFS_ACCESS_KEY=//p' "$W/root/rustfs/secrets.env")" \
+  "$(sed -n 's/^RUSTFS_SECRET_KEY=//p' "$W/root/rustfs/secrets.env")" > "$W/r.root"; chmod 600 "$W/r.root"
+[ "$(s3 "$W/r.root" PUT "http://127.0.0.1:29000/itbucket/a.txt" --data-binary @"$W/obj.txt")" = 200 ] && [ "$(s3 "$W/r.root" GET "http://127.0.0.1:29000/itbucket/a.txt")" = 200 ] \
+  && cmp -s "$W/s3.body" "$W/obj.txt" && [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:29000/itbucket/a.txt)" = 403 ] \
+  && ok "rustfs: signed put/get works, anonymous denied" || fail "rustfs s3"
+ad laravel-env rustfs --out "$W/r.env" > "$W/re.out" 2>&1; rk="$(sed -n 's/^RUSTFS_SECRET_KEY=//p' "$W/root/rustfs/secrets.env")"
+! grep -qF "$rk" "$W/r.env" && grep -q 'bucket-scoped key' "$W/r.env" && ok "rustfs: laravel-env never writes the root key" || fail "rustfs laravel-env"
+[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:29001/ || true)" != 000 ] && docker port "$(docker ps -q --filter label=com.docker.compose.project=vsw-rustfs)" | grep -q '127.0.0.1:29001' \
+  && ok "rustfs: console on 127.0.0.1 only" || fail "rustfs console"
+ad doctor rustfs > "$W/rd.out" 2>&1 && grep -q '0 problem' "$W/rd.out" && grep -q 'experimental' "$W/rd.out" && ok "rustfs: doctor clean, flags experimental" || { cat "$W/rd.out"; fail "rustfs doctor"; }
 
 # ---- secrets never reach stdout or the audit log ---------------------------------------------
 leak=0; for f in "$W"/root/*/secrets.env "$W"/root/.removed-*/secrets.env; do

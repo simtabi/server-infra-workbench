@@ -10,6 +10,7 @@
 #   addon.sh doctor  [name]                          binding, pin, perms, health, auth, RAM, disk (exit 1 on a problem)
 #   addon.sh laravel-env <name> [--out FILE]         Laravel .env keys into FILE (chmod 600); values never printed
 #   addon.sh remove  <name> [--delete-data] [--yes]  stop and remove; data kept unless --delete-data (typed name)
+#   addon.sh garage-node-id                          this node's Garage id@addr, for GARAGE_PEERS on the next node (not a secret)
 #
 # Roles: web = same node as PHP, binds 127.0.0.1 | db, dedicated = binds the private (VPC) IP.
 # Config: /etc/vsw-addons.conf (or ADDON_CONF=FILE); keys in config/addons.conf.example.
@@ -168,17 +169,18 @@ write_secrets() { # adds missing keys only; existing credentials are never rotat
 }
 garage_toml() { # $1 = file
   # host mode: bind the configured ports on ADDON_BIND; bridge mode: fixed ports inside the container
-  local inner="$ADDON_BIND" admin_bind=127.0.0.1 s3p="$GARAGE_S3_PORT" rpcp="$GARAGE_RPC_PORT" admp="$GARAGE_ADMIN_PORT"
-  [ "$ADDON_NETWORK" = bridge ] && { inner=0.0.0.0; admin_bind=0.0.0.0; s3p=3900; rpcp=3901; admp=3903; }
+  # peers dial rpc_public_addr, so in host mode it is ADDON_BIND (the VPC IP); bridge mode is single-node only
+  local inner="$ADDON_BIND" pub="$ADDON_BIND" admin_bind=127.0.0.1 s3p="$GARAGE_S3_PORT" rpcp="$GARAGE_RPC_PORT" admp="$GARAGE_ADMIN_PORT"
+  [ "$ADDON_NETWORK" = bridge ] && { inner=0.0.0.0; pub=127.0.0.1; admin_bind=0.0.0.0; s3p=3900; rpcp=3901; admp=3903; }
   (umask 077; cat > "$1" <<TOML
 # written by addon.sh $VERSION - chmod 600 (holds rpc_secret and admin tokens)
 metadata_dir = "/var/lib/garage/meta"
 data_dir = "/var/lib/garage/data"
 db_engine = "${GARAGE_DB_ENGINE}"
 metadata_auto_snapshot_interval = "6h"
-replication_factor = 1
+replication_factor = ${GARAGE_REPLICATION:-1}
 rpc_bind_addr = "${inner}:${rpcp}"
-rpc_public_addr = "127.0.0.1:${rpcp}"
+rpc_public_addr = "${pub}:${rpcp}"
 rpc_secret = "$(secret_get garage GARAGE_RPC_SECRET)"
 
 [s3_api]
@@ -192,7 +194,6 @@ admin_token = "$(secret_get garage GARAGE_ADMIN_TOKEN)"
 metrics_token = "$(secret_get garage GARAGE_METRICS_TOKEN)"
 TOML
   )
-  [ "$ADDON_NETWORK" = host ] && [ "$ADDON_BIND" != 127.0.0.1 ] && sed -i.tmp "s/^rpc_public_addr = .*/rpc_public_addr = \"${ADDON_BIND}:${GARAGE_RPC_PORT}\"/" "$1" && rm -f "$1.tmp"
   chmod 600 "$1"
 }
 seaweed_s3_json() {
@@ -241,8 +242,25 @@ ports_of() {
     rustfs) echo "$ADDON_BIND:$RUSTFS_PORT (S3), 127.0.0.1:$RUSTFS_CONSOLE_PORT (console)" ;;
   esac
 }
+garage_checks() { # replication and peers: Garage cannot change replication_factor on a live cluster
+  local rf="${GARAGE_REPLICATION:-1}" was p
+  case "$rf" in 1|2|3) ;; *) CODE=2 die "GARAGE_REPLICATION must be 1, 2 or 3" ;; esac
+  if installed garage; then
+    was="$(stack_get garage GARAGE_REPLICATION)"
+    [ "${was:-1}" = "$rf" ] || die "GARAGE_REPLICATION is ${was:-1} on this cluster; Garage cannot change it in place (new cluster + migration, see the Garage docs)"
+  fi
+  [ "$rf" = 1 ] || [ "$ADDON_NETWORK" = host ] || die "GARAGE_REPLICATION=$rf needs ADDON_NETWORK=host: peers must reach this node's RPC port"
+  for p in ${GARAGE_PEERS//,/ }; do
+    [[ "$p" =~ ^[0-9a-f]{64}@[^@[:space:]]+:[0-9]+$ ]] || CODE=2 die "GARAGE_PEERS entry '$p' is not <64-hex node id>@<ip>:<port>"
+  done
+  if [ -n "${GARAGE_PEERS:-}" ] && ! grep -q '^GARAGE_RPC_SECRET=' "$ADDONS_DIR/garage/secrets.env" 2>/dev/null; then
+    die "joining a cluster: copy secrets.env from a running node to $ADDONS_DIR/garage/secrets.env (600) first; rpc_secret and the app key must match"
+  fi
+  [ "$rf" = 1 ] || ! is_loopback "$ADDON_BIND" || warn "replication $rf with RPC on $ADDON_BIND: nodes on other hosts cannot reach it (use the VPC IP)"
+  return 0
+}
 cmd_plan() { # prints the plan; returns 0 when install may proceed
-  local n="$1" tmp; load_addon "$n"; resolve_bind; gates "$n"
+  local n="$1" tmp; load_addon "$n"; resolve_bind; gates "$n"; [ "$n" != garage ] || garage_checks
   echo "plan: $n ($ADDON_KIND$( [ "$ADDON_EXPERIMENTAL" = 1 ] && echo ', EXPERIMENTAL'))"
   echo "  role     $ADDON_ROLE   network $ADDON_NETWORK"
   echo "  image    $(image_of "$n")"
@@ -251,6 +269,7 @@ cmd_plan() { # prints the plan; returns 0 when install may proceed
   echo "  files    $ADDONS_DIR/$n/{docker-compose.yml,stack.env,secrets.env (600)$( [ "$n" = garage ] && echo ',garage.toml (600)')$( [ "$n" = seaweedfs ] && echo ',s3.json (600)')}"
   echo "  secrets  generated if missing: $(secret_spec "$n" | tr ' ' '\n' | cut -d: -f1 | tr '\n' ' ')(values never shown)"
   [ "$ADDON_KIND" = storage ] && echo "  bucket   $STORAGE_BUCKET with a key limited to it (read/write, not owner)"
+  [ "$n" = garage ] && echo "  cluster  replication ${GARAGE_REPLICATION:-1}, zone $GARAGE_ZONE, $(echo "${GARAGE_PEERS:-}" | tr ',' '\n' | grep -c . || true) peer(s) to join"
   [ "$n" = gotenberg ] && echo "  auth     basic auth $(gotenberg_auth_on && echo on || echo 'off (loopback only)'); private-IP fetches denied: $GOTENBERG_DENY_PRIVATE_IPS"
   ram_report "$n"
   if [[ "$ADDON_DATA_DIR" == /mnt/* ]] && command -v mountpoint >/dev/null 2>&1; then
@@ -311,14 +330,29 @@ cmd_install() {
 
 g() { dca garage exec -T -e RUST_LOG=warn garage /garage "$@"; }
 garage_setup() {
-  local ver id key="vsw-app-$STORAGE_BUCKET"
+  local id lay ver p want key="vsw-app-$STORAGE_BUCKET" rf="${GARAGE_REPLICATION:-1}"
   for _ in $(seq 1 30); do g status >/dev/null 2>&1 && break; sleep 2; done
-  if g status 2>/dev/null | grep 'NO ROLE ASSIGNED' >/dev/null; then
-    id="$(g node id -q 2>/dev/null | head -1 | cut -d@ -f1)"; [ -n "$id" ] || die "garage: no node id"
-    ver="$(g layout show 2>/dev/null | sed -n 's/.*[Cc]urrent cluster layout version: *\([0-9]*\).*/\1/p' | head -1)"
-    log "garage: layout zone=$GARAGE_ZONE capacity=$GARAGE_CAPACITY version $(( ${ver:-0} + 1 ))"
-    g layout assign -z "$GARAGE_ZONE" -c "$GARAGE_CAPACITY" "${id:0:16}" >/dev/null
-    g layout apply --version "$(( ${ver:-0} + 1 ))" >/dev/null
+  for p in ${GARAGE_PEERS//,/ }; do
+    g node connect "$p" >/dev/null 2>&1 || die "garage: cannot connect to peer ${p#*@} (reachable on the VPC? same rpc_secret?)"
+  done
+  id="$(g node id -q 2>/dev/null | head -1 | cut -c1-16)"; [ -n "$id" ] || die "garage: no node id"
+  # the layout is cluster state: wait until every peer's role (staged or applied) has reached this node
+  for _ in $(seq 1 30); do
+    lay="$(g layout show 2>&1 || true)"; want=0
+    for p in ${GARAGE_PEERS//,/ }; do grep -q "^${p:0:16} " <<<"$lay" || want=1; done
+    [ "$want" = 0 ] && break; sleep 2
+  done
+  if ! grep -q "^$id " <<<"$lay"; then
+    log "garage: layout assign zone=$GARAGE_ZONE capacity=$GARAGE_CAPACITY"
+    g layout assign -z "$GARAGE_ZONE" -c "$GARAGE_CAPACITY" "$id" >/dev/null
+    lay="$(g layout show 2>&1 || true)"
+  fi
+  ver="$(sed -n 's/.*garage layout apply --version \([0-9]*\).*/\1/p' <<<"$lay" | head -1)"
+  if [ -n "$ver" ]; then
+    log "garage: layout apply version $ver"; g layout apply --version "$ver" >/dev/null
+  elif grep -q 'cannot yet be applied' <<<"$lay"; then
+    log "garage: layout staged; it is applied by the install that brings the cluster to $rf node(s), which also creates the bucket and key"
+    return 0
   fi
   g bucket info "$STORAGE_BUCKET" >/dev/null 2>&1 || { log "garage: bucket $STORAGE_BUCKET"; g bucket create "$STORAGE_BUCKET" >/dev/null; }
   if ! g key info "$key" >/dev/null 2>&1; then
@@ -418,7 +452,10 @@ doctor_one() {
       if ! is_loopback "$ADDON_BIND" && [ "$GOTENBERG_BASIC_AUTH_ON" != true ]; then bad "bound to $ADDON_BIND without basic auth"; fi
       [ "$GOTENBERG_DENY_PRIVATE_IPS" = true ] && ok "SSRF guard on (private IPs denied)" || dwarn "GOTENBERG_DENY_PRIVATE_IPS is off: rendered HTML can reach internal services" ;;
     garage)
-      g status 2>/dev/null | grep 'NO ROLE ASSIGNED' >/dev/null && bad "layout not applied (re-run install)" || ok "layout applied"
+      local gid nodes; gid="$(g node id -q 2>/dev/null | head -1 | cut -c1-16)"
+      g layout show 2>/dev/null | sed '/STAGED ROLE CHANGES/,$d' | grep "^${gid:-none} " >/dev/null && ok "layout applied (this node has a role)" || bad "layout not applied for this node (re-run install; with replication > 1 it applies when the last node joins)"
+      nodes="$(g status 2>/dev/null | sed -n '/HEALTHY NODES/,/^$/p' | grep -cE '^[0-9a-f]{16} ' || true)"
+      [ "${nodes:-0}" -ge "${GARAGE_REPLICATION:-1}" ] && ok "healthy nodes: $nodes (replication ${GARAGE_REPLICATION:-1})" || bad "healthy nodes: ${nodes:-0}, replication ${GARAGE_REPLICATION:-1} needs at least that many" 
       if g bucket info "$STORAGE_BUCKET" 2>/dev/null | grep "vsw-app-$STORAGE_BUCKET" >/dev/null; then ok "bucket $STORAGE_BUCKET has key vsw-app-$STORAGE_BUCKET"
       else bad "bucket $STORAGE_BUCKET or its app key is missing (re-run install)"; fi ;;
     seaweedfs|rustfs)
@@ -505,6 +542,7 @@ main() {
     doctor) need_docker; cmd_doctor "$name" ;;
     laravel-env) [ -n "$name" ] || CODE=2 die "usage: addon.sh laravel-env <name>"; cmd_laravel_env "$name" ;;
     remove) [ -n "$name" ] || CODE=2 die "usage: addon.sh remove <name>"; cmd_remove "$name" ;;
+    garage-node-id) recorded garage; g node id -q 2>/dev/null | head -1 | grep . || die "garage is not running" ;;
     version|--version) echo "addon.sh $VERSION" ;;
     ""|-h|--help|help) usage ;;
     *) CODE=2 die "unknown command '$cmd' (see --help)" ;;

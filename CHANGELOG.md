@@ -18,6 +18,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - PITR on S3-compatible storage: `PITR_S3_URI_STYLE` (host/path) and `PITR_S3_CA_FILE` (private CA, verified);
   a port in `OFFSITE_ENDPOINT` becomes `repo1-storage-port`; `validate` refuses an `http://` endpoint for an s3 repo.
   `tests/shell/pitr-s3-it.sh` in `make it` restores to a time through Garage behind TLS ([backups](docs/backups-and-recovery.md#pitr-repository-on-s3)).
+- Garage clusters: `GARAGE_REPLICATION` (fixed at the first install; >1 needs host networking), `GARAGE_PEERS`
+  joins, `addon.sh garage-node-id`; each install stages its role and the one that completes the cluster applies
+  the layout and creates the bucket and key. `doctor` checks this node's role and the healthy node count.
+  `tests/shell/garage-cluster-it.sh` in `make it` (host networking, three nodes, one node down); `addons-it` now
+  installs RustFS ([garage](stacks/addons/garage/README.md#three-node-cluster)).
 - `tests/docs/check-tables.py` in `make docs-commands`: every Markdown table row has its header's cell count.
 
 ### Changed (P3)
