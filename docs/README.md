@@ -9,6 +9,7 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 |---|---|
 | [Installation](installation.md) | setting up a workstation: requirements, Composer, credentials check |
 | [Getting started](getting-started.md) | starting a new project: two droplets to a deployed app |
+| [Configure a setup](configure.md) | picking a profile and generating a client's config with `bin/workbench configure` |
 | [Configuration](configuration.md) | config files, precedence, platform credentials, what is written where |
 | [Architecture](architecture.md) | droplets, VPC, `eth0` vs `eth1`, ports, where files live |
 | [Repository structure](structure.md) | where things are, where new things go, old to new paths |
@@ -28,6 +29,12 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | [Command line](tools/cli.md) | `bin/workbench`: one entry point, platform commands, flags, exit codes |
 | [Platform API library](tools/platform-api.md) | `src/php`: DigitalOcean, Cloudflare, Ploi, GCP clients, pending actions, audit log |
 | [Python package](tools/python.md) | `src/python`: `ping` probe and the `plans` finder (DO plans per region via Ploi) |
+
+## Reference
+
+| Page | What |
+|---|---|
+| [Profiles](reference/profiles.md) | the 7 setup profiles, every setting, what each profile changes, RAM estimates |
 
 ## Recipes
 

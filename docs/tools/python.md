@@ -70,3 +70,10 @@ the current directory); flags win. Filters: `--regions`, `--exclude-regions`, `-
 `--output-format table|markdown|csv|json`, `--output-file`. Exit 1 with a clear message when a token is
 missing. `bin/workbench plans --help` lists everything; library use is in the module docstring.
 Never keep the env file inside the repository.
+
+## `configure` and `profile`
+
+`bin/workbench configure` and `bin/workbench profile list|show|diff|table` live in
+`vps_server_workbench/configure.py` (CLI) and `profiles.py` (layering, checks, rendering). Guide:
+[configure.md](../configure.md); settings: [profiles reference](../reference/profiles.md). Tests:
+`src/python/tests/test_configure.py` (no network, temp folders only).

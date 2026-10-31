@@ -21,8 +21,11 @@ def parse(text: str) -> dict[str, str]:
         if not m:
             continue
         key, raw = m.group(1), m.group(2)
+        after = line.split("=", 1)[1]
         if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
             value = raw[1:-1]
+        elif after[:1].isspace() and raw.startswith("#"):
+            value = ""  # `KEY=   # note`: empty value with a comment (`KEY=#x` keeps "#x")
         else:
             value = re.split(r"\s+#", raw, maxsplit=1)[0].strip()
         values[key] = value

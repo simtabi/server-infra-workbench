@@ -1,4 +1,4 @@
-"""Command line: `python -m vps_server_workbench ping|plans ...` (or `bin/workbench py ...`)."""
+"""Command line: `python -m vps_server_workbench ping|plans|configure|profile ...` (or `bin/workbench py ...`)."""
 
 from __future__ import annotations
 
@@ -30,6 +30,10 @@ def main(argv: list[str] | None = None) -> int:
         from vps_server_workbench import plan_finder
 
         return plan_finder.main(argv[1:])
+    if argv[:1] in (["configure"], ["profile"]):
+        from vps_server_workbench import configure
+
+        return configure.main(argv)
     args = _parser().parse_args(argv)
     host, port = args.host, args.port
     if args.env:

@@ -8,6 +8,7 @@ variables**, then a **config file**, then built-in defaults. Templates for every
 
 | Tool | Config file | Template | Reference |
 |---|---|---|---|
+| Configurator | `config/profiles/*.conf` layered onto `_defaults.conf`; writes `local/<client>/` | [`config/profiles/`](../config/profiles) | [configure.md](configure.md), [profiles](reference/profiles.md) |
 | DB server manager | `--config FILE` locally; installed as `/etc/docker-db-server-manager.conf` (root, 600) | [`config/db-server.env.example`](../config/db-server.env.example) | [db-server-manager.md](tools/db-server-manager.md#5-configuration) |
 | `update-env-db.sh`, `check-db-reach.sh` | `--from FILE` / `--env FILE` with `DB_*` lines | [`config/web-db.env.example`](../config/web-db.env.example) | [configure-a-ploi-web-server.md](recipes/configure-a-ploi-web-server.md) |
 | Deploy script | the SETTINGS block at its top | [`examples/*/ploi-deploy.settings.sh`](../examples/generic-laravel/ploi-deploy.settings.sh) | [deploy-script.md](tools/deploy-script.md#settings) |
