@@ -67,6 +67,15 @@ baks=("$T"/app.env.bak.*); newest="${baks[${#baks[@]}-1]}"
 
 # --- check-db-reach --------------------------------------------------------------
 if src/shell/web/check-db-reach.sh 127.0.0.1 9 >/dev/null 2>&1; then fail "closed port reported open"; else ok "check-db-reach reports a closed port"; fi
+CR="$(mktemp -d)"; mkdir -p "$CR/bin" "$CR/md/interfaces/private/0/ipv4"
+printf nyc1 > "$CR/md/region"; printf 10.124.0.2 > "$CR/md/interfaces/private/0/ipv4/address"; printf 255.255.240.0 > "$CR/md/interfaces/private/0/ipv4/netmask"
+printf '#!/bin/sh\nfor a; do u="$a"; done; cat "%s/md/${u#http://md/}"\n' "$CR" > "$CR/bin/curl"; chmod +x "$CR/bin/curl"
+PATH="$CR/bin:$PATH" METADATA_URL=http://md src/shell/web/check-db-reach.sh --db-region ams3 10.110.0.5 9 > "$CR/o" 2>&1 || true
+grep -q 'region nyc1' "$CR/o" && grep -q 'the DB is in ams3' "$CR/o" && grep -q 'outside this droplet.s VPC' "$CR/o" \
+  && ok "check-db-reach warns on a region mismatch and a private IP outside the VPC" || { cat "$CR/o"; fail "check-db-reach region"; }
+PATH="$CR/bin:$PATH" METADATA_URL=http://md src/shell/web/check-db-reach.sh 10.124.0.9 9 > "$CR/o" 2>&1 || true
+! grep -q WARNING "$CR/o" && ok "check-db-reach: same VPC, no warning" || { cat "$CR/o"; fail "same vpc"; }
+rm -rf "$CR"
 
 # --- adminer toggle + tunnel helper ----------------------------------------------
 grep -q 'adminer:' "$T/e1000/docker-compose.yml" && fail "adminer on by default" || ok "adminer off by default"

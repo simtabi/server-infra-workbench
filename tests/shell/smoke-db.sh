@@ -102,4 +102,25 @@ grep -q 'POSTGRES_USER: ${PG_ADMIN_USER}' "$c" && grep -q 'hba_file=/etc/postgre
   && grep -q '"--local-infile=0"' "$c" && grep -q 'secure-file-priv=/var/lib/mysql-files' "$c" && grep -q 'MYSQL_ROOT_HOST: localhost' "$c" \
   && grep -q 'subnet: "${DOCKER_SUBNET}"' "$c" && grep -q '^PG_IMAGE=vsw/postgres:18-postgis-pgvector$' "$T/db/stack.env" \
   && ok "compose: admin bootstrap, pg_hba, logging, local_infile=0, secure_file_priv, no root@'%', fixed subnet, neutral image tag" || fail "compose hardening"
+
+# --- cross-region: extra bind addresses, region check ----------------------------------------
+mkdir -p "$T/db2"; EXTRA_BIND_IPS=10.200.0.1 DB_DIR="$T/db2" L eval 'dc() { :; }; write_files >/dev/null'
+grep -qF 'ports: ["${PRIVATE_IP}:${PG_PORT}:5432", "10.200.0.1:${PG_PORT}:5432"]' "$T/db2/docker-compose.yml" \
+  && grep -qF 'ports: ["${PRIVATE_IP}:${PGBOUNCER_PORT}:5432", "10.200.0.1:${PGBOUNCER_PORT}:5432"]' "$T/db2/docker-compose.yml" \
+  && ! grep -q '0\.0\.0\.0' "$T/db2/docker-compose.yml" && ok "EXTRA_BIND_IPS: every DB port also published on the tunnel IP" || { grep ports "$T/db2/docker-compose.yml"; fail "extra binds"; }
+L ip_in_cidr 10.200.0.2 10.0.0.0/8 && ! L ip_in_cidr 10.17.0.2 10.16.0.0/16 2>/dev/null && L ip_in_cidr 192.0.2.9 0.0.0.0/0 && ! L ip_private 203.0.113.5 2>/dev/null && L ip_private 100.64.1.1 \
+  && ok "ip_in_cidr / ip_private" || fail "cidr math"
+EXTRA_BIND_IPS=203.0.113.5 L validate_config 2>"$T/e" && fail "public bind accepted" || { grep -q 'ALLOW_PUBLIC_BIND=1' "$T/e" && grep -q 'TLS_MODE=require is mandatory' "$T/e" && ok "public bind refused without ALLOW_PUBLIC_BIND=1 and TLS"; } || { cat "$T/e"; fail "public bind"; }
+EXTRA_BIND_IPS=203.0.113.5 ALLOW_PUBLIC_BIND=1 TLS_MODE=require L validate_config 2>"$T/e" && ok "public bind accepted with ALLOW_PUBLIC_BIND=1 + TLS_MODE=require" || { cat "$T/e"; fail "public bind ok"; }
+PRIVATE_IP=203.0.113.5 L validate_config 2>"$T/e" && fail "public PRIVATE_IP" || { grep -q 'not a private' "$T/e" && ok "PRIVATE_IP must be a private address"; } || fail "private ip"
+PEER_REGIONS="nyc 1" L validate_config 2>"$T/e" && fail "bad region" || { grep -q 'PEER_REGIONS entry' "$T/e" && ok "PEER_REGIONS validated"; } || fail "region slug"
+mkdir -p "$T/meta"; printf 'nyc1' > "$T/meta/region"
+mkdir -p "$T/mbin"; printf '#!/bin/sh\nfor a; do u="$a"; done; cat "%s/meta/${u##*/}"\n' "$T" > "$T/mbin/curl"; chmod +x "$T/mbin/curl"
+PATH="$T/mbin:$PATH" PEER_REGIONS=ams3 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
+grep -q 'this droplet is in nyc1' "$T/net.out" && grep -q 'PROBLEM  peer region ams3 differs from nyc1' "$T/net.out" && grep -q 'wireguard setup' "$T/net.out" \
+  && ok "doctor: region mismatch without a tunnel is a PROBLEM with the fix" || { cat "$T/net.out"; fail "region mismatch"; }
+PATH="$T/mbin:$PATH" PEER_REGIONS=nyc1 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
+grep -q 'peer region nyc1: same region' "$T/net.out" && grep -q 'bad=0' "$T/net.out" && ok "doctor: same region is ok" || { cat "$T/net.out"; fail "same region"; }
+PATH="$T/mbin:$PATH" PRIVATE_IP=10.0.0.5 VPC_CIDR=10.16.0.0/20 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
+grep -q 'outside VPC_CIDR' "$T/net.out" && ok "doctor: PRIVATE_IP outside VPC_CIDR is a PROBLEM" || { cat "$T/net.out"; fail "vpc cidr"; }
 echo "smoke-db: all $pass checks passed"

@@ -44,6 +44,11 @@
 #    PRIVATE_IP   bind address (default: eth1 IPv4; required if eth1 is missing)
 #    EXPECTED_PRIVATE_IP  abort unless this IP is on the host (wrong-server guard)
 #    VPC_CIDR     ufw source range (default 10.0.0.0/8 - set your VPC range)
+#    EXTRA_BIND_IPS  more addresses to publish the DB ports on, e.g. the WireGuard
+#                 tunnel IP (10.200.0.1). A public address also needs
+#                 ALLOW_PUBLIC_BIND=1 and TLS_MODE=require (docs/cross-region.md)
+#    PEER_REGIONS regions of the app servers; doctor warns when they differ from
+#                 this droplet's region (DO VPCs are per region)
 #    PG_USER PG_DB PG_IMAGE PG_BASE_IMAGE PGVECTOR_PKG PGBOUNCER_IMAGE MYSQL_IMAGE
 #    MARIADB_IMAGE PG_PORT PGBOUNCER_PORT MYSQL_PORT MARIADB_PORT WEB_ENV CRON_TIME
 #    ADMINER_IMAGE ADMINER_PORT
@@ -136,6 +141,10 @@ DOCKER_NETWORK="${DOCKER_NETWORK:-vsw_db}"          # compose network with a fix
 DOCKER_SUBNET="${DOCKER_SUBNET:-172.30.88.0/24}"    # pg_hba + MySQL root host use it
 TLS_MODE="${TLS_MODE:-off}"                         # off | require (self-signed, made on the server)
 TLS_DAYS="${TLS_DAYS:-825}"
+EXTRA_BIND_IPS="${EXTRA_BIND_IPS:-}"                # more bind addresses (WireGuard IP; public only with the two below)
+ALLOW_PUBLIC_BIND="${ALLOW_PUBLIC_BIND:-0}"         # 1 = a public EXTRA_BIND_IPS entry is intended (needs TLS_MODE=require)
+PEER_REGIONS="${PEER_REGIONS:-}"                    # app server regions, e.g. "nyc1"; doctor compares with this droplet
+METADATA_URL="${METADATA_URL:-http://169.254.169.254/metadata/v1}"   # DO droplet metadata (doctor region check)
 PG_LOG_MIN_DURATION="${PG_LOG_MIN_DURATION:-500ms}"
 PG_LOG_CONNECTIONS="${PG_LOG_CONNECTIONS:-on}"
 PG_IMAGE_LEGACY="${PG_IMAGE_LEGACY:-local/postgres:18-postgis-pgvector}"  # old default tag, retired by upgrade
@@ -447,6 +456,15 @@ write_pg_hba() { # file
   } > "$1"
 }
 
+add_binds() { # copy each '${PRIVATE_IP}:port' mapping to every EXTRA_BIND_IPS address
+  local line ip extra
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^(.*ports:\ \[)\"\$\{PRIVATE_IP\}:(\$\{[A-Z_]+\}:[0-9]+)\"\]$ ]]; then
+      extra=""; for ip in $(extra_binds); do extra="$extra, \"$ip:${BASH_REMATCH[2]}\""; done
+      printf '%s"${PRIVATE_IP}:%s"%s]\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$extra"
+    else printf '%s\n' "$line"; fi
+  done
+}
 write_files() {
   log "Writing files in $DB_DIR"
   cd "$DB_DIR"
@@ -673,7 +691,7 @@ EOF
   on "$ENABLE_MYSQL" && vols="$vols mysql_data: {},"
   on "$ENABLE_MARIADB" && vols="$vols mariadb_data: {},"
   echo "volumes: {${vols%,} }"
-} > docker-compose.yml
+} | add_binds > docker-compose.yml
   if pitr_on; then pitr_env_file > postgres/pitr.env; chmod 600 postgres/pitr.env; else rm -f postgres/pitr.env; fi
   dc config -q
 }
@@ -683,12 +701,17 @@ EOF
 ensure_tls() {
   local d="$DB_DIR/tls"
   (umask 077; mkdir -p "$d")
+  local want_ip have_sans; have_sans="$(openssl x509 -noout -ext subjectAltName -in "$d/server.crt" 2>/dev/null || true)"
+  for want_ip in "$PRIVATE_IP" $(extra_binds); do
+    [ -z "$have_sans" ] || grep -q "IP Address:$want_ip\$\|IP Address:$want_ip," <<<"$have_sans" || { echo "TLS: certificate lacks $want_ip - reissuing"; rm -f "$d/server.crt"; break; }
+  done
   if [ ! -f "$d/server.crt" ] || ! openssl x509 -checkend $((30 * 86400)) -noout -in "$d/server.crt" >/dev/null 2>&1; then
     echo "TLS: generating a CA and server certificate in $d ($TLS_DAYS days)"
     [ -f "$d/ca.key" ] || openssl req -x509 -newkey rsa:3072 -nodes -days 3650 -subj "/CN=vsw-db-ca $(hostname)" \
       -keyout "$d/ca.key" -out "$d/ca.crt" >/dev/null 2>&1
     openssl req -newkey rsa:3072 -nodes -subj "/CN=$PRIVATE_IP" -keyout "$d/server.key" -out "$d/server.csr" >/dev/null 2>&1
-    printf 'subjectAltName=IP:%s,DNS:postgres,DNS:pgbouncer,DNS:localhost\n' "$PRIVATE_IP" > "$d/san.ext"
+    local san="IP:$PRIVATE_IP" x; for x in $(extra_binds); do san="$san,IP:$x"; done
+    printf 'subjectAltName=%s,DNS:postgres,DNS:pgbouncer,DNS:localhost\n' "$san" > "$d/san.ext"
     openssl x509 -req -in "$d/server.csr" -CA "$d/ca.crt" -CAkey "$d/ca.key" -CAcreateserial -days "$TLS_DAYS" \
       -extfile "$d/san.ext" -out "$d/server.crt" >/dev/null 2>&1
     rm -f "$d/server.csr" "$d/san.ext"; chmod 600 "$d"/*.key
@@ -1484,12 +1507,33 @@ valid_ipv4() { local IFS=. a b c d; [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] 
   read -r a b c d <<<"$1"; for x in "$a" "$b" "$c" "$d"; do [ "$x" -le 255 ] || return 1; done; }
 valid_cidr() { [[ "$1" =~ ^(.+)/([0-9]{1,2})$ ]] || return 1; local ip="${BASH_REMATCH[1]}" bits="${BASH_REMATCH[2]}"; valid_ipv4 "$ip" && [ "$bits" -le 32 ]; }
 valid_port() { [[ "$1" =~ ^[0-9]{1,5}$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ]; }
+ip_to_int() { local IFS=. a b c d; read -r a b c d <<<"$1"; echo $(( (a << 24) + (b << 16) + (c << 8) + d )); }
+ip_in_cidr() { # ip cidr
+  valid_ipv4 "$1" && valid_cidr "$2" || return 1
+  local net="${2%/*}" bits="${2#*/}" mask
+  mask=$(( bits == 0 ? 0 : (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF ))
+  [ $(( $(ip_to_int "$1") & mask )) -eq $(( $(ip_to_int "$net") & mask )) ]
+}
+ip_private() { local c; for c in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10; do ip_in_cidr "$1" "$c" && return 0; done; return 1; }
+extra_binds() { echo "${EXTRA_BIND_IPS//,/ }"; }
 validate_config() { # strict: refuse anything ambiguous before touching the server
   local bad=0 v p seen=" "
   err() { printf '!! config: %s\n' "$*" >&2; bad=1; }
   valid_ipv4 "${PRIVATE_IP:-}" || err "PRIVATE_IP '${PRIVATE_IP:-}' is not an IPv4 address"
   case "${PRIVATE_IP:-}" in 0.0.0.0) err "PRIVATE_IP must not be 0.0.0.0 (would publish on every interface)" ;; esac
   [ -z "${EXPECTED_PRIVATE_IP:-}" ] || valid_ipv4 "$EXPECTED_PRIVATE_IP" || err "EXPECTED_PRIVATE_IP is not an IPv4 address"
+  ip_private "${PRIVATE_IP:-0}" || err "PRIVATE_IP '${PRIVATE_IP:-}' is not a private (VPC) address; use EXTRA_BIND_IPS for anything else"
+  for v in $(extra_binds); do
+    valid_ipv4 "$v" || { err "EXTRA_BIND_IPS entry '$v' is not an IPv4 address"; continue; }
+    case "$v" in 0.0.0.0|127.*) err "EXTRA_BIND_IPS must not contain $v" ;; esac
+    [ "$v" = "${PRIVATE_IP:-}" ] && err "EXTRA_BIND_IPS repeats PRIVATE_IP $v"
+    if ! ip_private "$v"; then
+      [ "$ALLOW_PUBLIC_BIND" = 1 ] || err "EXTRA_BIND_IPS $v is public: set ALLOW_PUBLIC_BIND=1 on purpose (and a DO cloud firewall allowlist; Docker ports bypass ufw)"
+      [ "$TLS_MODE" = require ] || err "EXTRA_BIND_IPS $v is public: TLS_MODE=require is mandatory"
+    fi
+  done
+  case "$ALLOW_PUBLIC_BIND" in 0|1) ;; *) err "ALLOW_PUBLIC_BIND must be 0 or 1" ;; esac
+  for v in ${PEER_REGIONS//,/ }; do [[ "$v" =~ ^[a-z]{3}[0-9]$ ]] || err "PEER_REGIONS entry '$v' is not a region slug (e.g. nyc1)"; done
   valid_cidr "$VPC_CIDR" || err "VPC_CIDR '$VPC_CIDR' is not a CIDR (e.g. 10.0.0.0/20)"
   for v in PG_PORT PGBOUNCER_PORT MYSQL_PORT MARIADB_PORT ADMINER_PORT; do valid_port "${!v}" || err "$v '${!v}' is not a port (1-65535)"; done
   for p in $(enabled_ports) $(on "$ENABLE_ADMINER" && echo "$ADMINER_PORT"); do
@@ -2306,21 +2350,43 @@ d_stale() { if [ "${DOCTOR_CONTEXT:-}" = upgrade ]; then d_warn "$*"; else d_bad
 stack_up() { [ -f "$DB_DIR/docker-compose.yml" ] && (cd "$DB_DIR" && dc ps --status running --services 2>/dev/null | grep -qx "$1"); }
 
 doctor_exposure() {
-  log "Exposure: DB ports must listen on $PRIVATE_IP only"
-  local p l
+  log "Exposure: DB ports must listen on $PRIVATE_IP${EXTRA_BIND_IPS:+ and $EXTRA_BIND_IPS} only"
+  local p l a x
   for p in $(enabled_ports); do
     l="$(listen_addrs "$p")"
     if [ "$l" = "?" ]; then d_warn "$p: unknown (no ss or lsof)"
     elif [ -z "$l" ]; then d_warn "$p: not listening"
     elif echo "$l" | grep -qE '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):'; then d_bad "$p: PUBLIC ($l)"
-    else d_ok "$p: $l"; fi
+    else
+      x=""; for a in $l; do a="${a%:*}"; [ "$a" = "$PRIVATE_IP" ] || in_list "$a" "$(extra_binds)" || x="$x $a"; done
+      if [ -n "$x" ]; then d_bad "$p: listens on unexpected address(es)$x ($l)"; else d_ok "$p: $l"; fi
+    fi
   done
+  for a in $(extra_binds); do ip_private "$a" || d_warn "$a is a public bind: Docker ports bypass ufw, so a DO cloud firewall must allow only the app servers (workbench do firewall-apply db ...)"; done
   echo "  (Docker-published ports bypass ufw; binding to the private IP keeps them off the internet.)"
   if on "$ENABLE_ADMINER"; then
     l="$(listen_addrs "$ADMINER_PORT")"
     if [ -n "$l" ] && [ "$l" != "?" ] && echo "$l" | grep -qvE '^(127\.0\.0\.1:[0-9]+[[:space:]]*)+$'; then d_bad "adminer $ADMINER_PORT not loopback-only ($l)"
     else d_ok "adminer: ${l:-not listening} (tunnel only)"; fi
   fi
+}
+doctor_network() { # region / VPC sanity: DO VPCs are per region (docs/cross-region.md)
+  log "Network: region and VPC"
+  ip_in_cidr "$PRIVATE_IP" "$VPC_CIDR" && d_ok "PRIVATE_IP $PRIVATE_IP is inside VPC_CIDR $VPC_CIDR" \
+    || d_bad "PRIVATE_IP $PRIVATE_IP is outside VPC_CIDR $VPC_CIDR (ufw and pg_hba would refuse the app servers)"
+  local region="" r wg=0 a
+  command -v curl >/dev/null 2>&1 && region="$(curl -fsS --max-time 2 "$METADATA_URL/region" 2>/dev/null || true)"
+  [[ "$region" =~ ^[a-z]{3}[0-9]$ ]] || region=""
+  for a in $(extra_binds); do ip -4 -o addr show dev wg0 2>/dev/null | grep -q "inet $a/" && wg=1; done
+  if [ -z "$region" ]; then d_warn "region: unknown (not a DigitalOcean droplet, or metadata unreachable)"; return 0; fi
+  d_ok "this droplet is in $region"
+  [ -n "$PEER_REGIONS" ] || { echo "  (set PEER_REGIONS to the app servers' regions to check them)"; return 0; }
+  for r in ${PEER_REGIONS//,/ }; do
+    if [ "$r" = "$region" ]; then d_ok "peer region $r: same region, the VPC works"
+    elif [ "$wg" = 1 ]; then d_ok "peer region $r: different region, reached over WireGuard (wg0)"
+    elif [ "$TLS_MODE" = require ] && [ "$ALLOW_PUBLIC_BIND" = 1 ]; then d_warn "peer region $r: different region over a public address with TLS; check the cloud firewall allowlist"
+    else d_bad "peer region $r differs from $region: the app can't reach $PRIVATE_IP (VPCs are per region). Move the servers, or: workbench net wireguard setup (docs/cross-region.md)"; fi
+  done
 }
 doctor_host() {
   log "Host"
@@ -2443,7 +2509,7 @@ cmd_doctor() { # [--alert]
   D_BAD=0 D_WARN=0
   [ -f "$DB_DIR/.env" ] && { cd "$DB_DIR"; load_env; }
   # a check that errors out must not stop the others: run each section on its own
-  local s; for s in doctor_exposure doctor_host doctor_postgres "doctor_mysql mysql" "doctor_mysql mariadb" doctor_backups; do
+  local s; for s in doctor_exposure doctor_network doctor_host doctor_postgres "doctor_mysql mysql" "doctor_mysql mariadb" doctor_backups; do
     $s || d_bad "check '$s' could not finish (exit $?)"
   done
   echo
