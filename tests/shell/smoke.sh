@@ -106,6 +106,33 @@ grep -q 'no-snapshot' "$T/n" && ok "non-interactive needs a snapshot decision" |
   && ok "remote-run builds the command list" || fail "remote-run builds the command list"
 "$R" --dry-run --host h --expect-ip 10.0.0.5 | grep -F "inet 10\\.0\\.0\\.5/" >/dev/null && ok "remote-run includes IP guard" || fail "remote-run includes IP guard"
 
+# --- remote-run snapshot fallback chain (PATH stubs: ssh, scp, doctl, workbench) ---
+SB="$T/stubs"; mkdir -p "$SB"; L="$T/stub.log"
+printf '#!/usr/bin/env bash\ncase "$*" in *metadata/v1/id*) echo 123456 ;; *) echo "ssh $*" >> "%s" ;; esac\n' "$L" > "$SB/ssh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/scp"
+printf '#!/usr/bin/env bash\ncase "$*" in "account get") [ "${STUB_DOCTL:-0}" = 1 ] ;; *) echo "doctl $*" >> "%s" ;; esac\n' "$L" > "$SB/doctl"
+printf '#!/usr/bin/env bash\ncase "$*" in "digitalocean account --json") [ "${STUB_WB:-0}" = 1 ] ;; *) echo "workbench $*" >> "%s" ;; esac\n' "$L" > "$SB/workbench"
+chmod +x "$SB"/*
+rr() { : > "$L"; PATH="$SB:$PATH" WORKBENCH="$SB/workbench" "$R" --host h --expect-ip 10.0.0.5 "$@" </dev/null > "$T/rr.out" 2>&1; }
+STUB_DOCTL=1 STUB_WB=1 rr -- upgrade
+grep -q 'doctl compute droplet-action snapshot 123456 --snapshot-name db-pre-upgrade-' "$L" && grep -q 'upgrade --snapshot-taken' "$L" && ! grep -q '^workbench' "$L" \
+  && ok "snapshot chain 1: doctl first, then --snapshot-taken" || fail "snapshot chain doctl: $(cat "$L" "$T/rr.out")"
+STUB_DOCTL=0 STUB_WB=1 rr -- upgrade
+grep -q 'workbench digitalocean snapshot 123456 --name db-pre-upgrade-.* --wait --yes' "$L" && grep -q 'upgrade --snapshot-taken' "$L" && ! grep -q '^doctl' "$L" \
+  && ok "snapshot chain 2: bin/workbench when doctl is not set up" || fail "snapshot chain workbench: $(cat "$L" "$T/rr.out")"
+STUB_DOCTL=0 STUB_WB=0 rr -- upgrade
+grep -q 'the server will use its own token' "$T/rr.out" && grep -q 'docker-db-server-manager.sh upgrade$' "$L" && ! grep -qE '^(doctl|workbench) ' "$L" \
+  && ok "snapshot chain 3/4: falls through to the server (token there, or typed CONTINUE)" || fail "snapshot chain server: $(cat "$L" "$T/rr.out")"
+set +e; STUB_DOCTL=0 STUB_WB=0 rr --snapshot-with none -- upgrade; rc=$?; set -e
+[ "$rc" -ne 0 ] && grep -q 'not confirmed; nothing changed' "$T/rr.out" && [ ! -s "$L" ] \
+  && ok "snapshot skip needs explicit confirmation" || fail "snapshot skip: rc=$rc $(cat "$T/rr.out")"
+set +e; STUB_DOCTL=0 rr --snapshot-with doctl -- upgrade; rc=$?; set -e
+[ "$rc" -ne 0 ] && grep -q 'doctl is missing or not authenticated' "$T/rr.out" && ok "--snapshot-with doctl fails fast" || fail "--snapshot-with doctl"
+STUB_DOCTL=1 rr -- upgrade --no-snapshot
+! grep -q '^doctl' "$L" && grep -q 'upgrade --no-snapshot' "$L" && ok "an explicit snapshot flag skips the chain" || fail "explicit flag"
+STUB_DOCTL=1 rr -- verify
+! grep -q '^doctl' "$L" && ok "no snapshot offer for non-upgrade commands" || fail "non-upgrade snapshot"
+
 # --- deploy script: no Ploi placeholder collisions ---------------------------
 if grep -nE '\$\{(BRANCH|SITE|RELEASE|DOMAIN|REPOSITORY|REPOSITORY_NAME|PROJECT_ROOT|TIME)\}' "$D"; then
   fail "deploy script uses a Ploi placeholder name as a shell variable"

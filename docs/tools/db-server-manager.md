@@ -44,7 +44,10 @@ src/shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
 That uploads the script (scp to `~`), installs it to `/root` with `sudo install -m 755`, aborts
 with `ABORT: this is <host>, not the db server` unless `<private-ip>` is on the host, then runs
 each command with sudo (one password prompt). Use `install` instead of `reset --yes` to keep
-existing data. The equivalent by hand:
+existing data. For `upgrade` it first offers a droplet snapshot from your Mac: doctl if configured,
+otherwise `bin/workbench do snapshot` (token from the credentials file), otherwise the server's own token,
+otherwise you type `CONTINUE` on the server; `--snapshot-with doctl|workbench|server|none` forces one.
+The equivalent by hand:
 
 ```sh
 scp src/shell/db/docker-db-server-manager.sh <db-alias>:~/
@@ -361,7 +364,7 @@ traffic is unencrypted on the VPC ([roadmap](../status.md#private-network-encryp
 2. **Plan**: prints a diff of what would change; `--dry-run` stops here.
 3. **Snapshot**: `--snapshot` takes a DigitalOcean snapshot through the API (token from `DIGITALOCEAN_TOKEN`
    or `/root/.config/digitalocean-token`, chmod 600, never in the repo), `--snapshot-taken` records that you
-   took one (remote-run.sh does this with doctl), `--no-snapshot` skips with a warning. Without a flag it asks.
+   took one (remote-run.sh does this with doctl or `bin/workbench do snapshot`), `--no-snapshot` skips with a warning. Without a flag it asks.
 4. **Backup** and **verify** it (every engine present, gzip intact, dump trailer present).
 5. **Savepoint** in `/opt/db/upgrade-saves/<ts>` (chmod 700, newest 5 kept): the previous manager and config,
    compose file, `.env`, `stack.env`, Postgres files, PgBouncer config, image IDs (the Postgres image is pinned
