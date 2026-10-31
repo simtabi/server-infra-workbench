@@ -116,7 +116,7 @@ encrypted data unreadable), never edits DB settings and never restarts services.
 
 The DB-unreachable hint lists the usual causes: the public instead of the private IP, PgBouncer (6432) vs
 Postgres (5432), the DO cloud firewall or ufw, or the DB containers being down. See
-lessons learned (LESSONS_LINK).
+[lessons learned](../lessons-learned.md#networking).
 
 ## Testing
 

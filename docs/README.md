@@ -13,6 +13,11 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | [Configuration](configuration.md) | config files, precedence, platform credentials, what is written where |
 | [Architecture](architecture.md) | droplets, VPC, `eth0` vs `eth1`, ports, where files live |
 | [Repository structure](structure.md) | where things are, where new things go, old to new paths |
+| [Database environments](database-environments.md) | one app, several environments (tst/dev/stg/prd): isolation, topologies, set-up flow, guard rails |
+| [Backups and recovery](backups-and-recovery.md) | backup layers, retention, off-site, PITR, restore tests, which restore to use |
+| [High availability](high-availability.md) | removing single points of failure: managed prd, standby, two web nodes |
+| [Checklists](checklists/README.md) | new DB/web server, manager upgrade, pre-launch, monthly restore drill |
+| [Lessons learned](lessons-learned.md) | mistakes already made once and the rule each one produced |
 | [Security and operations](security.md) | firewall, Docker vs ufw, updates, logs, monitoring |
 | [Troubleshooting](troubleshooting.md) | something failed: real errors and their fixes |
 | [Status](status.md) | what is done and what is still open |
@@ -38,6 +43,10 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | Page | What |
 |---|---|
 | [Profiles](reference/profiles.md) | the 7 setup profiles, every setting, what each profile changes, RAM estimates |
+| [Privileges](reference/privileges.md) | which role can do what, per engine, and how to check |
+| [Naming](reference/naming.md) | database, role, tenant and trash names; environments; reserved names |
+| [Sizing](reference/sizing.md) | RAM per engine, droplet sizes per combination, the RAM warning |
+| [Configuration keys](reference/configuration-keys.md) | every DB manager config key with its default (generated from the example config) |
 
 ## Recipes
 
@@ -53,7 +62,9 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 
 ## Decisions
 
-[Architecture decision records](adr/README.md): layout, PHP on PSR-18, pending actions, credentials.
+[Architecture decision records](adr/README.md): layout, PHP on PSR-18, pending actions, credentials, object storage,
+database topology ([0008](adr/0008-database-topology.md)), MongoDB off by default ([0009](adr/0009-mongodb-off-by-default.md)),
+least-privilege roles ([0010](adr/0010-least-privilege-database-roles.md)).
 
 ## Diagrams
 
@@ -66,6 +77,9 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | DB manager command lifecycle | [db-server-manager.md](tools/db-server-manager.md#4-commands) |
 | Backup and restore | [db-server-manager.md](tools/db-server-manager.md#backup) |
 | Guided upgrade | [roll-out-a-manager-upgrade.md](recipes/roll-out-a-manager-upgrade.md) |
+| Environment isolation and topologies | [database-environments.md](database-environments.md#how-isolation-works) |
+| Backup layers and restore decisions | [backups-and-recovery.md](backups-and-recovery.md#layers) |
+| Production HA | [high-availability.md](high-availability.md) |
 | Legacy upgrade procedure | [upgrade-a-legacy-db-server.md](recipes/upgrade-a-legacy-db-server.md#steps-from-your-workstation) |
 | SSH key flow | [set-up-ssh-access.md](recipes/set-up-ssh-access.md#key-flow) |
 | Which machine am I on? | [set-up-ssh-access.md](recipes/set-up-ssh-access.md#which-machine-am-i-on) |
@@ -78,7 +92,7 @@ Diagrams are [Mermaid](https://mermaid.js.org); GitHub renders them inline; `mak
 | Tool | Runs on | Main commands / flags |
 |---|---|---|
 | [`bin/workbench`](../bin/workbench) | workstation | `list`, `<area> <tool>`, `do`, `cf`, `ploi`, `gcp`, `credentials`, `py`; `--dry-run --yes --force --json --verbose`, see [cli.md](tools/cli.md) |
-| [`docker-db-server-manager.sh`](../src/shell/db/docker-db-server-manager.sh) | DB server (root) | `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user backup restore cron-install cron-remove logs uninstall help`; `--yes --dry-run --non-interactive --snapshot --snapshot-taken --no-snapshot --config --version` |
+| [`docker-db-server-manager.sh`](../src/shell/db/docker-db-server-manager.sh) | DB server (root) | `init install upgrade reset status verify doctor [--alert] env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user role-split env-init env-apply env-list env-sql env-creds purge-trash backup restore restore-test offsite pitr binlog-ship engine gfs-keep cron-install cron-remove logs uninstall help`; `--yes --dry-run --non-interactive --snapshot --snapshot-taken --no-snapshot --config --version` |
 | [`remote-run.sh`](../src/shell/db/remote-run.sh) | workstation | `--host --expect-ip --config --script --no-upload --dry-run -- <cmd>, <cmd>` |
 | [`update-env-db.sh`](../src/shell/web/update-env-db.sh) | web server or workstation | `--env --site --from --set --remote --no-backup --dry-run` |
 | [`check-db-reach.sh`](../src/shell/web/check-db-reach.sh) | web server or workstation | `<db-ip> [ports]`, `--env FILE`, `--remote ALIAS` |

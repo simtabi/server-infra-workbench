@@ -6,6 +6,87 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (manager 1.4.0: least privilege, environments, backups)
+
+- **Least privilege** ([privileges](docs/reference/privileges.md), [ADR 0010](docs/adr/0010-least-privilege-database-roles.md)):
+  `PG_ADMIN_USER` (`vsw_admin`) is the only Postgres superuser and owns every central database; the app login
+  has no superuser/`CREATEROLE`/`REPLICATION`/`BYPASSRLS` and gets `CREATEDB` only for tenants
+  (`PG_APP_CREATEDB`). `upgrade` performs the split (`role-split [--rollback]` by hand). PgBouncer uses a
+  dedicated `pgbouncer_auth` login and a `SECURITY DEFINER` lookup that never returns superusers. MySQL/MariaDB:
+  no `root@'%'`, `local_infile=0`, `secure_file_priv`, explicit per-database grant lists with `_` escaped.
+  Optional `TLS_MODE=require` (self-signed, renewed by `upgrade`).
+- **Environments** ([guide](docs/database-environments.md), [naming](docs/reference/naming.md)): `APP`, `ENVS`,
+  `TENANT_ENVS`, `PROTECTED_ENVS`, `PRD_LOCATION`; `env-init` wizard or flags (`--dry-run`, exit 2 on a missing
+  answer without a terminal), `env-apply`, `env-list`, `env-sql`, `env-creds [--out F]`. Per-env databases,
+  `_owner`/`_app`/`_ro`/`_migrator` roles, `pg_hba` allow lists, secrets in `$ENV_SECRETS_DIR/<env>.env` (600).
+- **Guard rails**: protected envs need `--force-prod`, the env name typed (or `WORKBENCH_CONFIRM`) and a verified
+  backup younger than `FRESH_BACKUP_MIN`; drops are soft (Postgres rename to `__trash_<ts>`, MySQL dump kept
+  `DROPPED_DUMP_DAYS`); `purge-trash`.
+- **Backups** ([Backups and recovery](docs/backups-and-recovery.md)): manifest + `SHA256SUMS` per backup, GFS
+  `RETENTION`, encrypted off-site copies (`offsite backup|list|verify|fetch`, openssl or age, rclone or aws),
+  pgBackRest PITR (`pitr setup|backup|status|restore`, 2.60+), `binlog-ship`, weekly `restore-test` into
+  throwaway containers with no network, `doctor --alert` with email/webhook/check-in/command alerts;
+  `cron-install` writes all jobs.
+- `engine enable|disable` with a RAM check and a `do resize` hint; `create-db --tenants --owner`;
+  `doctor` checks roles, isolation, tenants, naming, MySQL hardening, TLS, backups, off-site, PITR and RAM.
+
+### Fixed (manager 1.4.0)
+
+- `restore-test` always removes its throwaway containers (a `RETURN` trap didn't fire from cron and left them
+  running), and removes leftovers from older runs first.
+
+### Added (configurator, platform commands)
+
+- **`bin/workbench configure`** wizard and `profile list|show|diff|table` with 7 versioned profiles
+  ([profiles](docs/reference/profiles.md)): RAM, region, VPC and best-practice checks; writes a client's config
+  under the ignored `local/<client>/`.
+- **`do resize`** (shutdown, resize, power on, as a pending action) and DO monitoring alert policies; DO
+  firewalls, uptime checks, droplet create; Ploi sites, deploy scripts and daemons; health checks.
+- **Add-ons** ([add-ons](docs/tools/addons.md), [ADR 0007](docs/adr/0007-object-storage-selection.md)): Gotenberg
+  and one object store per node (Garage, SeaweedFS, RustFS experimental) via `addon.sh`, with plan, confirm,
+  audit and container tests.
+- **Client data out of the repo**: real setups live in ignored `local/`; `make client-check` denylist gate.
+
+### Added (server tools)
+
+- **`server harden`**, **`server update --reboot-window`**, **`web diagnose [--fix]`** ([server tools](docs/tools/server.md))
+  on a shared library (plan, confirm, lock, audit, backups), all with `--dry-run` and `--host`.
+- **`server init --role db|web|base`**: timezone, swap (+ `vm.swappiness=10` on db), base packages, Docker from
+  Docker's apt repo with log rotation (db only, never under Ploi), then `harden`.
+- **`server inventory`**: read-only facts as txt/json/md, `--out DIR` with dated copies and diffs, `--pull` into
+  `local/<client>/inventory/<host>/`, `--install-cron` for a daily snapshot. Never reads `.env` values.
+- `remote()` copies extra files and has a no-TTY mode for captured output.
+- Tests: `tests/shell/smoke-server.sh` (59 tests, stubbed root) and `tests/shell/server-it.sh` (17 tests in an
+  Ubuntu 24.04 container, part of `make it`).
+
+### Added (Laravel .env)
+
+- **`env.sh init|check`** ([Laravel .env](docs/tools/env.md)) with `config/laravel.env.example`: per-env defaults,
+  `APP_KEY` generated only when empty, `DB_*` from `env-creds`, validation, key-only diff, backup, atomic 600
+  write, typed confirmation on prd. `config/credentials.env.example` for platform tokens.
+
+### Added (SSH keys: vps-ssh-key-manager merged)
+
+- `workbench keys` for provider accounts (DigitalOcean, Vultr, Hetzner, Linode, Scaleway) and safe server
+  `authorized_keys` editing, replacing the separate vps-ssh-key-manager package ([SSH keys](docs/tools/ssh-keys.md)).
+- **`fixkeys.sh` 2.0** for console recovery: `list|add|remove|perms|diagnose|restore|menu`, `--user`, `--file`,
+  `--root DIR` for rescue-mounted disks, `ssh-keygen` validation, refuses private keys, effective
+  `AuthorizedKeysFile` from `sshd -T`, backups, atomic writes, audit with fingerprints only.
+  [Lockout recipe](docs/recipes/recover-ssh-lockout.md).
+
+### Added (docs)
+
+- [Database environments](docs/database-environments.md), [Backups and recovery](docs/backups-and-recovery.md),
+  [High availability](docs/high-availability.md), [Lessons learned](docs/lessons-learned.md),
+  [checklists](docs/checklists/README.md); reference pages for [privileges](docs/reference/privileges.md),
+  [naming](docs/reference/naming.md), [sizing](docs/reference/sizing.md) and
+  [configuration keys](docs/reference/configuration-keys.md) (generated, checked by `make links`);
+  ADRs 0008-0010 (database topology, MongoDB, least-privilege roles).
+
+### Fixed (shell tools)
+
+- Usage text works with BSD `sed` (`p;}`), so `--help` works on macOS.
+
 ### Added (platform APIs, CLI, Python)
 
 - **PHP platform API library** (`php/`, `simtabi/vps-server-workbench`, PHP 8.4+): typed, fluent clients for

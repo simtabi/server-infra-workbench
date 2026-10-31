@@ -68,6 +68,7 @@ compose-check: ## docker compose config for stacks/caddy + stacks/addons, caddy 
 
 links: ## check relative links and #anchors in all Markdown
 	python3 tests/docs/check-links.py .
+	python3 tests/docs/gen-config-keys.py --check
 
 mermaid: ## render every Mermaid block to /tmp/vsw-mermaid (needs node; downloads mermaid-cli)
 	bash tests/docs/render-mermaid.sh

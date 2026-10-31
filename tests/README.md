@@ -15,6 +15,7 @@ No test calls a real API or a real server.
 | [`shell/addons-it.sh`](shell/addons-it.sh) | add-ons on real containers (docker) | `make it` |
 | [`shell/server-it.sh`](shell/server-it.sh) | server init/harden/inventory/update, env, fixkeys as root in Ubuntu 24.04 (docker) | `make it` |
 | [`docs/check-links.py`](docs/check-links.py) | every relative Markdown link resolves | `make links` |
+| [`docs/gen-config-keys.py`](docs/gen-config-keys.py) | `docs/reference/configuration-keys.md` matches `config/db-server.env.example` (`--check`; run without it to regenerate) | `make links` |
 | [`docs/render-mermaid.sh`](docs/render-mermaid.sh) | every Mermaid diagram renders | `make mermaid` |
 
 `make ci` is the gate: lint, tests, PHP, Python, links and compose checks.

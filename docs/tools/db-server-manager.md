@@ -20,6 +20,18 @@
 
 Moving an existing server to this version: [upgrading.md](../recipes/upgrade-a-legacy-db-server.md).
 
+**New in 1.4.0** (details in the [CHANGELOG](../../CHANGELOG.md)):
+
+| Area | What changed | Read |
+|---|---|---|
+| Least privilege | `PG_ADMIN_USER` is the only superuser; the app login has no admin attributes; no `root@'%'`; PgBouncer `auth_query` through a `SECURITY DEFINER` function | [privileges](../reference/privileges.md), [ADR 0010](../adr/0010-least-privilege-database-roles.md) |
+| Environments | `env-init`, `env-apply`, `env-list`, `env-sql`, `env-creds`, `purge-trash`; protected envs, soft drop | [Database environments](../database-environments.md), [naming](../reference/naming.md) |
+| Backups | manifest + checksums, GFS `RETENTION`, encrypted `offsite`, `restore-test`, pgBackRest `pitr`, `binlog-ship`, alerts | [Backups and recovery](../backups-and-recovery.md) |
+| Engines | `engine enable\|disable`, RAM check with a resize hint | [sizing](../reference/sizing.md) |
+| TLS | `TLS_MODE=require` (self-signed, made on the server) | [Security](#9-security) |
+| Config | every key | [configuration keys](../reference/configuration-keys.md) |
+
+
 ## 0. Runbook (from your workstation)
 
 > Run these on your **laptop**. If your prompt says `ploi@<db-host>`, you are on the
@@ -63,10 +75,10 @@ ssh -t <db-alias> 'ip -4 addr | grep -q "inet <private-ip>/" || { echo "ABORT: $
 
 | Service | Image | Port (private IP only) | Login |
 |---|---|---|---|
-| PostgreSQL 18.6 + PostGIS 3.6 + pgvector 0.8 | `PG_IMAGE` (default `local/postgres:18-postgis-pgvector`, built from `postgis/postgis:18-3.6`) | `5432` | `<user>` / `PG_PASSWORD` (superuser, so it can create databases) |
-| PgBouncer 1.26.1, session mode, scram-sha-256 | `edoburu/pgbouncer:v1.26.1-p0` | `6432` → container `5432` | same as Postgres |
-| MySQL 9.7 | `mysql:9.7` | `3306` | `root` / `MYSQL_ROOT_PASSWORD` |
-| MariaDB 13 | `mariadb:13` | `3307` → container `3306` | `root` / `MARIADB_ROOT_PASSWORD` |
+| PostgreSQL 18.6 + PostGIS 3.6 + pgvector 0.8 | `PG_IMAGE` (default `vsw/postgres:18-postgis-pgvector`, built from `postgis/postgis:18-3.6`) | `5432` | app: `<user>` / `PG_PASSWORD` (no superuser; `CREATEDB` only with `PG_APP_CREATEDB=1`); admin: `PG_ADMIN_USER` / `PG_ADMIN_PASSWORD` |
+| PgBouncer 1.26.1, session mode (`PGBOUNCER_POOL_MODE`), scram-sha-256 | `edoburu/pgbouncer:v1.26.1-p0` | `6432` → container `5432` | any non-superuser Postgres login (looked up with `auth_query`) |
+| MySQL 9.7 | `mysql:9.7` | `3306` | app users from `create-db`/`env-apply`; `root` only on localhost and the compose subnet |
+| MariaDB 13 | `mariadb:13` | `3307` → container `3306` | as MySQL |
 
 ```
  web server (VPC IP) ──── VPC_CIDR ────▶ db server PRIVATE_IP (eth1)
@@ -80,12 +92,14 @@ Every port is bound to the private IP, so none of them is reachable from the pub
 
 ### Files (`/opt/db`)
 ```
-/opt/db/.env                         PRIVATE_IP + 3 generated passwords (chmod 600)
+/opt/db/.env                         PRIVATE_IP + generated passwords: PG, PG admin, PgBouncer auth/admin, MySQL/MariaDB root (chmod 600)
 /opt/db/stack.env                    non-secret settings (users, images, ports)
 /opt/db/docker-compose.yml
 /opt/db/postgres/Dockerfile
 /opt/db/postgres/init/10-extensions.sql
-/opt/db/backups/<YYYYmmdd-HHMMSS>/{postgres,mysql,mariadb}.sql.gz
+/opt/db/backups/<YYYYmmdd-HHMMSS>/{postgres,mysql,mariadb}.sql.gz, grants-*.sql.gz, manifest.txt, SHA256SUMS
+/etc/vps-server-workbench/secrets/<env>.env   per-environment passwords (chmod 600, with APP set)
+/var/lib/vps-server-workbench/db/            status stamps (last backup, restore test, off-site) for doctor
 Docker volumes: db_pg_data, db_mysql_data, db_mariadb_data
 ```
 Every run of `install` and `reset` rewrites these files from the script, so make changes in the script rather than in the files.
@@ -114,17 +128,27 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `reset` | **destroys** all DB data | `Type RESET` (or `--yes`) | new passwords, rebuild from scratch |
 | `status` | no | no | `docker compose ps` |
 | `verify` | no | no | health, extensions, logins for each enabled engine |
-| `doctor` | no | no | host checks: ports only on the private IP, ufw default deny, unattended-upgrades, reboot-required, free disk, age of the newest backup, cron |
+| `doctor [--alert]` | no | no | host, exposure, roles and isolation, MySQL hardening, TLS, environments, backups, off-site, restore test, PITR, RAM; `--alert` notifies on problems |
 | `env [engine]` | no | no | prints the `DB_*` lines (contains the password) |
-| `create-db <name> [engine] [--extensions a,b] [--readonly-user] [--out F]` | creates a database + owner user | no | random password, PgBouncer-ready, prints the `DB_*` lines once |
+| `create-db <name> [engine] [--owner U] [--tenants] [--extensions a,b] [--readonly-user] [--out F]` | creates a database + owner user | no | admin-owned database, least-privilege login ([privileges](../reference/privileges.md)), PgBouncer-ready, prints the `DB_*` lines once |
 | `create-user <u> <db> [engine] [--readonly] [--out F]` | creates a user | no | read-write (default) or read-only on one database |
 | `grant <u> <db> [engine] [--readonly\|--readwrite]` | changes grants | no | adds access to another database |
 | `rotate-password <u> [engine] [--out F]` | changes a password | no | new random password, printed once |
 | `list-dbs [engine\|all]` / `list-users [engine\|all]` | no | no | databases with owner and size; login users and the DBs they can reach |
-| `drop-db <name> [engine]` / `drop-user <u> [engine]` | **deletes** | `Type DROP` (or `--yes`) | protected: `PG_USER`, `PG_DB`, `root`, system databases |
-| `backup` | writes `BACKUP_DIR/<ts>/` | no | one gzip dump per enabled engine plus MySQL/MariaDB users and grants, prunes to `KEEP`, then `BACKUP_HOOK` |
-| `restore <dir> [postgres\|mysql\|mariadb\|all]` | **overwrites** | `Type RESTORE` (or `--yes`) | loads the dumps |
-| `cron-install` / `cron-remove` | cron file only | no | daily `backup` at `CRON_TIME` |
+| `drop-db <name> [engine] [--force-prod]` / `drop-user <u> [engine] [--force-prod]` | **deletes** (soft in protected envs) | `Type DROP`; protected envs: the env name | reserved names refused; protected envs need `--force-prod` and a fresh backup |
+| `backup [--cron]` | writes `BACKUP_DIR/<ts>/` | no | one gzip dump per enabled engine plus MySQL/MariaDB users and grants, manifest and checksums, GFS prune (`RETENTION`, else `KEEP`), off-site copy, then `BACKUP_HOOK` |
+| `restore-test [dir] [--cron]` | no (throwaway containers) | no | loads a backup with no network and compares table counts with the manifest |
+| `offsite backup [dir] \| list \| verify [name] \| fetch <name> [dir]` | uploads / downloads | no | encrypted copies in S3/Spaces ([backups](../backups-and-recovery.md)) |
+| `pitr setup \| backup [full\|diff\|incr] \| status \| restore --target T` | `restore` **rewinds the cluster** | `restore`: `Type RESTORE` / env name | pgBackRest point-in-time recovery for Postgres |
+| `binlog-ship` | uploads | no | closed MySQL/MariaDB binlogs off-site, encrypted |
+| `restore <dir> [postgres\|mysql\|mariadb\|all]` | **overwrites** | `Type RESTORE` (or `--yes`); protected envs: `--force-prod` + env name | checks the manifest, then loads the dumps |
+| `env-init [flags] [--out F] [--dry-run]` | writes a config block | wizard (or flags) | environment layout ([guide](../database-environments.md#set-it-up)) |
+| `env-apply` | creates databases and roles | no | `<app>_<env>` databases, roles, grants, `pg_hba`; idempotent |
+| `env-list` / `env-sql <env> [engine]` / `env-creds <env> [engine] [--out F]` | no | no | the layout; SQL for a prd host this tool doesn't manage; an env's `DB_*` lines |
+| `purge-trash [--dry-run]` | **drops** soft-dropped databases older than `TRASH_DAYS` | no | also removes dumps of dropped MySQL/MariaDB databases after `DROPPED_DUMP_DAYS` |
+| `engine enable\|disable <engine> [--delete-volume] [--dry-run]` | starts / stops an engine | `Type ENABLE` / `DISABLE` | edits the config, converges, RAM check |
+| `role-split [--rollback]` | changes roles | `Type SPLIT` / `ROLLBACK` | the 1.4.0 Postgres role split by hand (`upgrade` does it) |
+| `cron-install` / `cron-remove` | cron file only | no | `backup`, `doctor --alert`, `restore-test`, PITR, `binlog-ship`, `purge-trash` jobs ([table](../backups-and-recovery.md#set-up)) |
 | `logs [service]` | no | no | follow the last 200 lines |
 | `uninstall [--purge]` | `--purge` deletes everything | `Type PURGE` | stop and remove |
 | `help` | no | no | detailed help |
@@ -221,11 +245,13 @@ Creates database `<name>` owned by a new user `<name>` with a random password, o
 (default: the first enabled of postgres, mysql, mariadb). Names: `a-z 0-9 _`, max 63 (Postgres) or 32
 (MySQL/MariaDB). An existing user is refused, so re-running is safe.
 
-- **Isolation:** `PUBLIC` loses `CONNECT` on the new database and on `PG_DB`, so app users can't open each
-  other's databases. MySQL/MariaDB users get `ALL` on their own schema only.
-- **PgBouncer:** PgBouncer looks up any login role through `PG_USER` (`auth_user` + its default
-  `auth_query`), so new Postgres users work on `PGBOUNCER_PORT` at once; the manager also sends `RELOAD`.
-  The printed `DB_PORT` is the PgBouncer port.
+- **Isolation:** the database is owned by `PG_ADMIN_USER` (so the app can't drop it) and `PUBLIC` loses
+  `CONNECT`, so app users can't open each other's databases. The owner login gets DDL in schema `public` and
+  DML, never superuser; MySQL/MariaDB users get the explicit list in [privileges](../reference/privileges.md)
+  on their own schema only. `--tenants` adds `CREATEDB` (Postgres) or the escaped `<name>\_t\_%` grant.
+- **PgBouncer:** PgBouncer looks up every non-superuser login through `pgbouncer_auth` and
+  `pgbouncer.get_auth()` (`auth_query`), so new Postgres users work on `PGBOUNCER_PORT` at once; the
+  manager also sends `RELOAD`. The printed `DB_PORT` is the direct port; the pooled alternative is shown.
 - **Extensions:** every new Postgres database copies `template1`, which `install` filled with
   `PG_EXTENSIONS` (default `vector postgis pg_trgm pgcrypto uuid-ossp citext pg_stat_statements`).
   `--extensions citext,hstore` adds more to just this database (comma-separated; must exist in the image:
@@ -244,13 +270,47 @@ sudo /root/docker-db-server-manager.sh list-users all
 sudo /root/docker-db-server-manager.sh drop-user shop_report      # type DROP
 ```
 
-`rotate-password` refuses `PG_USER` (its password is shared with PgBouncer's config); rotate that with
-`reset` on a new server, or by hand: `ALTER ROLE`, update `PG_PASSWORD` in `/opt/db/.env`, `install`.
-`drop-user` on Postgres reassigns the user's objects to `PG_USER` in every database, then drops the role.
+`rotate-password` works for `PG_USER` too once the role split is done (it updates `PG_PASSWORD` in
+`/opt/db/.env`; PgBouncer picks the new hash up through `auth_query`). Reserved logins are refused.
+`drop-user` on Postgres reassigns the user's objects to `PG_ADMIN_USER` in every database, then drops the role.
 
 ### `doctor`
-Read-only health check of the host (run as root for the ufw part). Every line is
-`ok`, `WARN` or `FAIL`; exit code 1 on any `FAIL`.
+Read-only health check (run as root). Every line is `ok`, `warn` or `PROBLEM`; exit code 1 on any problem.
+Sections: host (ufw, updates, reboot, disk, RAM vs [sizing](../reference/sizing.md)), exposure (ports on the
+private IP only), Postgres roles, isolation, `pg_hba`, TLS and extensions, environments and tenants,
+MySQL/MariaDB hardening and grants, backups, off-site copies, restore tests and PITR. The full list is in
+[Database environments](../database-environments.md#what-doctor-checks). `doctor --alert` (hourly from
+`cron-install`) sends problems to `ALERT_EMAIL`, `ALERT_WEBHOOK`, `HEALTHCHECK_URL` or `ALERT_COMMAND`.
+
+### Environments (`env-*`, `purge-trash`)
+With `APP` set, one server holds `<app>_<env>` databases for `ENVS` (any of `tst dev trn stg prd`), each with
+its own `_owner`, `_app`, `_ro` (and optional `_migrator`) roles, a `pg_hba` allow list and generated passwords in
+`$ENV_SECRETS_DIR/<env>.env`. Protected envs (`PROTECTED_ENVS`, default `stg prd`) need `--force-prod`, the env
+name typed and a fresh backup for destructive commands, and drops are soft. Everything is in
+[Database environments](../database-environments.md).
+
+```sh
+sudo /root/docker-db-server-manager.sh env-init --dry-run --app myapp --engines postgres --envs tst,dev,stg,prd
+sudo /root/docker-db-server-manager.sh env-init --out /etc/docker-db-server-manager.conf --app myapp --engines postgres --envs tst,dev,stg,prd
+sudo /root/docker-db-server-manager.sh upgrade --dry-run && sudo /root/docker-db-server-manager.sh upgrade
+sudo /root/docker-db-server-manager.sh env-apply && sudo /root/docker-db-server-manager.sh env-list
+(umask 077; sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env)
+sudo WORKBENCH_CONFIRM=prd /root/docker-db-server-manager.sh drop-db myapp_prd_t_42 --force-prod   # soft drop
+sudo /root/docker-db-server-manager.sh purge-trash --dry-run
+```
+
+### `engine enable|disable <engine>`
+Turns `postgres`, `pgbouncer`, `mysql`, `mariadb` or `adminer` on or off: prints a plan (`--dry-run` stops
+there), checks RAM, edits the config key, starts or removes the container and converges. `disable` backs up first and keeps the
+volume unless `--delete-volume` (a second typed confirmation).
+
+### `role-split [--rollback]`
+The 1.4.0 Postgres role split by hand: backs up, ends `PG_USER`'s sessions for a few seconds, moves its objects
+to a new non-superuser `PG_USER` and makes `PG_ADMIN_USER` the only superuser. `upgrade` does this for you.
+`--rollback` restores the pre-1.4.0 layout.
+
+### `restore-test`, `offsite`, `pitr`, `binlog-ship`
+See [Backups and recovery](../backups-and-recovery.md).
 
 ### `backup`
 
@@ -276,9 +336,11 @@ It writes three gzip dumps to `$BACKUP_DIR/<ts>/` (chmod 600) and runs `gzip -t`
 - `BACKUP_HOOK` (optional) runs after a good backup with the directory as `$1`, for
   an offsite copy (rclone, `aws s3`, `restic`...). A hook failure fails the backup run.
 - `cron-install` also writes `/etc/logrotate.d/docker-db-server-backup` (weekly, 8 kept).
-- Nightly dumps mean up to 24 h of data loss, and backups aren't restore-tested
-  automatically; see [point-in-time recovery](../status.md#point-in-time-recovery) and
-  [restore test](../status.md#restore-test).
+- Every backup gets `manifest.txt` (databases and table counts) and `SHA256SUMS`; `restore`, `restore-test`
+  and `offsite verify` check them. With `RETENTION` set, pruning is grandfather-father-son instead of `KEEP`.
+- With `OFFSITE=s3` the backup is packed, encrypted (`openssl` AES-256 with `OFFSITE_KEY_FILE`, or `age`) and
+  uploaded with a checksum. Nightly dumps alone mean up to 24 h of data loss; add `PITR=pgbackrest`
+  ([Backups and recovery](../backups-and-recovery.md)).
 - **Postgres** uses `pg_dumpall --clean --if-exists`, which covers every database (including ones the app creates itself) and every role.
 - **MySQL and MariaDB** dump only user databases. The `mysql`, `sys` and `*_schema` system schemas are left out on purpose, so a restore never overwrites root or the passwords in `.env`. Database users you create yourself in MySQL or MariaDB are therefore **not** backed up, so recreate them after a restore.
 
@@ -292,7 +354,7 @@ When you run it with `sudo`, put the variables after sudo: `sudo KEEP=14 ./docke
 You'll be asked to type `RESTORE`. During a Postgres restore, PgBouncer is stopped so it releases its pooled connections, and the `<user>` role statements are skipped (you are connected as that role). You can ignore notices like `database "<db>" already exists`. MySQL/MariaDB dumps contain user databases only, so a restore cannot bring back old root users or passwords.
 
 ### `cron-install` / `cron-remove`
-Writes `/etc/cron.d/docker-db-server-backup`, which runs `backup` at `CRON_TIME` (default `15 3 * * *`, 03:15 **server time**, which is UTC on DO droplets) and logs to `/var/log/docker-db-server-backup.log`. The job runs the script from where it is when you install the cron, so keep it there (for example `/root/docker-db-server-manager.sh`).
+Writes `/etc/cron.d/docker-db-server-backup`, which runs `backup` at `CRON_TIME` (default `15 3 * * *`, 03:15 **server time**, which is UTC on DO droplets) plus `doctor --alert`, `restore-test` and, when configured, PITR, `binlog-ship` and `purge-trash` ([job table](../backups-and-recovery.md#set-up)), and logs to `/var/log/docker-db-server-backup.log`. Run it again after changing the config. The job runs the script from where it is when you install the cron, so keep it there (for example `/root/docker-db-server-manager.sh`).
 
 ### `logs [service]`
 `./docker-db-server-manager.sh logs pgbouncer` shows the last 200 lines and keeps following the log.
@@ -317,7 +379,7 @@ Prints the detailed help with examples.
 | `KEEP` | `7` | backups kept after each `backup` |
 | `FORCE=1` / `--yes` / `-y` | off | skip the typed confirmation (required when there's no terminal) |
 
-Also configurable: `PG_USER`/`PG_DB` (`app`), `PG_IMAGE`, `PG_BASE_IMAGE`, `PGVECTOR_PKG`, `PG_MAX_CONNECTIONS` (200), `PGBOUNCER_IMAGE`, `PGBOUNCER_MAX_CLIENT_CONN` (500), `PGBOUNCER_POOL_SIZE` (20), `MYSQL_IMAGE`, `MARIADB_IMAGE`, the four `*_PORT`s, `CRON_TIME`, `CRON_FILE`, `CRON_LOG`, `WEB_ENV`. Put them in `/etc/docker-db-server-manager.conf` (template: [`config/db-server.env.example`](../../config/db-server.env.example)), or pass `--config FILE`. Environment variables beat the file. `shared_preload_libraries=pg_stat_statements` is fixed.
+Every key, with defaults: [configuration keys](../reference/configuration-keys.md). Also configurable: `PG_USER`/`PG_DB` (`app`), `PG_IMAGE`, `PG_BASE_IMAGE`, `PGVECTOR_PKG`, `PG_MAX_CONNECTIONS` (200), `PGBOUNCER_IMAGE`, `PGBOUNCER_MAX_CLIENT_CONN` (500), `PGBOUNCER_POOL_SIZE` (20), `MYSQL_IMAGE`, `MARIADB_IMAGE`, the four `*_PORT`s, `CRON_TIME`, `CRON_FILE`, `CRON_LOG`, `WEB_ENV`. Put them in `/etc/docker-db-server-manager.conf` (template: [`config/db-server.env.example`](../../config/db-server.env.example)), or pass `--config FILE`. Environment variables beat the file. `shared_preload_libraries=pg_stat_statements` is fixed.
 
 ## 6. PostgreSQL extensions
 These are created in `<db>` **and in `template1`**, so every database created later gets them automatically:
@@ -339,18 +401,22 @@ Then **redeploy in Ploi**, because the config is cached at deploy time. For MySQ
 
 ## 8. PgBouncer notes
 - It runs in session mode, so Laravel and prepared statements work unchanged. To use it, set `DB_PORT=6432`.
-- It **must** stay in session mode for Laravel. **Creating or dropping databases** (e.g. a multi-database app provisioning one) needs a direct Postgres connection on 5432 and a role with `CREATEDB` (the bootstrap user is a superuser). Keep the app on 5432 until you've tested it on 6432.
-- The edoburu image writes `"<user>" "<plain password>"` to `userlist.txt`, which scram-sha-256 needs so it can log in to Postgres on the client's behalf.
+- Keep session mode for Laravel unless you've tested transaction mode (`PGBOUNCER_POOL_MODE=transaction`). **Creating or dropping databases** (tenants) needs a direct Postgres connection on 5432 and a role with `CREATEDB` (`PG_APP_CREATEDB=1` or `--tenants`). Keep the app on 5432 until you've tested it on 6432.
+- Only `pgbouncer_auth` is in `userlist.txt`; every other login is looked up with `auth_query` through `pgbouncer.get_auth()`, which never returns superusers, so the admin login can't be used through PgBouncer.
 - You can query the admin console with `psql "host=<PRIVATE_IP> port=6432 user=<user> dbname=pgbouncer" -c "show pools;"`. Its healthcheck logs a login every 5 seconds; that is expected, not an attack.
 - Transaction mode would need extra Laravel settings (emulated prepares) and isn't configured.
 
 ## 9. Security
 
-Firewall, Docker vs ufw, updates and secrets on disk: [security.md](../security.md). Web-to-DB
-traffic is unencrypted on the VPC ([roadmap](../status.md#private-network-encryption)).
+Firewall, Docker vs ufw, updates and secrets on disk: [security.md](../security.md). Logins and grants:
+[privileges](../reference/privileges.md). `TLS_MODE=require` turns on TLS for Postgres (`ssl=on`, `hostssl`
+rules) and MySQL/MariaDB (`require_secure_transport`) with a self-signed certificate made on the server
+(`TLS_DAYS`, renewed by `upgrade`); set `DB_SSLMODE=require` in Laravel. With `TLS_MODE=off` web-to-DB
+traffic is unencrypted on the VPC.
 - Ports are bound to the private IP only, and ufw allows only `VPC_CIDR` on 5432, 6432, 3306 and 3307. Existing ufw rules are detected, so no duplicates get added. If ufw isn't installed, the rules are skipped with a warning.
 - `.env`, the `.env` backups and the dump files are all chmod 600, root only.
-- The MySQL and MariaDB root passwords are never printed. To read them, run `grep ROOT /opt/db/.env`.
+- The MySQL and MariaDB root passwords are never printed, and root can't log in from the VPC. To read them, run `grep ROOT /opt/db/.env`.
+- `local_infile=0` on MySQL/MariaDB; MariaDB also sets `secure_file_priv`.
 - Treat `/opt/db/backups` as secret, because the Postgres dump contains password hashes. Copy backups somewhere off the server too (for example DO Spaces or a mounted volume using `BACKUP_DIR`).
 
 ## 10. Upgrades

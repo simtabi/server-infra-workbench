@@ -143,7 +143,7 @@ MARIADB_ED25519="${MARIADB_ED25519:-0}"             # 1 = new MariaDB users use 
 MY_APP_HOST="${MY_APP_HOST:-%}"                     # host part of MySQL/MariaDB app users (ports are VPC-only)
 BINLOG_DAYS="${BINLOG_DAYS:-7}"                     # MySQL/MariaDB binlog retention on the server
 STATE_DIR="${STATE_DIR:-/var/lib/vps-server-workbench/db}"   # status stamps for doctor/monitoring
-# ---- environments (approved design; see docs/guides/database-environments.md) --
+# ---- environments (approved design; see docs/database-environments.md) --
 APP="${APP:-}"                                      # empty = no environment layout
 ENVS="${ENVS:-tst dev trn stg prd}"
 TENANT_ENVS="${TENANT_ENVS:-$ENVS}"                 # envs whose app role may CREATE tenant DBs
@@ -226,7 +226,7 @@ Setup and updates
   engine enable|disable <postgres|pgbouncer|mysql|mariadb|adminer> [--delete-volume] [--dry-run]
   role-split [--rollback]     the 1.4.0 Postgres role split by hand (upgrade does it for you)
 
-Environments (APP set; docs/guides/database-environments.md)
+Environments (APP set; docs/database-environments.md)
   env-apply                   create/repair <app>_<env> databases + roles (idempotent)
   env-list | env-sql <env> [engine] | env-creds <env> [engine] [--out F]
   purge-trash [--dry-run]     drop soft-deleted databases older than TRASH_DAYS ($TRASH_DAYS)
@@ -239,7 +239,7 @@ Databases and users (privilege model: docs/reference/privileges.md)
   drop-db <name> [engine] [--force-prod] | drop-user <user> [engine] [--force-prod]
   list-dbs [engine|all] | list-users [engine|all]
 
-Backups and recovery (docs/guides/backups-and-recovery.md)
+Backups and recovery (docs/backups-and-recovery.md)
   backup [--cron]             dumps + manifest + checksums, GFS prune (RETENTION), off-site copy (OFFSITE)
   restore <dir> [engine|all]  DESTRUCTIVE (type RESTORE; protected envs: --force-prod + env name)
   restore-test [dir] [--cron] load a backup into throwaway containers (no network), compare the manifest
@@ -1100,7 +1100,7 @@ cmd_env_init() {
     done; die "no valid $2"
   }
   v_app() { [[ "$1" =~ ^[a-z][a-z0-9]{1,19}$ ]]; }
-  v_eng() { local x; for x in ${1//,/ }; do case "$x" in postgres|mysql|mariadb) ;; mongodb|mongo) echo "  MongoDB is off by design (docs/adr/0002-mongodb.md)" >&2; return 1 ;; *) return 1 ;; esac; done; }
+  v_eng() { local x; for x in ${1//,/ }; do case "$x" in postgres|mysql|mariadb) ;; mongodb|mongo) echo "  MongoDB is off by design (docs/adr/0009-mongodb-off-by-default.md)" >&2; return 1 ;; *) return 1 ;; esac; done; }
   v_envs() { local x; [ -n "$1" ] || return 1; for x in ${1//,/ }; do in_list "$x" "$VALID_ENVS" || return 1; done; }
   v_sub() { [ "$1" = none ] || v_envs "$1"; }
   v_prd() { case "$1" in local|droplet|managed) ;; *) return 1 ;; esac; }
@@ -1168,7 +1168,7 @@ parse_user_args() { # fills U_* from: [engine] [--engine E] [--readonly] [--out 
   while [ $# -gt 0 ]; do
     case "$1" in
       postgres|pgsql|mysql|mariadb) U_ENGINE="${1/pgsql/postgres}" ;;
-      mongodb|mongo) die "MongoDB is not managed by this tool (docs/adr/0002-mongodb.md)" ;;
+      mongodb|mongo) die "MongoDB is not managed by this tool (docs/adr/0009-mongodb-off-by-default.md)" ;;
       --engine) U_ENGINE="${2:-}"; shift ;;
       --readonly|--ro) U_RO=1 ;;
       --readwrite|--rw) U_RO=0 ;;
@@ -2529,7 +2529,7 @@ PG_APP_CREATEDB=$PG_APP_CREATEDB
 #PG_EXTENSIONS=$PG_EXTENSIONS
 # TLS for client connections (self-signed, made on this server): off | require
 TLS_MODE=$TLS_MODE
-# Backups: GFS retention, off-site copies (encrypted), PITR - see docs/guides/backups-and-recovery.md
+# Backups: GFS retention, off-site copies (encrypted), PITR - see docs/backups-and-recovery.md
 #RETENTION="daily=7 weekly=4 monthly=3"
 #OFFSITE=s3
 #OFFSITE_ENDPOINT=https://ams3.digitaloceanspaces.com
