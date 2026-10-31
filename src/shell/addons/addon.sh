@@ -4,7 +4,7 @@
 #
 #   addon.sh list                                    add-ons, kind, default role, pinned image, installed?
 #   addon.sh plan    <name> [--role R] [--bind IP]   what install would do (writes nothing, shows no secrets)
-#   addon.sh install <name> [--role R] [--bind IP] [--data-dir D] [--yes]
+#   addon.sh install <name> [--role R] [--bind IP] [--data-dir D] [--accept-experimental] [--yes]
 #                                                    plan, confirm, creds (600), start, bucket + app key, health
 #   addon.sh status  [name]                          containers and health
 #   addon.sh doctor  [name]                          binding, pin, perms, health, auth, RAM, disk (exit 1 on a problem)
@@ -12,6 +12,7 @@
 #   addon.sh remove  <name> [--delete-data] [--yes]  stop and remove; data kept unless --delete-data (typed name)
 #   addon.sh garage-node-id                          this node's Garage id@addr, for GARAGE_PEERS on the next node (not a secret)
 #
+# Flags: --force (skip the RAM/disk gate), --accept-experimental (RustFS; never on a protected env).
 # Roles: web = same node as PHP, binds 127.0.0.1 | db, dedicated = binds the private (VPC) IP.
 # Config: /etc/vsw-addons.conf (or ADDON_CONF=FILE); keys in config/addons.conf.example.
 # Every change is appended to the audit log (/var/log/vsw-addons.log). Secrets never reach stdout or the log.
