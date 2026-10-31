@@ -46,7 +46,9 @@ archived || fail "WAL after T not archived"
 run cmd_pitr status > "$W/status.out" 2>&1 && grep -q 'status: ok' "$W/status.out" && ok "pitr status: stanza ok" || { cat "$W/status.out"; fail "pitr status"; }
 if run cmd_pitr restore > "$W/r0.out" 2>&1; then fail "restore without --target accepted"; fi
 grep -q 'usage: pitr restore --target' "$W/r0.out" && ok "pitr restore needs --target" || fail "restore usage"
-FORCE=1 run cmd_pitr restore --target "$T" > "$W/restore.out" 2>&1 && grep -q 'PITR restore done' "$W/restore.out" || { tail -40 "$W/restore.out"; fail "pitr restore"; }
+if FORCE=1 run cmd_pitr restore --target "$T" </dev/null > "$W/r1.out" 2>&1; then fail "prd restore without --force-prod accepted"; fi
+grep -q 'force-prod' "$W/r1.out" && ok "pitr restore on a prd cluster refused without --force-prod" || { cat "$W/r1.out"; fail "restore guard"; }
+WORKBENCH_CONFIRM=prd FORCE=1 run cmd_pitr restore --target "$T" --force-prod </dev/null > "$W/restore.out" 2>&1 && grep -q 'PITR restore done' "$W/restore.out" || { tail -40 "$W/restore.out"; fail "pitr restore"; }
 n="$(psq 'select count(*) || '"' '"' || min(id) || '"' '"' || max(id) from t_pitr')"
 [ "$n" = "100 1 100" ] && ok "pitr restore --target T: exactly the 100 rows from before T" || fail "after restore: $n (want 100 1 100)"
 ls "$BACKUP_DIR"/*/manifest.txt >/dev/null 2>&1 && ok "restore took a dump backup first" || fail "no pre-restore backup"

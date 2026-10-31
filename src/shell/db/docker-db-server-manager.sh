@@ -2394,7 +2394,7 @@ cmd_offsite() { # backup [dir] | list | verify [name] | fetch <name> [dir]
     list) offsite_env; remote_ls ;;
     verify|fetch)
       offsite_key; offsite_env
-      local n="${1:-}"; [ -n "$n" ] || n="$(remote_ls | grep -E '\.tar\.gz\.(enc|age)$' | sort | tail -1)"
+      local n="${1:-}"; [ -n "$n" ] || n="$(remote_ls | grep -E '\.tar\.gz\.(enc|age)$' | sort | tail -1 || true)"
       [ -n "$n" ] || die "no off-site copies found"
       local t; t="$(mktemp -d)"; chmod 700 "$t"
       remote_get "$n" "$t/$n"; remote_get "$n.sha256" "$t/$n.sha256"
@@ -2648,7 +2648,7 @@ doctor_backups() {
   [ -n "$age" ] && [ "$age" -le "$((RESTORE_TEST_MAX_AGE_D * 24))" ] && d_ok "restore test ${age}h ago" || d_warn "no restore test in ${RESTORE_TEST_MAX_AGE_D} days (restore-test)"
   if pitr_on && stack_up postgres; then
     if pgbr info >/dev/null 2>&1; then
-      x="$(pgbr info --output=json 2>/dev/null | grep -o '"status":{"code":[0-9]*' | head -1 | grep -o '[0-9]*$')"
+      x="$(pgbr info --output=json 2>/dev/null | grep -o '"status":{"code":[0-9]*' | head -1 | grep -o '[0-9]*$' || true)"
       [ "${x:-1}" = 0 ] && d_ok "pgBackRest stanza ok" || d_bad "pgBackRest stanza not ok (pitr setup)"
       [ "$(pg_val postgres "select coalesce(extract(epoch from now() - last_archived_time)::int, 999999) < 3600 from pg_stat_archiver")" = t ] && d_ok "WAL archiving within the last hour" || d_stale "WAL archiving is behind or failing (pg_stat_archiver)"
       [ "$(pg_val postgres "select failed_count > 0 and coalesce(last_failed_time > last_archived_time, false) from pg_stat_archiver")" = t ] && d_bad "last WAL archive attempt failed"

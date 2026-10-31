@@ -520,10 +520,12 @@ doctor_unit() {
   return 0
 }
 doctor_prometheus() {
-  local p g up down
+  local p g t up down
   p="$( (load_unit prometheus; echo "$PROMETHEUS_PORT") )"; g="$( (load_unit prometheus; echo "$GRAFANA_PORT") )"
-  up="$(curl -fsS -m 5 "http://$MONITOR_BIND:$p/api/v1/targets?state=active" 2>/dev/null | grep -o '"health":"up"' | wc -l | tr -d ' ')"
-  down="$(curl -fsS -m 5 "http://$MONITOR_BIND:$p/api/v1/targets?state=active" 2>/dev/null | grep -o '"health":"down"' | wc -l | tr -d ' ')"
+  # fetch once; count without grep, whose "no match" exit would end a set -e/pipefail script
+  t="$(curl -fsS -m 5 "http://$MONITOR_BIND:$p/api/v1/targets?state=active" 2>/dev/null || true)"
+  up="$(printf '%s' "$t" | awk '{ n += gsub(/"health":"up"/, "") } END { print n + 0 }')"
+  down="$(printf '%s' "$t" | awk '{ n += gsub(/"health":"down"/, "") } END { print n + 0 }')"
   [ "${down:-0}" = 0 ] && ok "prometheus targets: ${up:-0} up" || dwarn "prometheus targets: ${up:-0} up, $down down (http://127.0.0.1:$p/targets through the tunnel)"
   curl -fsS -m 5 "http://$MONITOR_BIND:$p/api/v1/rules" 2>/dev/null | grep VswBackupStale >/dev/null && ok "alert rules loaded" || bad "alert rules not loaded"
   [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://$MONITOR_BIND:$g/api/dashboards/uid/vsw-overview")" = 401 ] && ok "grafana refuses anonymous access" || dwarn "grafana anonymous check inconclusive"

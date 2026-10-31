@@ -73,7 +73,7 @@ load_addon() { # pinned defaults, then the conf again so it wins, then what inst
   case "$ADDON_NETWORK" in host|bridge) ;; *) CODE=2 die "ADDON_NETWORK must be host or bridge" ;; esac
 }
 pinned_keys() { grep -oE '^[A-Z0-9_]+=' "$STACKS/$1/addon.env.example" | tr -d =; }
-image_of() { local k; k="$(pinned_keys "$1" | grep '_IMAGE$' | head -1)"; echo "${!k}"; }
+image_of() { local k; k="$(pinned_keys "$1" | grep '_IMAGE$' | head -1 || true)"; [ -z "$k" ] || echo "${!k}"; }
 installed() { [ -f "$ADDONS_DIR/$1/stack.env" ]; }
 installed_storage() { local n; for n in garage seaweedfs rustfs; do installed "$n" && echo "$n"; done; return 0; }
 stack_get() { sed -n "s/^$2=//p" "$ADDONS_DIR/$1/stack.env" 2>/dev/null | tail -1; }
