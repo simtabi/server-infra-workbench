@@ -82,16 +82,17 @@ New project end to end: **[Getting started](docs/getting-started.md)** (about 10
 | Path | What |
 |---|---|
 | [`bin/workbench`](bin/workbench) | One entry point: `list`, `<area> <tool>` for shell tools, `do`/`cf`/`ploi`/`gcp` for platform APIs, `py` for Python helpers ([cli.md](docs/tools/cli.md)) |
-| [`src/shell/db/docker-db-server-manager.sh`](src/shell/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP, each engine optional. `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user logs backup restore cron-install cron-remove uninstall help` |
+| [`src/shell/db/docker-db-server-manager.sh`](src/shell/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP, each engine optional. `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user logs backup restore tls-ca monitor-user metrics migrate-managed pg-major-upgrade cron-install cron-remove uninstall help` |
 | [`src/shell/db/remote-run.sh`](src/shell/db/remote-run.sh) | Run the manager on the DB server from your workstation, with a wrong-server guard |
 | [`src/shell/web/update-env-db.sh`](src/shell/web/update-env-db.sh) | Back up a shared Laravel `.env` and replace its `DB_*` keys idempotently (password masked in output); local or `--remote` |
 | [`src/shell/deploy/ploi-deploy.sh`](src/shell/deploy/ploi-deploy.sh) | Ploi deploy script for any PHP/Node app: `laravel` or `generic` preset, optional hooks (first install, migrations, post-deploy, health check), zero-downtime or in-place |
 | [`src/shell/tunnels/db-tunnel.sh`](src/shell/tunnels/db-tunnel.sh) | SSH tunnels from the Mac per engine (`postgres pgbouncer mysql mariadb adminer all`) for TablePlus, psql, Adminer |
 | [`src/shell/web/check-db-reach.sh`](src/shell/web/check-db-reach.sh) | TCP check from the web server to every DB port (no passwords needed), with region and VPC warnings |
 | [`src/shell/server/`](docs/tools/server.md) | `server init`, `harden`, `update --reboot-window`, `inventory`, and `web diagnose` for a 500/503 |
-| [`src/shell/env/env.sh`](docs/tools/env.md) | Laravel `.env` per environment: `env init` / `env check` from the template |
+| [`src/shell/env/env.sh`](docs/tools/env.md) | Laravel `.env` per environment: `env init` / `env check` from the template, `--addons` merges add-on keys |
 | [`src/shell/ssh/fixkeys.sh`](docs/tools/ssh-keys.md) | `authorized_keys` repair and console lockout recovery (also from the DO recovery ISO) |
 | [`src/shell/net/wireguard.sh`](docs/tools/net.md) | WireGuard tunnel between two servers in different regions ([cross-region](docs/cross-region.md)) |
+| [`src/shell/monitor/monitor.sh`](docs/tools/monitor.md) | Self-hosted monitoring per node: Beszel, Uptime Kuma, Netdata, Prometheus + Grafana + exporters; loopback UIs, RAM gate. `bin/workbench status` for a one-screen health check |
 | [`src/shell/addons/addon.sh`](docs/tools/addons.md) | Optional services: Gotenberg (PDF) and one S3-compatible store (Garage, SeaweedFS, RustFS) |
 | [`configure`](docs/configure.md) | `bin/workbench configure` wizard and versioned `config/profiles` (dev-budget and others) into gitignored `local/<client>/` |
 | [`src/php`](src/php/README.md) | Typed PHP 8.4 clients for DigitalOcean, Cloudflare, Ploi and GCP on PSR-18, with retries, pagination, redaction, pending actions and an audit log ([platform-api.md](docs/tools/platform-api.md)) |

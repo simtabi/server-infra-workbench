@@ -20,6 +20,10 @@
 
 Moving an existing server to this version: [upgrading.md](../recipes/upgrade-a-legacy-db-server.md).
 
+**New in 1.5.0:** `TLS_MODE=verify-full` + `tls-ca` ([recipe](../recipes/verify-full-tls.md)), `monitor-user` and `metrics`
+for [monitoring](monitor.md), `migrate-managed` ([recipe](../recipes/migrate-to-managed.md)), `pg-major-upgrade`
+([recipe](../recipes/pg-major-upgrade.md)).
+
 **New in 1.4.0** (details in the [CHANGELOG](../../CHANGELOG.md)):
 
 | Area | What changed | Read |
@@ -149,6 +153,11 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `purge-trash [--dry-run]` | **drops** soft-dropped databases older than `TRASH_DAYS` | no | also removes dumps of dropped MySQL/MariaDB databases after `DROPPED_DUMP_DAYS` |
 | `engine enable\|disable <engine> [--delete-volume] [--dry-run]` | starts / stops an engine | `Type ENABLE` / `DISABLE` | edits the config, converges, RAM check |
 | `role-split [--rollback]` | changes roles | `Type SPLIT` / `ROLLBACK` | the 1.4.0 Postgres role split by hand (`upgrade` does it) |
+| `tls-ca [--out F]` | no | no | prints (or writes) the public CA certificate for `TLS_MODE=verify-full` clients; the key never leaves the server |
+| `monitor-user [--rotate]` | creates a role | no | `vsw_monitor` with `pg_monitor`, connection limit 5, password in `MONITOR_PASSWORD_FILE` (600, never printed); idempotent |
+| `metrics` | writes the textfile | no | node-exporter metrics (`vsw_db.prom`): last backup, off-site, restore test, TLS expiry; also refreshed by every backup |
+| `migrate-managed --target-env F [--db a,b] [--check]` | **replaces** same-named target databases | `Type MIGRATE` | copies databases to a managed PostgreSQL, extension check, row counts compared; source read-only ([recipe](../recipes/migrate-to-managed.md)) |
+| `pg-major-upgrade --to N [--dry-run] \| --cleanup OLD` | rebuilds Postgres (backs up first) | `Type UPGRADE` / `CLEANUP` | dump/reload into the new major, inventory compare, auto-rollback; old data kept until `--cleanup` ([recipe](../recipes/pg-major-upgrade.md)) |
 | `cron-install` / `cron-remove` | cron file only | no | `backup`, `doctor --alert`, `restore-test`, PITR, `binlog-ship`, `purge-trash` jobs ([table](../backups-and-recovery.md#set-up)) |
 | `logs [service]` | no | no | follow the last 200 lines |
 | `uninstall [--purge]` | `--purge` deletes everything | `Type PURGE` | stop and remove |

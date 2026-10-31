@@ -49,6 +49,20 @@ ALERT_EMAIL=<you@example.com>
 After task 11, deploy the web app with its new `DB_*` values (`bin/workbench env check --env <env>`, then a Ploi
 deploy) and run `bin/workbench web check-db-reach --env <path-to-.env>` on the web server.
 
+## Optional tasks (manager 1.5.0 and monitoring)
+
+Do these after the 11 tasks, one per window. Each has a dry run and its own rollback.
+
+| # | Task | Run | Verify | Roll back |
+|---|---|---|---|---|
+| 12 | Neutral Postgres image tag | remove `PG_IMAGE` from `$CONF`, then task 2 again ([recipe](../recipes/retag-postgres-image.md)) | `upgrade` prints `retired old image tag`; `docker images` shows `vsw/postgres` | the upgrade's savepoint re-tags the old image |
+| 13 | TLS `verify-full` | `TLS_MODE=verify-full` in `$CONF`, task 2 again, then `-- tls-ca --out /tmp/vsw-db-ca.crt` and copy the CA to the web host ([recipe](../recipes/verify-full-tls.md)) | `doctor`: "verify-full: server certificate chains to the CA"; the app connects with `DB_SSLMODE=verify-full` | `TLS_MODE=require` and `upgrade`; the app back to `DB_SSLMODE=require` |
+| 14 | Monitoring | `-- monitor-user`, then `monitor.sh plan` and `install` on each node, agents first ([monitor](../tools/monitor.md#typical-rollout-two-nodes-hub-on-web), [checklist 07](../checklists/07-monitoring.md)) | `monitor.sh doctor` 0 problems; Prometheus targets up through `monitor.sh tunnel` | `monitor.sh remove <unit>` (files kept) |
+| 15 | Add-on keys in the app `.env` | `bin/workbench env init --host $WEB --env <env> --site <domain> --addons --dry-run`, then without `--dry-run` | the output lists the add-ons and changed keys, no values; `env check` clean | the `.env.bak.*` the tool wrote |
+
+`pg-major-upgrade` and `migrate-managed` are not part of this rollout. Run them only when you need them:
+[pg-major-upgrade](../recipes/pg-major-upgrade.md), [migrate-to-managed](../recipes/migrate-to-managed.md).
+
 ## When something fails
 
 Stop at the failing step. Don't skip ahead: later steps assume earlier ones. Read

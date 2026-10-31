@@ -27,6 +27,8 @@ bin/workbench tunnels db-tunnel --help
 | `ssh fixkeys` (console lockout recovery; normally pasted, not run through the dispatcher) | [ssh-keys.md](ssh-keys.md) |
 | `addon plan\|install\|status ...` | [addons.md](addons.md) |
 | `net wireguard setup\|status\|remove` | [net.md](net.md) |
+| `monitor plan\|install\|status\|doctor\|targets\|tunnel\|remove ...` | [monitor.md](monitor.md) |
+| `status [--host H ...] [--url U] [--json]` | [monitor.md](monitor.md#workbench-status) |
 
 Area and tool names must match `[a-z0-9-]+`, so nothing outside `shell/` can be reached.
 

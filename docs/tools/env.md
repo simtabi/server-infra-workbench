@@ -68,3 +68,16 @@ Exit 1 on an error, so it fits a deploy hook or cron.
   `SESSION_SECURE_COOKIE`, `LOG_STACK=daily`).
 - [`config/credentials.env.example`](../../config/credentials.env.example): the workstation credentials file
   for the platform commands (`~/.config/vps-server-workbench/credentials`, mode 600).
+
+## Add-on keys (`--addons`)
+
+`env init --addons` (or `ENV_ADDONS=auto`) also merges the `laravel.env` files the [add-ons](addons.md) wrote on
+that host (`/opt/vsw-addons/*/laravel.env`, from `addon.sh laravel-env <name>`).
+
+- **Why:** the add-on keys (Gotenberg URL and login, S3 keys for Garage or SeaweedFS) used to be pasted into the
+  `.env` by hand, which put secrets on the clipboard and in terminal scrollback.
+- Order: the existing `.env`, then `--from`, then the add-ons, then `--set`, so an explicit `--set` always wins.
+- Only 600/400 files are read; any other mode is skipped with a warning. An empty add-on value (the RustFS key
+  placeholder) never clears a value you already have.
+- The output names the add-ons and the changed keys, never the values. The audit log records `addons=...`.
+

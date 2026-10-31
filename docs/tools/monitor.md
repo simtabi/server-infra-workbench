@@ -104,6 +104,14 @@ monitor.sh tunnel --host deploy@web-1                  # run the printed ssh lin
 
 `bin/workbench configure` prints these steps per node, hub first, with the right file names.
 
+## `workbench status`
+
+`src/shell/server/status.sh` (`bin/workbench status`) is the one-screen answer to "is anything wrong right
+now?": load, RAM, disk, containers (unhealthy ones named), reboot needed, last backup, monitor stacks, and
+optional health URLs. It is read-only and takes no locks, so it's safe on prd at any time. `--json` is for
+scripts, `--host H` runs it over ssh. It exits 1 when something needs a look (`STATUS_DISK_WARN`,
+`STATUS_BACKUP_MAX_H`).
+
 ## Tests
 
 - `tests/shell/smoke-monitor.sh` (offline, `make test`): validation, refusals, plans per role, RAM gate,

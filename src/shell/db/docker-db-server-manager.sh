@@ -72,7 +72,7 @@ set -euo pipefail
 trap 'echo "!! ERROR: line $LINENO: \"$BASH_COMMAND\" failed" >&2' ERR
 
 TOOL_NAME="Docker DB Server Setup Manager"
-VERSION="1.4.0"
+VERSION="1.5.0"
 
 # ---- configuration ------------------------------------------------------------
 # A config file is KEY=VALUE lines. It only fills in variables the environment

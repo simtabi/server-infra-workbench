@@ -6,6 +6,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (P2: manager 1.5.0, monitoring, progress)
+
+- **Monitoring** ([monitor](docs/tools/monitor.md), [ADR 0012](docs/adr/0012-monitoring-stack.md)): `bin/workbench monitor`
+  with any mix of `beszel`, `kuma`, `netdata` and `prometheus` (Prometheus, Alertmanager, Grafana with provisioned
+  dashboards, node-exporter, cAdvisor, postgres/pgbouncer exporters, blackbox) per role (`hub`, `agent`, `both`).
+  UIs on loopback (`tunnel`), agents on the private IP, pinned images, generated secrets in 600 files, RAM gate
+  (exit 3), `doctor`, `targets`, `remove` (files kept). Profiles default to `beszel,kuma`; configurator keys `MONITOR_*`.
+- `bin/workbench status`: one-screen, read-only health of one or more nodes, `--json`, health URLs.
+- **Manager 1.5.0**: `TLS_MODE=verify-full` (CA on the server, PgBouncer verifies Postgres, `tls-ca`, `env` prints
+  `DB_SSLROOTCERT`); `monitor-user` (`pg_monitor`, connection limit 5); `metrics` (node-exporter textfile, refreshed by
+  backups, off-site copies and restore tests); `migrate-managed` (target credentials from a 600 file, extension and
+  version checks, row counts compared); `pg-major-upgrade --to N` (verified backup, dump/reload, inventory compare,
+  auto-rollback, `--cleanup`).
+- `env init --addons` / `ENV_ADDONS=auto`: merges the add-ons' `laravel.env` files (600 only, values never printed).
+- Progress UX for shell, PHP and Python (steps, bars, spinners; plain lines off a TTY, `NO_COLOR`, `--quiet`).
+- `server harden` `dockergroup` item (`--fix-docker-group`), and a `doctor` warning for non-root docker group members.
+- Recipes: [pg-major-upgrade](docs/recipes/pg-major-upgrade.md), [verify-full TLS](docs/recipes/verify-full-tls.md),
+  [migrate-to-managed](docs/recipes/migrate-to-managed.md), [retag-postgres-image](docs/recipes/retag-postgres-image.md);
+  [live rollout runbook](docs/runbooks/live-rollout.md); [P1/P2 plan](docs/plan/p1-p2-implementation.md).
+- Tests: `smoke-monitor`, `smoke-progress`, `db-features-it` (verify-full, metrics, migrate-managed, 18 to 19 upgrade
+  with rollback and cleanup), `monitor-it` (every stack in containers); `make it` runs the suites in order.
+
+### Fixed (P2)
+
+- Restore test waits for MySQL over TCP (the socket answered before the listener was up).
+- `status.sh` no longer aborts when a stamp file is missing.
+
 ### Added (cross-region)
 
 - `bin/workbench net wireguard setup|status|remove` ([networking](docs/tools/net.md)): plan and confirm, keys

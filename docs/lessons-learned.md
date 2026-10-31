@@ -45,6 +45,10 @@ documentation IP ranges.
 
 | Lesson | What happened | Rule now |
 |---|---|---|
+| A new Postgres major would not start next to the old data | the 18+ image entrypoint refuses to init 19 while `18/docker` exists in the same volume | `pg-major-upgrade` renames the old directory to `.pg18-old` (kept for rollback, removed by `--cleanup`); the container test runs the real 18 to 19 path |
+| A dry run died without a message | `df` piped under `pipefail`, and a decimal size from `sum(pg_database_size())` in shell arithmetic, aborted the `set -e` script | `$(...) \|\| fallback` for optional probes; SQL returns `ceil(...)::bigint` for anything the shell counts |
+| MySQL "ready" before it accepts TCP | the restore test's socket ping passed while the TCP listener was still starting | wait with `-h127.0.0.1 --protocol=TCP`, the path the clients use |
+| Managed targets have no superuser | restoring owners and grants failed half-way into a managed database | `migrate-managed` restores with `--no-owner --no-privileges` and compares every table's row count |
 | The app login was a superuser | the container's bootstrap user doubled as the Laravel login, so any SQL injection could drop everything | role split in 1.4.0 ([ADR 0010](adr/0010-least-privilege-database-roles.md)); `doctor` fails on superuser app logins |
 | `root@'%'` on MySQL | the official image creates it by default | new installs set `MYSQL_ROOT_HOST=localhost`; `upgrade` removes it |
 | `_` is a wildcard in MySQL grants | a grant on `myapp_prd%` also matched `myappXprd...` | names are escaped (`myapp\_prd\_t\_%`); `doctor` warns on unescaped grants |
@@ -90,4 +94,6 @@ documentation IP ranges.
 | Plans before changes | every tool prints a plan and has `--dry-run`; destructive steps need a typed word; protected envs need `--force-prod` |
 | Writes are audited | `/var/log/vps-server-workbench/audit.log` and syslog, with fingerprints and names, never secrets |
 | Client data doesn't belong in a shared repo | client notes live in gitignored `local/<client>/`; `make client-check` and a secret scan run before every push |
+| Monitoring can take the database down | Prometheus + Grafana need about 700 MB; on a 2 GB DB droplet that is the OOM killer's next target | `monitor plan` gates RAM (exit 3) and the profiles default to Beszel + Kuma ([ADR 0012](adr/0012-monitoring-stack.md)) |
+| Integration suites that share Docker interfere | two suites running at once made a healthy Postgres look unhealthy | `make it` runs suites one after another; each suite uses its own ports, subnet and project name |
 | Pin versions, upgrade on purpose | images and packages are pinned; `upgrade --dry-run` shows the diff first |
