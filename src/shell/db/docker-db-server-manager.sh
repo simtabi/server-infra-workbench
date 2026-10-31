@@ -177,6 +177,8 @@ PITR="${PITR:-off}"                                 # off | pgbackrest
 PITR_DAYS="${PITR_DAYS:-14}"
 PITR_REPO_TYPE="${PITR_REPO_TYPE:-s3}"              # s3 | posix (posix: a local/volume path, tests and NFS)
 PITR_REPO_PATH="${PITR_REPO_PATH:-/pgbackrest}"
+PITR_S3_URI_STYLE="${PITR_S3_URI_STYLE:-host}"        # host (Spaces, AWS) | path (Garage, MinIO, SeaweedFS)
+PITR_S3_CA_FILE="${PITR_S3_CA_FILE:-}"              # PEM CA for a private S3 endpoint; TLS is always verified
 PITR_FULL_CRON="${PITR_FULL_CRON:-30 2 * * 0}"
 PITR_DIFF_CRON="${PITR_DIFF_CRON:-30 2 * * 1-6}"
 PGBACKREST_PKG="${PGBACKREST_PKG:-pgbackrest}"
@@ -637,6 +639,9 @@ exec docker-entrypoint.sh "$@"
 EOF
   chmod 755 postgres/conf/entry.sh
   if pitr_on; then write_pgbackrest_conf postgres/conf/pgbackrest.conf; else rm -f postgres/conf/pgbackrest.conf; fi
+  if pitr_on && [ "$PITR_REPO_TYPE" = s3 ] && [ -n "$PITR_S3_CA_FILE" ]; then
+    install -m 644 "$PITR_S3_CA_FILE" postgres/conf/s3-ca.crt   # a CA certificate is public; it goes in read-only
+  else rm -f postgres/conf/s3-ca.crt; fi
   if tls_on; then ensure_tls; fi
 
   write_stack_env
@@ -854,9 +859,14 @@ write_pgbackrest_conf() { # file
     echo "repo1-type=$PITR_REPO_TYPE"
     echo "repo1-path=$PITR_REPO_PATH"
     if [ "$PITR_REPO_TYPE" = s3 ]; then
+      # pgBackRest speaks HTTPS only and wants host and port apart: https://h:9000 -> h + 9000
+      local hp="${OFFSITE_ENDPOINT#https://}"; hp="${hp%%/*}"
       echo "repo1-s3-bucket=$OFFSITE_BUCKET"
-      echo "repo1-s3-endpoint=${OFFSITE_ENDPOINT#https://}"
+      echo "repo1-s3-endpoint=${hp%%:*}"
+      [[ "$hp" == *:* ]] && echo "repo1-storage-port=${hp##*:}"
       echo "repo1-s3-region=$OFFSITE_REGION"
+      echo "repo1-s3-uri-style=$PITR_S3_URI_STYLE"
+      [ -n "$PITR_S3_CA_FILE" ] && echo "repo1-storage-ca-file=/etc/postgresql/vsw/s3-ca.crt"
     fi
     echo "repo1-retention-full-type=time"
     echo "repo1-retention-full=$PITR_DAYS"
@@ -1678,6 +1688,12 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
   [ -z "$MONITOR_USER" ] || [[ "$MONITOR_USER" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || err "MONITOR_USER '$MONITOR_USER' must match [a-z_][a-z0-9_]*"
   case "$PITR" in off|pgbackrest) ;; *) err "PITR must be off or pgbackrest" ;; esac
   case "$PITR_REPO_TYPE" in s3|posix) ;; *) err "PITR_REPO_TYPE must be s3 or posix" ;; esac
+  case "$PITR_S3_URI_STYLE" in host|path) ;; *) err "PITR_S3_URI_STYLE must be host or path" ;; esac
+  if [ "$PITR" = pgbackrest ] && [ "$PITR_REPO_TYPE" = s3 ]; then
+    [ -n "$OFFSITE_BUCKET" ] || err "PITR_REPO_TYPE=s3 needs OFFSITE_BUCKET"
+    [[ "$OFFSITE_ENDPOINT" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]] || err "PITR_REPO_TYPE=s3 needs OFFSITE_ENDPOINT=https://host[:port] (pgBackRest speaks HTTPS only)"
+    [ -z "$PITR_S3_CA_FILE" ] || [ -r "$PITR_S3_CA_FILE" ] || err "PITR_S3_CA_FILE '$PITR_S3_CA_FILE' is not readable"
+  fi
   case "$OFFSITE" in none|s3) ;; *) err "OFFSITE must be none or s3" ;; esac
   [ "$OFFSITE" = none ] || [ -n "$OFFSITE_BUCKET" ] || err "OFFSITE=s3 needs OFFSITE_BUCKET"
   case "$PGBOUNCER_POOL_MODE" in session|transaction) ;; *) err "PGBOUNCER_POOL_MODE must be session or transaction" ;; esac

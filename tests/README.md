@@ -17,6 +17,7 @@ No test calls a real API or a real server.
 | [`shell/server-it.sh`](shell/server-it.sh) | server init/harden/inventory/update, env, fixkeys as root in Ubuntu 24.04 (docker) | `make it` |
 | [`shell/db-features-it.sh`](shell/db-features-it.sh) | verify-full TLS, metrics, migrate-managed, the Postgres major upgrade (docker) | `make it` |
 | [`shell/pitr-it.sh`](shell/pitr-it.sh) | pgBackRest backup and point-in-time restore (docker) | `make it` |
+| [`shell/pitr-s3-it.sh`](shell/pitr-s3-it.sh) | PITR through an S3 repo: Garage add-on behind a Caddy TLS front with a per-run CA, encrypted repo, restore to a time (docker) | `make it` |
 | [`shell/monitor-it.sh`](shell/monitor-it.sh) | the monitoring stacks and exporters against a real manager install (docker) | `make it` |
 | [`shell/wg-it.sh`](shell/wg-it.sh) | a real WireGuard tunnel between two Ubuntu containers (ssh, ufw); SKIP without kernel WireGuard | `make it` |
 | [`shell/smoke-monitor.sh`](shell/smoke-monitor.sh), [`shell/smoke-progress.sh`](shell/smoke-progress.sh) | monitor planner, progress output | `make test` |

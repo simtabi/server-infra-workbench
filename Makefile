@@ -98,8 +98,9 @@ links: ## check relative links and #anchors in all Markdown
 	python3 tests/docs/check-links.py .
 	python3 tests/docs/gen-config-keys.py --check
 
-docs-commands: php-install ## every documented bin/workbench / src/shell command, subcommand and --flag exists (vs --help)
+docs-commands: php-install ## every documented command/subcommand/--flag exists (vs --help); every Markdown table row matches its header
 	python3 tests/docs/check-commands.py .
+	python3 tests/docs/check-tables.py .
 
 mermaid: ## render every Mermaid block to /tmp/vsw-mermaid (needs node; downloads mermaid-cli)
 	bash tests/docs/render-mermaid.sh
@@ -115,9 +116,9 @@ test: ## offline smoke tests (no servers touched)
 	python3 stacks/monitor/prometheus/grafana/dashboards.py --check
 	bash examples/run.sh --all
 
-it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (verify-full, metrics, migrate-managed, pg-major-upgrade), PITR restore, monitoring, WireGuard between two hosts (~22 min)
+it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (verify-full, metrics, migrate-managed, pg-major-upgrade), PITR restore (posix and S3 via Garage + TLS), monitoring, WireGuard between two hosts (~25 min)
 	bash tests/shell/run-suites.sh tests/shell/upgrade-it.sh tests/shell/addons-it.sh tests/shell/server-it.sh \
-	  tests/shell/db-features-it.sh tests/shell/pitr-it.sh tests/shell/monitor-it.sh tests/shell/wg-it.sh
+	  tests/shell/db-features-it.sh tests/shell/pitr-it.sh tests/shell/pitr-s3-it.sh tests/shell/monitor-it.sh tests/shell/wg-it.sh
 
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
 	tests/shell/client-check.sh

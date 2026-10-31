@@ -15,9 +15,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   monitoring, s3-storage, gotenberg.
 - `make secrets-check` (in `make ci` and the pre-push hook): `tests/security/no-hardcoded-secrets.py` plus
   gitleaks with `.gitleaks.toml` over the full history ([security](docs/security.md#secrets-in-the-repository-generated-never-written-down)).
+- PITR on S3-compatible storage: `PITR_S3_URI_STYLE` (host/path) and `PITR_S3_CA_FILE` (private CA, verified);
+  a port in `OFFSITE_ENDPOINT` becomes `repo1-storage-port`; `validate` refuses an `http://` endpoint for an s3 repo.
+  `tests/shell/pitr-s3-it.sh` in `make it` restores to a time through Garage behind TLS ([backups](docs/backups-and-recovery.md#pitr-repository-on-s3)).
+- `tests/docs/check-tables.py` in `make docs-commands`: every Markdown table row has its header's cell count.
 
 ### Changed (P3)
 
+- `docs/lessons-learned.md`: six 3-column rows that sat in the 2-column Process table (their rule column was dropped by
+  GitHub) moved to a new Testing and CI table.
 - Every test password, token and key is generated per run (shell `openssl rand`, PHP `random_bytes`).
 - The pgbouncer exporter gets a libpq `key=value` connection string built by `monitor.sh` into
   `secrets.env`; no URL with a password slot remains in a tracked file.

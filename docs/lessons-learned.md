@@ -96,10 +96,18 @@ documentation IP ranges.
 | Plans before changes | every tool prints a plan and has `--dry-run`; destructive steps need a typed word; protected envs need `--force-prod` |
 | Writes are audited | `/var/log/vps-server-workbench/audit.log` and syslog, with fingerprints and names, never secrets |
 | Client data doesn't belong in a shared repo | client notes live in gitignored `local/<client>/`; `make client-check` and a secret scan run before every push |
+| Pin versions, upgrade on purpose | images and packages are pinned; `upgrade --dry-run` shows the diff first |
+
+## Testing and CI
+
+| Lesson | What happened | Rule now |
+|---|---|---|
 | Monitoring can take the database down | Prometheus + Grafana need about 700 MB; on a 2 GB DB droplet that is the OOM killer's next target | `monitor plan` gates RAM (exit 3) and the profiles default to Beszel + Kuma ([ADR 0012](adr/0012-monitoring-stack.md)) |
 | Integration suites that share Docker interfere | two suites running at once made a healthy Postgres look unhealthy | `make it` runs suites one after another; each suite uses its own ports, subnet and project name |
 | Test passwords are still passwords to a scanner | GitGuardian raised 4 incidents for test fixtures | every secret is generated at runtime; `make secrets-check` (scanner + gitleaks) runs in `make ci` and pre-push |
 | `--help` that nobody reads breaks quietly | 12 tools printed only their title: `sed -n '2,/=====/p'` ends at the title box's closing rule | `usage()` counts the rules with awk; `make docs-commands` runs every tool's `--help` and checks each documented subcommand and flag against it |
 | CI and laptops ran different shellcheck versions | ubuntu-latest's 0.9 flagged SC2015/SC2119 that 0.11 does not, and a SC2317 disable was dead | one pinned version (`SHELLCHECK_VERSION`, docker image when the local binary differs); `make ci-local` |
 | Dependabot cannot read `${X_IMAGE:-repo:tag}` | the docker-compose entry had nothing it could update; the composer entry pointed at a stale `/php` | composer path fixed, compose entry removed with the reason; image pins move with `upgrade --dry-run` |
-| Pin versions, upgrade on purpose | images and packages are pinned; `upgrade --dry-run` shows the diff first |
+| pgBackRest's S3 driver speaks HTTPS only | a plain `http://` Garage endpoint cannot hold a PITR repo; the first design would have failed only on the server | `validate` refuses a non-https endpoint; private endpoints get `PITR_S3_CA_FILE` and path style; `pitr-s3-it` restores through a TLS front with a per-run CA |
+| A check on a file that is never written passes vacuously | the "secret never logged" grep named `run.log`, which only `upgrade` writes | integration checks read the captured outputs that exist (`cat ... 2>/dev/null \| grep`) |
+| A row in the wrong table loses a column silently | six 3-column lessons sat in the 2-column Process table, so GitHub dropped their rule | `tests/docs/check-tables.py` in `make docs-commands` fails on a cell count that differs from the header |

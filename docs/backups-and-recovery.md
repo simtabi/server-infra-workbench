@@ -90,6 +90,22 @@ sudo /root/docker-db-server-manager.sh cron-install        # all jobs below
 | `binlog-ship` | `BINLOG_SHIP_CRON` | only with `OFFSITE` and MySQL/MariaDB on |
 | `purge-trash` | 04:40 | only with `APP` set |
 
+### PITR repository on S3
+
+pgBackRest's S3 driver speaks **HTTPS only**, so `validate` refuses an `http://` `OFFSITE_ENDPOINT` when
+`PITR_REPO_TYPE=s3`. The repo uses `OFFSITE_ENDPOINT`, `OFFSITE_BUCKET`, `OFFSITE_REGION` and the keys in
+`OFFSITE_CREDS_FILE`; `PITR_CIPHER_PASS` in the same file encrypts the repo (aes-256-cbc) before it leaves the server.
+
+| Provider | `OFFSITE_ENDPOINT` | `PITR_S3_URI_STYLE` | `PITR_S3_CA_FILE` | Why |
+|---|---|---|---|---|
+| DigitalOcean Spaces | `https://<region>.digitaloceanspaces.com` (for example `ams3`) | `host` (default) | empty | Spaces serves `<bucket>.<region>...` with a public certificate; set `OFFSITE_REGION` to the same region |
+| AWS S3 | `https://s3.<region>.amazonaws.com` | `host` | empty | public CA, virtual-hosted buckets |
+| Garage / MinIO / SeaweedFS (self-hosted) | `https://s3.internal:8443` behind a TLS proxy | `path` | the proxy's CA (PEM) | no wildcard DNS for bucket hosts; a private CA is verified, never skipped |
+
+A port in the endpoint becomes `repo1-storage-port`; the CA is copied to `postgres/conf/s3-ca.crt` and mounted
+read-only. Use a key scoped to the PITR bucket and keep `PITR_REPO_PATH` distinct per server
+(`/db-main`, `/db-staging`) so two stanzas never share a path.
+
 Turn on bucket versioning, and give the server a key that can't delete objects if the provider supports it, so
 a compromised server can't erase its own off-site history.
 
@@ -122,5 +138,6 @@ Practise a restore monthly on a scratch droplet ([checklist](checklists/monthly-
 - A PITR restore can't target one database: it rewinds every database on the Postgres server. To recover one
   table, restore to a scratch server and copy the rows back.
 - MySQL/MariaDB point-in-time replay from shipped binlogs is manual (`mysqlbinlog --stop-datetime`).
-- Not container-tested: PITR restore end to end, MySQL 9.7 restore tests (the integration test uses
-  MariaDB 11). See [tests](../tests/README.md).
+- Container-tested: PITR restore to a time from a posix repo (`pitr-it`) and from an S3 repo (`pitr-s3-it`,
+  Garage behind TLS). Not reproducible locally: the real Spaces endpoint and its public CA; rehearse that on a
+  scratch droplet. See [tests](../tests/README.md).
