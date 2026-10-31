@@ -6,15 +6,15 @@ it. The reasons are in [ADR 0010](../adr/0010-least-privilege-database-roles.md)
 
 ## The table
 
-| Privilege | Default app user | Read-only user |
-|---|---|---|
-| Connect to its own database | Yes | Yes |
-| Create, change and drop tables in its own schema (migrations) | Yes | No |
-| Read, insert, update and delete rows | Yes | Read only |
-| Create new databases (tenants) | Only if turned on for that environment | No |
-| Touch other databases | No | No |
-| Superuser, create roles, replication, bypass row-level security | Never | Never |
-| Drop the database itself | No (admin only) | No |
+| Privilege | Default app user | Read-only user | Why |
+|---|---|---|---|
+| Connect to its own database | Yes | Yes | each login is scoped to one database; nothing else is reachable |
+| Create, change and drop tables in its own schema (migrations) | Yes | No | Laravel runs `php artisan migrate` with the app login during deploys; a read-only login must never change the schema |
+| Read, insert, update and delete rows | Yes | Read only | the app needs full DML; reporting tools, analysts and support people only need to read, and a leaked read-only password can't change data |
+| Create new databases (tenants) | Only if turned on for that environment | No | multi-tenant packages create one database per tenant at runtime; elsewhere `CREATEDB` is just extra blast radius, so it is off by default |
+| Touch other databases | No | No | a bug or SQL injection in stg must not reach prd, and one client's app must not reach another's |
+| Superuser, create roles, replication, bypass row-level security | Never | Never | a superuser can read any file the server can, run programs, drop everything and create new logins: SQL injection would become full server compromise. These stay with the admin login used by the manager |
+| Drop the database itself | No (admin only) | No | dropping a database is the one mistake a backup restore takes hours to fix; only the manager does it, after a backup, as a soft drop (`__trash_<ts>`) |
 
 "Turned on" means `--tenants` on `create-db`, `PG_APP_CREATEDB=1` for the single-database layout, or the
 environment listed in `TENANT_ENVS` for the environment layout ([naming](naming.md)).

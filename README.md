@@ -87,12 +87,18 @@ New project end to end: **[Getting started](docs/getting-started.md)** (about 10
 | [`src/shell/web/update-env-db.sh`](src/shell/web/update-env-db.sh) | Back up a shared Laravel `.env` and replace its `DB_*` keys idempotently (password masked in output); local or `--remote` |
 | [`src/shell/deploy/ploi-deploy.sh`](src/shell/deploy/ploi-deploy.sh) | Ploi deploy script for any PHP/Node app: `laravel` or `generic` preset, optional hooks (first install, migrations, post-deploy, health check), zero-downtime or in-place |
 | [`src/shell/tunnels/db-tunnel.sh`](src/shell/tunnels/db-tunnel.sh) | SSH tunnels from the Mac per engine (`postgres pgbouncer mysql mariadb adminer all`) for TablePlus, psql, Adminer |
-| [`src/shell/web/check-db-reach.sh`](src/shell/web/check-db-reach.sh) | TCP check from the web server to every DB port (no passwords needed) |
+| [`src/shell/web/check-db-reach.sh`](src/shell/web/check-db-reach.sh) | TCP check from the web server to every DB port (no passwords needed), with region and VPC warnings |
+| [`src/shell/server/`](docs/tools/server.md) | `server init`, `harden`, `update --reboot-window`, `inventory`, and `web diagnose` for a 500/503 |
+| [`src/shell/env/env.sh`](docs/tools/env.md) | Laravel `.env` per environment: `env init` / `env check` from the template |
+| [`src/shell/ssh/fixkeys.sh`](docs/tools/ssh-keys.md) | `authorized_keys` repair and console lockout recovery (also from the DO recovery ISO) |
+| [`src/shell/net/wireguard.sh`](docs/tools/net.md) | WireGuard tunnel between two servers in different regions ([cross-region](docs/cross-region.md)) |
+| [`src/shell/addons/addon.sh`](docs/tools/addons.md) | Optional services: Gotenberg (PDF) and one S3-compatible store (Garage, SeaweedFS, RustFS) |
+| [`configure`](docs/configure.md) | `bin/workbench configure` wizard and versioned `config/profiles` (dev-budget and others) into gitignored `local/<client>/` |
 | [`src/php`](src/php/README.md) | Typed PHP 8.4 clients for DigitalOcean, Cloudflare, Ploi and GCP on PSR-18, with retries, pagination, redaction, pending actions and an audit log ([platform-api.md](docs/tools/platform-api.md)) |
 | [`src/python`](src/python/README.md) | Standard-library helpers with tests: `ping` (TCP probe) and `plans` (which DO plans each region offers through Ploi) ([python.md](docs/tools/python.md)) |
 | [`stacks/caddy`](stacks/README.md) | Laravel (php-fpm, queue, scheduler) behind Caddy with automatic HTTPS, for a Ploi Docker web server; reverse-proxy and smoke-test variants |
 | [`config/`](config/README.md) | `.env.example`-style templates for every tool |
-| [`examples/`](examples/README.md) | Example configs per project (no secrets): a made-up generic Laravel app and a real deployment |
+| [`examples/`](examples/README.md) | Example configs per project (no secrets): a made-up generic Laravel app (real setups live in gitignored `local/`) |
 
 Full map and conventions: [docs/structure.md](docs/structure.md).
 

@@ -16,6 +16,8 @@
 | Platform APIs | PHP 8.4 clients for DigitalOcean (droplets, snapshots, actions), Cloudflare (zones, DNS upsert/delete), Ploi (servers, sites, deploy), GCP (instances, snapshots, firewalls); pending actions, dry runs, audit log |
 | CLI | `bin/workbench`: shell tools, `do`/`cf`/`ploi`/`gcp` (incl. `do resize`, alerts, firewalls), `keys`, `configure` + profiles, `credentials`, `py` |
 | Server tools | `server init`, `harden`, `update --reboot-window`, `inventory`, `web diagnose [--fix]`, `env init\|check`, `fixkeys.sh` console recovery; [server tools](tools/server.md) |
+| Cross-region | `EXTRA_BIND_IPS`, `PEER_REGIONS`, `VPC_PEERING`, public bind only with `ALLOW_PUBLIC_BIND=1` + TLS; `doctor` and `check-db-reach` region/VPC checks; `net wireguard setup\|status\|remove`; [cross-region](cross-region.md) |
+| Docs | [lessons learned](lessons-learned.md), [checklists](checklists/README.md) per phase (command, verify, why), [privileges](reference/privileges.md) with the reason per row, ADRs 0001-0011 |
 | Add-ons | Gotenberg; Garage, SeaweedFS, RustFS (experimental) object stores; [add-ons](tools/addons.md) |
 | Quality | shellcheck, smoke tests, deploy sandbox, Docker integration tests (upgrade, add-ons, server tools), link check, generated config-keys check, compose validation, client-data check, Pint, PHPStan max, PHPUnit, Python unittest, CI |
 
@@ -30,7 +32,37 @@ Ranked by risk to data first, then by how likely the gap is to bite.
 | 3 | <a id="monitoring"></a>**Monitoring and alerts (mostly done)** | `doctor --alert` runs hourly and notifies by email, webhook, check-in URL or command; DO alert policies and uptime checks via `bin/workbench do`. Metrics and dashboards are not built in. | Point `HEALTHCHECK_URL` at a check-in monitor so a dead cron is noticed too. Ideas: [security.md](security.md#monitoring-not-built-in). |
 | 4 | <a id="postgres-major-upgrade"></a>**Major Postgres upgrade** | A new major version can't start on the old data directory, so bumping `PG_BASE_IMAGE` (e.g. 18 to 19) without a procedure breaks the database. | Today: `backup`, `uninstall`, remove the `db_postgres` volume, set the new image, `install`, `restore <dir> postgres`, `verify`. Planned: an `upgrade` command that does this with a guard, or uses `pg_upgrade` in a helper container. Minor versions only need `install` (pull and recreate). |
 | 5 | <a id="create-db-pgbouncer"></a>**~~`create-db` users vs PgBouncer~~ (done in 1.2.0)** | Fixed: PgBouncer uses `auth_user=PG_USER` + `auth_query`, so every Postgres login role pools through 6432. | Apply on an existing server with `install` ([rollout plan](recipes/roll-out-a-manager-upgrade.md)). |
-| 6 | <a id="private-network-encryption"></a>**Encryption on the private network (partly done)** | `TLS_MODE=require` turns on TLS for Postgres and MySQL/MariaDB with a self-signed certificate. Clients can't verify it yet. | Next: a small CA and `verify-full` (`DB_SSLMODE=verify-full`), PgBouncer `client_tls_*`, or WireGuard between droplets. |
-| 7 | <a id="platform-coverage"></a>**Platform API coverage** | The clients cover what the runbooks need today (snapshots, DNS, deploys, inventory). Creating droplets, firewalls or Ploi sites still happens in the dashboards. | Add endpoints as the runbooks need them, each with a mocked test, a CLI command and a docs row ([platform-api.md](tools/platform-api.md#adding-a-platform)). Wire `remote-run.sh` to `bin/workbench do snapshot` as an alternative to doctl. |
+| 6 | <a id="private-network-encryption"></a>**Encryption on the private network (partly done)** | `TLS_MODE=require` turns on TLS for Postgres and MySQL/MariaDB with a self-signed certificate. Clients can't verify it yet. | Next: a small CA and `verify-full` (`DB_SSLMODE=verify-full`) and PgBouncer `client_tls_*`. WireGuard between droplets is done (`net wireguard`). |
+| 7 | <a id="platform-coverage"></a>**Platform API coverage** | The clients cover what the runbooks need today (snapshots, DNS, deploys, inventory). Droplets, cloud firewalls, uptime checks, alert policies, resizes, Ploi sites, deploy scripts and daemons are covered; VPC peering, Spaces keys and managed databases are not. | Add endpoints as the runbooks need them, each with a mocked test, a CLI command and a docs row ([platform-api.md](tools/platform-api.md#adding-a-platform)). Next: `do vpc-peering`, `do db trusted-sources`. |
 | 8 | <a id="ha"></a>**High availability** | One DB server and one web node are single points of failure. | [High availability](high-availability.md): managed prd with a standby ([ADR 0008](adr/0008-database-topology.md)), two web nodes behind a load balancer. |
-| 9 | <a id="not-tested"></a>**Not covered by integration tests** | PITR restore, MySQL 9.7 (the IT uses MariaDB 11), Garage host-network mode, RustFS install, multi-node Garage; swap, Docker install and `--host` for server tools are tested offline only. | Add container tests as these get used. |
+| 9 | <a id="not-tested"></a>**Not covered by integration tests** | PITR restore, a real WireGuard tunnel between two hosts (only stubbed in `smoke-net`), MySQL 9.7 (the IT uses MariaDB 11), Garage host-network mode, RustFS install, multi-node Garage; swap, Docker install and `--host` for server tools are tested offline only. | Add container tests as these get used. |
+
+## Recommendations
+
+What to do with the tools as they are, and what is only proposed. "Implemented" means a command exists, has
+tests and is documented; "proposed" means nothing in the repo does it yet.
+
+### Implemented: use these now
+
+| # | Recommendation | Command | Why |
+|---|---|---|---|
+| 1 | Generate each setup from a profile into `local/<client>/` | `bin/workbench configure --profile dev-budget --client <client>` | sizes, regions, engines and backups are checked before anything runs |
+| 2 | In dev, run only the engines the app uses | `M engine disable mysql`, `M engine disable mariadb` | frees RAM on a 2 GB droplet instead of paying for a resize; data volume kept |
+| 3 | Upgrade existing servers to 1.4.0 with a dry run first | `remote-run.sh ... -- upgrade --dry-run`, then `-- upgrade` | removes the superuser app login and `root@'%'`, adds manifests and checks |
+| 4 | Copy backups off the droplet | `M offsite backup`, `M offsite verify` | a backup on the same droplet is lost with it |
+| 5 | Turn on alerts | `bin/workbench do alerts standard`, `do uptime check-create`, `HEALTHCHECK_URL` | nobody watches a dev server; alerts do |
+| 6 | Diagnose before changing anything on a broken site | `bin/workbench web diagnose --site <domain> --env <env>` | most 503s were config: `.env`, migrations, IP or port |
+| 7 | Keep web and DB in one region and VPC | `doctor` and `check-db-reach` warn otherwise | private traffic doesn't cross regions; peering or tunnels add cost and moving parts |
+| 8 | Use the phase checklists | [checklists](checklists/README.md) | each step has a verify, so mistakes show up at that step |
+
+### Proposed: not built yet
+
+| # | Proposal | Why | Effort |
+|---|---|---|---|
+| 1 | Major Postgres upgrade command (dump/restore or `pg_upgrade` helper) | today it's a manual, risky procedure (row 4 above) | medium |
+| 2 | Client-verifiable TLS: a small CA, `verify-full`, PgBouncer `client_tls_*` | `require` encrypts but doesn't authenticate the server | medium |
+| 3 | Move prd to a managed database with a standby before launch | removes the single point of failure and the self-managed backups for prd ([ADR 0008](adr/0008-database-topology.md)) | low effort, monthly cost |
+| 4 | `do vpc-peering` and managed-DB trusted-sources commands | cross-region peering is a dashboard step today | low |
+| 5 | Container tests for PITR restore and a two-host WireGuard tunnel | both are tested offline only | medium |
+| 6 | Metrics and dashboards (node exporter, Postgres exporter) | alerts say something is wrong, not why | medium |
+| 7 | A second web node behind a load balancer | one web node is a single point of failure | cost |

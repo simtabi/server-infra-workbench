@@ -26,6 +26,7 @@ bin/workbench tunnels db-tunnel --help
 | `env init\|check --env dev\|stg\|prd` | [env.md](env.md) |
 | `ssh fixkeys` (console lockout recovery; normally pasted, not run through the dispatcher) | [ssh-keys.md](ssh-keys.md) |
 | `addon plan\|install\|status ...` | [addons.md](addons.md) |
+| `net wireguard setup\|status\|remove` | [net.md](net.md) |
 
 Area and tool names must match `[a-z0-9-]+`, so nothing outside `shell/` can be reached.
 

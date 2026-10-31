@@ -4,6 +4,21 @@ Things that went wrong (or nearly did) while building and running these servers,
 them. Each one is a rule the tools now follow. No client names or addresses: examples use `myapp` and
 documentation IP ranges.
 
+## Always look out for
+
+1. **Where am I?** Read the prompt before pasting: Mac commands don't work on the server and the reverse.
+2. **Which IP?** Private VPC IP for DB traffic, never the public one; same region, same VPC.
+3. **Which port?** The app uses PgBouncer on 6432; 5432 is for session work and admin tools.
+4. **Docker ignores ufw.** Bind to the private IP and use a DO cloud firewall.
+5. **Test from the real client**, not from the server to its own public IP (hairpin).
+6. **No superuser app login, no `root@'%'`.** `doctor` checks both.
+7. **RAM.** Count each engine before enabling it; turn off what the app doesn't use.
+8. **Backups off the droplet**, encrypted, with the key stored elsewhere, and restored at least monthly.
+9. **Empty DB + 503** means migrations never ran.
+10. **One command per interactive prompt** (`doctl auth init`, `passwd`): no multi-line pastes.
+11. **Which SSH client holds the key?** Termius keys aren't on your Mac.
+12. **Keep a console session or the DO console ready** before touching SSH or the firewall.
+
 ## Contents
 
 - [Networking](#networking)
@@ -19,6 +34,11 @@ documentation IP ranges.
 |---|---|---|
 | The DB is unreachable from the web server | the `.env` used the droplet's **public** IP, or port 5432 when the app should use PgBouncer on 6432 (or the reverse) | `env-creds` and `env` print the private IP and the right port; `web diagnose` lists the usual causes: public vs private IP, 6432 vs 5432, the DO cloud firewall or ufw, containers down |
 | Docker-published ports bypass ufw | a `0.0.0.0:5432` mapping was reachable from the internet with ufw "deny" | every port binds to `PRIVATE_IP`; `doctor` "Exposure" fails on any public listener |
+| Commands meant for the Mac were run on the server | `scp ~/Downloads/...` typed inside an SSH session failed: `~/Downloads` doesn't exist there and the server has no key to itself | look at the prompt before pasting; docs mark each block "on your workstation" or "on the server"; `remote-run.sh` does the upload from the workstation |
+| The ufw hairpin | a test from the DB server to its own **public** IP passed or failed differently from the real path, because traffic to your own public address loops back and skips the cloud firewall and parts of ufw | test from the other server: `bin/workbench web check-db-reach --remote <web> <db-private-ip> 6432 5432` |
+| The wrong IP | a public IP, the old server's IP or the DB's IP in another VPC was in `DB_HOST` | private VPC IP only; `env-creds` prints it; `check-db-reach` warns on a public address or one outside this droplet's VPC |
+| PgBouncer 6432 vs Postgres 5432 | the app used 5432 directly (connection storms) or tools that need session features went through 6432 | the app uses 6432 (`DB_PORT=6432`); migrations or `pg_dump` that need session state use 5432 from the VPC; both allowed only from the VPC |
+| VPCs are per region | a web server in another region couldn't reach the DB's private IP at all | build peers in one region; otherwise VPC peering, WireGuard or public TLS with an allowlist ([cross-region](cross-region.md)); `doctor` and `check-db-reach` check the region |
 | `eth0` is public, `eth1` is the VPC | the wrong interface was used for the bind address | `PRIVATE_IFACE=eth1` and `EXPECTED_PRIVATE_IP` (wrong-server guard) |
 
 ## Databases
@@ -30,6 +50,7 @@ documentation IP ranges.
 | `_` is a wildcard in MySQL grants | a grant on `myapp_prd%` also matched `myappXprd...` | names are escaped (`myapp\_prd\_t\_%`); `doctor` warns on unescaped grants |
 | A new Postgres major can't start on old data | bumping the image tag 18 -> 19 would break the server | bump only the minor tag in place; a major version follows the dump/restore path in [status](status.md#postgres-major-upgrade) |
 | Four engines on 1.9 GB | the server swapped and the OOM killer stopped MySQL | RAM estimates in [sizing](reference/sizing.md); `doctor` and `engine enable` warn and print the resize command |
+| An empty staging database behind a 503 | the stg site returned 503 and the DB had no tables: the first deploy never ran migrations (and the site stayed in maintenance mode) | `web diagnose` reports pending migrations and maintenance mode; the deploy script runs `migrate --force`; check `php artisan migrate:status` first |
 | Extensions missing on new databases | `citext` was added to the config after the first install | extensions are created in `template1` too, and `upgrade` converges them |
 
 ## Backups
@@ -48,6 +69,8 @@ documentation IP ranges.
 |---|---|---|
 | A hardening change can lock you out | an sshd drop-in disabled the only working login | `server harden` runs `sshd -t` before any reload and rolls the drop-in back if it fails; keep your current session open and test a new login before closing it |
 | Key problems are usually permissions | `~/.ssh` group-writable, CRLF line endings from a pasted key, the wrong `AuthorizedKeysFile` | `fixkeys.sh diagnose` checks each one; [lockout recipe](recipes/recover-ssh-lockout.md) for the console |
+| Multi-line pastes into interactive prompts | pasting a block that started with `doctl auth init` fed the following lines into the token prompt, so the "token" was the rest of the commands | run interactive commands on their own line, wait for the prompt, then paste only the answer; tools read tokens from the credentials file instead |
+| Keys in Termius are not keys on your Mac | a key generated or imported in Termius lives in Termius's vault; `ssh` in Terminal, `scp`, `remote-run.sh` and the workbench can't use it, and adding "the Mac key" to a server didn't help Termius | decide which client holds the key; export the **public** key from Termius when a server needs it; `keys fingerprint` compares what each side has |
 | Keep the console path ready | | provider consoles and the recovery ISO steps are in the recipe; test it once on a scratch droplet |
 
 ## Shell scripting

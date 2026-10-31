@@ -44,6 +44,7 @@ packages do it. Why: [ADR 0002](adr/0002-layout-by-language-then-area.md) and
 | point a site's `.env` at the DB | `src/shell/web/update-env-db.sh` | on the web server |
 | check the web server can reach the DB | `src/shell/web/check-db-reach.sh` | on the web server |
 | the Ploi deploy script | `src/shell/deploy/ploi-deploy.sh` | paste into Ploi |
+| connect servers in different regions | `src/shell/net/wireguard.sh` | `bin/workbench net wireguard setup --host … --peer …` |
 | open a tunnel to the DB from my Mac | `src/shell/tunnels/db-tunnel.sh` | `bin/workbench tunnels db-tunnel` |
 | snapshot a droplet, manage DNS, Ploi, GCP | `src/php/src/<Platform>/` | `bin/workbench do\|cf\|ploi\|gcp …` |
 | find DO plans available per region in Ploi | `src/python/src/vps_server_workbench/plan_finder.py` | `bin/workbench plans` |
