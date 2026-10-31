@@ -3,7 +3,7 @@
 # Each "node" is its own ADDONS_DIR + compose project + port set on the Docker host's network namespace,
 # so this exercises: ADDON_NETWORK=host binding, GARAGE_REPLICATION=3, GARAGE_PEERS joins with a copied
 # secrets.env, staged layout applied by the third install, replication across nodes, a node down.
-# Not in `make ci` (Docker, ~2 min): run by `make it`.
+# Not in `make ci` (Docker, ~2 min): run by `make it`. Names and ports follow VSW_IT_PREFIX (tests/shell/it-lib.sh).
 # shellcheck disable=SC2015
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -11,16 +11,16 @@ cd "$(dirname "$0")/../.."
 . tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "garage-cluster-it skipped (no docker)"; exit 0; }
 A="$PWD/src/shell/addons/addon.sh"
-W="$(mktemp -d /tmp/vsw-gcl.XXXX)"
+W="$(mktemp -d /tmp/vsw-gcl.XXXX)"; P="$(it_name -gcl)"; LAST="/tmp/$P-last"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 cleanup() {
-  it_purge vsw-gcl-n1 vsw-gcl-n2 vsw-gcl-n3
-  rm -rf /tmp/vsw-gcl-last; mkdir -p /tmp/vsw-gcl-last; cp "$W"/*.out /tmp/vsw-gcl-last/ 2>/dev/null || true
+  it_purge "$P-n1" "$P-n2" "$P-n3"
+  rm -rf "$LAST"; mkdir -p "$LAST"; cp "$W"/*.out "$LAST/" 2>/dev/null || true
   rm -rf "$W"
 }
 trap cleanup EXIT
 mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
-s3p() { echo "249${1}0"; }
+s3p() { it_port "249${1}0"; }; rpcp() { it_port "249${1}1"; }; admp() { it_port "249${1}3"; }
 for i in 1 2 3; do
   cat > "$W/n$i.conf" <<CONF
 ADDONS_DIR=$W/n$i
@@ -28,8 +28,8 @@ AUDIT_LOG=$W/audit-n$i.log
 ADDON_BIND=127.0.0.1
 ADDON_NETWORK=host
 GARAGE_S3_PORT=$(s3p "$i")
-GARAGE_RPC_PORT=249${i}1
-GARAGE_ADMIN_PORT=249${i}3
+GARAGE_RPC_PORT=$(rpcp "$i")
+GARAGE_ADMIN_PORT=$(admp "$i")
 GARAGE_ZONE=dc$i
 GARAGE_CAPACITY=1G
 GARAGE_REPLICATION=3
@@ -39,8 +39,8 @@ ADDON_DISK_BAD_PCT=100
 CONF
 done
 # node N: its own conf and compose project (the template's `name:` is overridden by COMPOSE_PROJECT_NAME)
-node() { local i="$1"; shift; ADDON_CONF="$W/n$i.conf" ADDON_ALLOW_NONROOT=1 COMPOSE_PROJECT_NAME="vsw-gcl-n$i" "$A" "$@"; }
-gx() { local i="$1"; shift; docker exec -e RUST_LOG=warn "$(docker ps -q --filter "label=com.docker.compose.project=vsw-gcl-n$i" | head -1)" /garage "$@"; }
+node() { local i="$1"; shift; ADDON_CONF="$W/n$i.conf" ADDON_ALLOW_NONROOT=1 COMPOSE_PROJECT_NAME="$P-n$i" "$A" "$@"; }
+gx() { local i="$1"; shift; docker exec -e RUST_LOG=warn "$(docker ps -q --filter "label=com.docker.compose.project=$P-n$i" | head -1)" /garage "$@"; }
 # S3 from the Docker host's network namespace (host networking binds there, not on a Docker Desktop VM's client)
 s3() { local f="$1" m="$2" u="$3"; shift 3
   printf 'user = "%s:%s"\naws-sigv4 = "aws:amz:%s:s3"\n' "$(sed -n 's/^AWS_ACCESS_KEY_ID=//p' "$f")" \
@@ -52,14 +52,15 @@ openssl rand -hex 64 > "$W/obj.bin"
 
 node 1 install garage --role web --yes > "$W/n1.out" 2>&1 && grep -q 'layout staged' "$W/n1.out" && ! grep -q 'garage: bucket' "$W/n1.out" \
   && ok "node 1: installed in host mode; layout staged (1 of 3), no bucket yet" || { it_why "$W/n1.out" 30; fail "node 1 install"; }
-c1="$(docker ps -q --filter label=com.docker.compose.project=vsw-gcl-n1)"
+c1="$(docker ps -q --filter "label=com.docker.compose.project=$P-n1")"
 [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$c1")" = host ] && [ -z "$(docker port "$c1")" ] \
   && ok "host networking: no published ports" || fail "network mode"
 docker run --rm --network host busybox:1.37 netstat -ltn > "$W/listen.out" 2>&1
-grep -E ':249(10|11|13) ' "$W/listen.out" | awk '{print $4}' | grep -qv '^127\.0\.0\.1:' && fail "garage listens beyond 127.0.0.1" || true
-[ "$(grep -cE '127\.0\.0\.1:249(10|11|13) ' "$W/listen.out")" = 3 ] && ok "S3, RPC and admin listen on 127.0.0.1 only" || { cat "$W/listen.out"; fail "listen addresses"; }
+ports1="($(s3p 1)|$(rpcp 1)|$(admp 1))"
+grep -E ":$ports1 " "$W/listen.out" | awk '{print $4}' | grep -qv '^127\.0\.0\.1:' && fail "garage listens beyond 127.0.0.1" || true
+[ "$(grep -cE "127\.0\.0\.1:$ports1 " "$W/listen.out")" = 3 ] && ok "S3, RPC and admin listen on 127.0.0.1 only" || { cat "$W/listen.out"; fail "listen addresses"; }
 id1="$(node 1 garage-node-id 2>"$W/id.err")"
-[[ "$id1" =~ ^[0-9a-f]{64}@127\.0\.0\.1:24911$ ]] && ok "garage-node-id: <id>@<ADDON_BIND>:<rpc port>" || fail "garage-node-id: $id1"
+[[ "$id1" =~ ^[0-9a-f]{64}@127\.0\.0\.1:$(rpcp 1)$ ]] && ok "garage-node-id: <id>@<ADDON_BIND>:<rpc port>" || fail "garage-node-id: $id1"
 
 printf 'GARAGE_PEERS=%s\n' "$id1" >> "$W/n2.conf"
 if node 2 install garage --role web --yes > "$W/n2a.out" 2>&1; then fail "node 2 joined without the cluster secrets"; fi
@@ -81,11 +82,11 @@ node 1 laravel-env garage --out "$W/app.env" > "$W/env.out" 2>&1
 [ "$(s3 "$W/app.env" PUT "http://127.0.0.1:$(s3p 1)/cluster/obj.bin" --data-binary @/w/obj.bin)" = 200 ] \
   && [ "$(s3 "$W/app.env" GET "http://127.0.0.1:$(s3p 3)/cluster/obj.bin")" = 200 ] && cmp -s "$W/s3.body" "$W/obj.bin" \
   && ok "write through node 1, read the same bytes through node 3" || fail "cross-node read"
-docker stop "$(docker ps -q --filter label=com.docker.compose.project=vsw-gcl-n2)" >/dev/null
+docker stop "$(docker ps -q --filter "label=com.docker.compose.project=$P-n2")" >/dev/null
 [ "$(s3 "$W/app.env" GET "http://127.0.0.1:$(s3p 1)/cluster/obj.bin")" = 200 ] && cmp -s "$W/s3.body" "$W/obj.bin" \
   && [ "$(s3 "$W/app.env" PUT "http://127.0.0.1:$(s3p 3)/cluster/b.bin" --data-binary @/w/obj.bin)" = 200 ] \
   && ok "node 2 down: reads and writes still succeed (quorum 2 of 3)" || fail "one node down"
-docker start "$(docker ps -aq --filter label=com.docker.compose.project=vsw-gcl-n2)" >/dev/null
+docker start "$(docker ps -aq --filter "label=com.docker.compose.project=$P-n2")" >/dev/null
 code=000; for _ in $(seq 1 30); do code="$(s3 "$W/app.env" GET "http://127.0.0.1:$(s3p 2)/cluster/b.bin" || true)"; [ "$code" = 200 ] && break; sleep 2; done
 [ "$code" = 200 ] && cmp -s "$W/s3.body" "$W/obj.bin" \
   && ok "node 2 back: serves the object written while it was down" || { gx 1 status; fail "node 2 catch-up (HTTP $code)"; }

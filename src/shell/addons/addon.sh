@@ -75,6 +75,7 @@ load_addon() { # pinned defaults, then the conf again so it wins, then what inst
   local v; for v in "${ADDON_DISK_WARN_PCT:-85}" "${ADDON_DISK_BAD_PCT:-95}"; do
     [[ "$v" =~ ^[0-9]+$ ]] && [ "$v" -le 100 ] || CODE=2 die "ADDON_DISK_WARN_PCT / ADDON_DISK_BAD_PCT must be 0-100"; done
   case "$ADDON_NETWORK" in host|bridge) ;; *) CODE=2 die "ADDON_NETWORK must be host or bridge" ;; esac
+  [[ "${ADDON_PROJECT_PREFIX:-vsw}" =~ ^[a-z0-9][a-z0-9_-]{0,30}$ ]] || CODE=2 die "ADDON_PROJECT_PREFIX must be lowercase letters, digits, - or _ (max 31)"
 }
 pinned_keys() { grep -oE '^[A-Z0-9_]+=' "$STACKS/$1/addon.env.example" | tr -d =; }
 image_of() { local k; k="$(pinned_keys "$1" | grep '_IMAGE$' | head -1 || true)"; [ -z "$k" ] || echo "${!k}"; }
@@ -140,8 +141,8 @@ gates() { # refusals that apply to plan and install
 stack_env() { # non-secret settings recorded for compose and later commands
   local k
   printf '# written by addon.sh %s - non-secret settings for %s (secrets are in secrets.env)\n' "$VERSION" "$1"
-  printf 'ADDON_NAME=%s\nADDON_ROLE=%s\nADDON_BIND=%s\nADDON_NETWORK=%s\nADDON_DATA_DIR=%s\nSTORAGE_BUCKET=%s\n' \
-    "$1" "$ADDON_ROLE" "$ADDON_BIND" "$ADDON_NETWORK" "$ADDON_DATA_DIR" "$STORAGE_BUCKET"
+  printf 'ADDON_NAME=%s\nADDON_PROJECT=%s\nADDON_ROLE=%s\nADDON_BIND=%s\nADDON_NETWORK=%s\nADDON_DATA_DIR=%s\nSTORAGE_BUCKET=%s\n' \
+    "$1" "$(project_of "$1")" "$ADDON_ROLE" "$ADDON_BIND" "$ADDON_NETWORK" "$ADDON_DATA_DIR" "$STORAGE_BUCKET"
   for k in $(pinned_keys "$1"); do case "$k" in ADDON_*) ;; *) printf '%s=%s\n' "$k" "${!k}" ;; esac; done
   case "$1" in
     gotenberg) printf 'GOTENBERG_BASIC_AUTH_ON=%s\n' "$(gotenberg_auth_on && echo true || echo false)" ;;
@@ -155,7 +156,7 @@ secret_spec() { # KEY:value-kind
     gotenberg) echo "GOTENBERG_USERNAME:user GOTENBERG_PASSWORD:hex24" ;;
     garage) echo "GARAGE_RPC_SECRET:hex32 GARAGE_ADMIN_TOKEN:hex32 GARAGE_METRICS_TOKEN:hex32 GARAGE_APP_KEY_ID:gk GARAGE_APP_SECRET:hex32" ;;
     seaweedfs) echo "SEAWEED_ADMIN_KEY_ID:ak SEAWEED_ADMIN_SECRET:hex24 SEAWEED_APP_KEY_ID:ak SEAWEED_APP_SECRET:hex24 SEAWEED_ADMIN_PASSWORD:hex16" ;;
-    rustfs) echo "RUSTFS_ACCESS_KEY:ak RUSTFS_SECRET_KEY:hex24" ;;
+    rustfs) echo "RUSTFS_ACCESS_KEY:ak RUSTFS_SECRET_KEY:hex24 RUSTFS_APP_KEY_ID:ak RUSTFS_APP_SECRET:hex24" ;;
   esac
 }
 gen_value() {
@@ -219,7 +220,9 @@ config_sha() { # hash of mounted config files (not of secrets.env; compose alrea
   for f in garage.toml s3.json; do [ -f "$ADDONS_DIR/$1/$f" ] && out="$out$( (sha256sum "$ADDONS_DIR/$1/$f" 2>/dev/null || shasum -a 256 "$ADDONS_DIR/$1/$f") | cut -c1-16)"; done
   echo "${out:-none}"
 }
-dca() { local n="$1"; shift; (cd "$ADDONS_DIR/$n" && docker compose --env-file stack.env --env-file secrets.env "$@"); }
+# compose project: what install recorded (ADDON_PROJECT), else COMPOSE_PROJECT_NAME, else <ADDON_PROJECT_PREFIX>-<name>
+project_of() { local p; p="$(stack_get "$1" ADDON_PROJECT)"; echo "${p:-${COMPOSE_PROJECT_NAME:-${ADDON_PROJECT_PREFIX:-vsw}-$1}}"; }
+dca() { local n="$1" p; shift; p="$(project_of "$n")"; (cd "$ADDONS_DIR/$n" && docker compose -p "$p" --env-file stack.env --env-file secrets.env "$@"); }
 need_docker() { { command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; } || die "docker with the compose plugin is required"; }
 need_root() { [ "$(id -u)" -eq 0 ] || [ "${ADDON_ALLOW_NONROOT:-0}" = 1 ] || die "run as root (sudo)"; }
 audit() { printf '%s user=%s addon=%s %s\n' "$(date -u +%FT%TZ)" "${SUDO_USER:-$(id -un)}" "$1" "${*:2}" >> "$AUDIT_LOG" 2>/dev/null || warn "cannot write audit log $AUDIT_LOG"; }
@@ -371,14 +374,32 @@ seaweed_setup() {
   fi
   log "seaweedfs: app identity vsw-app limited to $STORAGE_BUCKET (s3.json)"
 }
-rustfs_setup() {
-  local code
-  code="$(printf 'user = "%s:%s"\naws-sigv4 = "aws:amz:%s:s3"\n' "$(secret_get rustfs RUSTFS_ACCESS_KEY)" "$(secret_get rustfs RUSTFS_SECRET_KEY)" "$STORAGE_REGION" \
-    | dca rustfs exec -T rustfs curl -s -o /dev/null -w '%{http_code}' -K - -X PUT "http://127.0.0.1:9000/$STORAGE_BUCKET" || true)"
-  case "$code" in 200|409) log "rustfs: bucket $STORAGE_BUCKET" ;; *) warn "rustfs: bucket create returned HTTP $code" ;; esac
-  warn "rustfs: create a key limited to $STORAGE_BUCKET in the console (ssh -L $RUSTFS_CONSOLE_PORT:127.0.0.1:$RUSTFS_CONSOLE_PORT <host>); the root key is not for the app"
+# rf_admin METHOD PATH [BODY]: a SigV4-signed request with the root key, sent from inside the container.
+# Credentials and the body travel in curl's stdin config, never on a command line; prints the HTTP code.
+rf_admin() {
+  { printf 'user = "%s:%s"\naws-sigv4 = "aws:amz:%s:s3"\n' "$(secret_get rustfs RUSTFS_ACCESS_KEY)" "$(secret_get rustfs RUSTFS_SECRET_KEY)" "$STORAGE_REGION"
+    [ -z "${3:-}" ] || printf 'data-binary = "%s"\n' "${3//\"/\\\"}"; } \
+    | dca rustfs exec -T rustfs curl -s -o /dev/null -w '%{http_code}' -K - -X "$1" "http://127.0.0.1:9000$2" || true
 }
-
+rustfs_policy() { # read/write objects in one bucket, list it; no bucket create/delete, no admin
+  local b="$1"
+  printf '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:ListBucket","s3:ListBucketMultipartUploads"],"Resource":["arn:aws:s3:::%s"]},{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":["arn:aws:s3:::%s/*"]}]}' "$b" "$b"
+}
+rustfs_setup() {
+  local code pol="vsw-app-$STORAGE_BUCKET" uid; uid="$(secret_get rustfs RUSTFS_APP_KEY_ID)"
+  for _ in $(seq 1 30); do code="$(rf_admin GET "/$STORAGE_BUCKET")"; [ "$code" != 000 ] && break; sleep 2; done
+  code="$(rf_admin PUT "/$STORAGE_BUCKET")"
+  case "$code" in 200|409) log "rustfs: bucket $STORAGE_BUCKET" ;; *) die "rustfs: bucket create returned HTTP $code" ;; esac
+  code="$(rf_admin PUT "/rustfs/admin/v3/add-canned-policy?name=$pol" "$(rustfs_policy "$STORAGE_BUCKET")")"
+  [ "$code" = 200 ] || die "rustfs: policy $pol returned HTTP $code"
+  if [ "$(rf_admin GET "/rustfs/admin/v3/user-info?accessKey=$uid")" != 200 ]; then
+    log "rustfs: app key (read/write on $STORAGE_BUCKET only)"
+    code="$(rf_admin PUT "/rustfs/admin/v3/add-user?accessKey=$uid" "{\"secretKey\":\"$(secret_get rustfs RUSTFS_APP_SECRET)\",\"status\":\"enabled\"}")"
+    [ "$code" = 200 ] || die "rustfs: app key create returned HTTP $code"
+  fi
+  code="$(rf_admin PUT "/rustfs/admin/v3/set-user-or-group-policy?policyName=$pol&userOrGroup=$uid&isGroup=false")"
+  [ "$code" = 200 ] || die "rustfs: attaching $pol returned HTTP $code"
+}
 recorded() { # load what install recorded for an installed add-on
   local n="$1"; installed "$n" || die "$n is not installed here"
   load_addon "$n"; set -a
@@ -401,8 +422,8 @@ cmd_laravel_env() {
         case "$n" in
           garage) port="$GARAGE_S3_PORT"; id="$(secret_get garage GARAGE_APP_KEY_ID)"; sec="$(secret_get garage GARAGE_APP_SECRET)" ;;
           seaweedfs) port="$SEAWEED_S3_PORT"; id="$(secret_get seaweedfs SEAWEED_APP_KEY_ID)"; sec="$(secret_get seaweedfs SEAWEED_APP_SECRET)" ;;
-          rustfs) port="$RUSTFS_PORT"; id=""; sec=""
-            echo "# RustFS: paste a bucket-scoped key created in the console; the root key is deliberately not written here" ;;
+          rustfs) port="$RUSTFS_PORT"; id="$(secret_get rustfs RUSTFS_APP_KEY_ID)"; sec="$(secret_get rustfs RUSTFS_APP_SECRET)"
+            echo "# RustFS: bucket-scoped app key (policy vsw-app-$STORAGE_BUCKET); the root key is deliberately not written here" ;;
         esac
         echo "FILESYSTEM_DISK=s3"; echo "AWS_ACCESS_KEY_ID=$id"; echo "AWS_SECRET_ACCESS_KEY=$sec"
         echo "AWS_DEFAULT_REGION=$STORAGE_REGION"; echo "AWS_BUCKET=$STORAGE_BUCKET"
@@ -463,7 +484,11 @@ doctor_one() {
     seaweedfs|rustfs)
       local port code; port="$([ "$n" = seaweedfs ] && echo "$SEAWEED_S3_PORT" || echo "$RUSTFS_PORT")"
       code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$ADDON_BIND:$port/$STORAGE_BUCKET" || true)"
-      case "$code" in 401|403) ok "anonymous S3 access denied ($code)" ;; 000) dwarn "S3 port not reachable from here" ;; *) bad "anonymous S3 request returned $code (auth not enforced?)" ;; esac ;;
+      case "$code" in 401|403) ok "anonymous S3 access denied ($code)" ;; 000) dwarn "S3 port not reachable from here" ;; *) bad "anonymous S3 request returned $code (auth not enforced?)" ;; esac
+      if [ "$n" = rustfs ]; then
+        [ "$(rf_admin GET "/rustfs/admin/v3/user-info?accessKey=$(secret_get rustfs RUSTFS_APP_KEY_ID)")" = 200 ] \
+          && ok "app key exists (policy vsw-app-$STORAGE_BUCKET)" || bad "rustfs app key missing (re-run install)"
+      fi ;;
   esac
   if [ "$ADDON_KIND" = storage ] && [ -d "$ADDON_DATA_DIR" ]; then
     local use; use="$(df -P "$ADDON_DATA_DIR" | awk 'NR==2 {gsub("%","",$5); print $5}')"

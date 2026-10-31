@@ -64,9 +64,13 @@ flowchart LR
 - **Credentials** are generated on the node (`openssl rand`), stored in `/opt/vsw-addons/<name>/secrets.env`
   (chmod 600), never printed and never logged. Re-running `install` keeps them. To rotate them, delete the key
   from `secrets.env` and the matching app key in the store, then run `install` again.
-- **App key**: Garage and SeaweedFS get a key that can read and write the one bucket only. It cannot create
-  or delete buckets, and it cannot see other buckets. RustFS has no CLI for this, so you create the key in its
-  console. The root key is never written for the app.
+- **App key**: every store gets a key that can read and write the one bucket only. It cannot create or
+  delete buckets, and it cannot see other buckets. Garage uses `bucket allow --read --write`, SeaweedFS an
+  `s3.json` identity, RustFS an IAM user with the policy `vsw-app-<bucket>` created through its admin API
+  (signed with the root key from inside the container). The root key is never written for the app.
+- **Project name**: compose projects are `<ADDON_PROJECT_PREFIX>-<name>` (`vsw-garage` by default), recorded
+  in `stack.env` as `ADDON_PROJECT` at install so later commands find the containers. Change the prefix only
+  for a second, separate set of add-ons on one host (the integration tests do this).
 - **Data path**: `ADDON_DATA_DIR`, `/opt/vsw-addons/<name>` by default. A DigitalOcean volume such as
   `/mnt/volume_nyc3_01/garage` keeps object data off the droplet disk and survives a resize. `plan` warns if
   the volume is not mounted.
@@ -83,7 +87,7 @@ flowchart LR
 | Who runs it | DigitalOcean | you | you | you | you (a team) |
 | Smallest useful setup | none | 1 node; 3 for redundancy | 1 node | 1 node | 3+ nodes, cephadm |
 | RAM (estimate) | none on your droplets | ~256 MB | ~512 MB+ | ~512 MB | GBs per node |
-| Least-privilege key | per-bucket access keys | `bucket allow --read --write` | `s3.json` actions per bucket | console only | RGW users/policies |
+| Least-privilege key | per-bucket access keys | `bucket allow --read --write` | `s3.json` actions per bucket | IAM user + bucket policy (admin API) | RGW users/policies |
 | Redundancy | provider-managed | multi-node, multi-zone layout | replication / erasure coding | erasure coding | full |
 | Fit | **default for dev-budget and most production** | small self-hosted, multi-site later | many small files, wants a UI | evaluation only | large clusters only |
 | In this repo | docs (below) | add-on, container-tested | add-on, container-tested | add-on, gated | docs only |

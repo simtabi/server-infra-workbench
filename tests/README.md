@@ -35,3 +35,25 @@ commands and compose checks. `make ci-local` runs it exactly as CI does. `make i
 after another (`tests/shell/run-suites.sh`). Each suite sources [`shell/it-lib.sh`](shell/it-lib.sh) and
 ends with `it_purge <compose project>...`; the runner fails a suite that leaves `vsw*` containers, networks or
 volumes behind. Give a new suite its own `vsw`-prefixed project, ports and `172.30.x.0/24` subnet.
+
+### Parallel runs
+
+Two `make it` runs on one Docker daemon (two worktrees, two agents) collide on fixed names and host-network
+ports, and the default leak guard removes every new `vsw*` object, including the other run's. Give each run its
+own prefix:
+
+```bash
+VSW_IT_PREFIX=vswa ONLY=addons-it,garage-cluster-it make it
+VSW_IT_PREFIX=vswb VSW_IT_PORT_OFFSET=18000 ONLY=garage-cluster-it make it
+```
+
+- `it_name SUFFIX` gives `<prefix>SUFFIX`, `it_port BASE` gives `BASE + VSW_IT_PORT_OFFSET`. The default
+  prefix `vsw` keeps the historic names and offset 0. Another prefix gets -10000, 11000 or 18000 from a hash
+  of the prefix; set `VSW_IT_PORT_OFFSET` yourself when two prefixes hash alike. The suites' ports span less
+  than 7000, so different offsets never overlap, and none lands in 30000-32767 (Kubernetes NodePorts on
+  Docker Desktop). `addons-it` checks its published ports are free first (`it_ports_free`): a desktop app on
+  127.0.0.1:30000 once answered its Gotenberg checks.
+- With a prefix, the leak guard watches only `<prefix>-*` / `<prefix>_*` names. A default (`vsw`) run still
+  watches all `vsw*` names, so when runs overlap, **every** run needs a non-default prefix.
+- Prefix-aware today: `addons-it`, `garage-cluster-it`. The other suites still use fixed `vsw` names and
+  subnets: run each of them in only one run at a time.

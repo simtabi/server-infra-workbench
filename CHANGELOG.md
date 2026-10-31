@@ -41,6 +41,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed (P3)
 
+- RustFS: install now creates a bucket-scoped app key (IAM user + policy `vsw-app-<bucket>` through the admin
+  API) and `laravel-env` writes it. Before, the app had no usable key unless you made one in the console, and
+  a failed bucket create was only a warning. `doctor` checks the app key.
+- `make it` runs can share one Docker daemon: `VSW_IT_PREFIX` / `VSW_IT_PORT_OFFSET` (it-lib) give
+  `addons-it` and `garage-cluster-it` their own project names and ports, and the leak guard watches only its
+  own prefix. Before, a second run recreated the first run's Garage containers and its leak guard could remove
+  them. `addon.sh` takes `ADDON_PROJECT_PREFIX` and records `ADDON_PROJECT` in `stack.env`.
+
 - `reset` and `uninstall --purge` accept `--force-prod`. On a server with a protected env they told you to add
   the flag but never parsed it (only `RESET_FORCE_PROD=1` / `PURGE_FORCE_PROD=1` worked); unknown options are
   now refused instead of ignored.

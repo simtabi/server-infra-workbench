@@ -12,6 +12,7 @@
 # PROTECTED_ENVS=prd
 # ADDON_DISK_WARN_PCT=85                # doctor: data disk use that warns ...
 # ADDON_DISK_BAD_PCT=95                 # ... and that is a problem (exit 1)
+# ADDON_PROJECT_PREFIX=vsw              # compose projects are <prefix>-<name>; recorded at install (tests use their own)
 
 # object storage
 # STORAGE_BUCKET=app
