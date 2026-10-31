@@ -10,6 +10,8 @@
 # ADDON_DATA_DIR=                       # default /opt/vsw-addons/<name>; a DO volume: /mnt/volume_<region>_01/garage
 # ADDON_ENV=dev                         # env this node serves; experimental add-ons are refused on PROTECTED_ENVS
 # PROTECTED_ENVS=prd
+# ADDON_DISK_WARN_PCT=85                # doctor: data disk use that warns ...
+# ADDON_DISK_BAD_PCT=95                 # ... and that is a problem (exit 1)
 
 # object storage
 # STORAGE_BUCKET=app

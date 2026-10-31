@@ -225,7 +225,7 @@ psql "host=db-prd.internal.example.com port=25060 user=doadmin sslmode=verify-fu
 | TLS | on when `TLS_MODE=require`; certificate valid for more than 21 days | problem |
 | Backups | newest dump under `BACKUP_MAX_AGE_H`; off-site copy as fresh; WAL archived within the hour | problem + alert |
 | Restore tests | one passed within `RESTORE_TEST_MAX_AGE_D` days | warn |
-| Capacity | disk under 80% (warn) / 90% (problem); RAM vs [sizing](reference/sizing.md) | warn |
+| Capacity | disk under 80% (warn) / 90% (problem), `DOCTOR_DISK_WARN_PCT` / `DOCTOR_DISK_BAD_PCT`; RAM vs [sizing](reference/sizing.md) | warn |
 
 `doctor --alert` (hourly from `cron-install`) sends failures to `ALERT_EMAIL`, `ALERT_WEBHOOK`,
 `HEALTHCHECK_URL` or `ALERT_COMMAND`.

@@ -40,6 +40,7 @@ rm -rf "$W/root/garage"
 PEER="$(openssl rand -hex 32)@10.10.0.6:3901"
 # settings come from the conf file (sourced after the pinned defaults), so each case gets its own conf
 C() { local f; f="$(mktemp "$W/conf.XXXX")"; { cat "$W/addons.conf"; printf '%s\n' "$@"; } > "$f"; echo "$f"; }
+refuses "doctor disk limit must be 0-100" "ADDON_DISK_WARN_PCT" env ADDON_CONF="$(C ADDON_DISK_BAD_PCT=150)" "$A" plan garage --bind 10.10.0.5
 refuses "garage: replication must be 1, 2 or 3" "must be 1, 2 or 3" env ADDON_CONF="$(C GARAGE_REPLICATION=5)" "$A" plan garage --bind 10.10.0.5
 refuses "garage: replication 3 refused in bridge mode" "needs ADDON_NETWORK=host" env ADDON_CONF="$(C GARAGE_REPLICATION=3 ADDON_NETWORK=bridge)" "$A" plan garage --bind 10.10.0.5
 refuses "garage: malformed peer refused" "is not <64-hex" env ADDON_CONF="$(C GARAGE_PEERS=abc@10.10.0.6:3901)" "$A" plan garage --bind 10.10.0.5

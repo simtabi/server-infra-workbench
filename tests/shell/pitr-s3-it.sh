@@ -28,7 +28,7 @@ trap cleanup EXIT
 printf 'ADDONS_DIR=%s\nAUDIT_LOG=%s\nADDON_BIND=127.0.0.1\nADDON_NETWORK=bridge\nGARAGE_S3_PORT=24900\nGARAGE_ADMIN_PORT=24903\nSTORAGE_BUCKET=pitr\n' \
   "$W/root" "$W/audit.log" > "$W/addons.conf"
 export ADDON_CONF="$W/addons.conf" ADDON_ALLOW_NONROOT=1
-"$A" install garage --role web --yes > "$W/garage.out" 2>&1 && ok "garage add-on: bucket 'pitr' + bucket-scoped key" || { tail -30 "$W/garage.out"; fail "garage install"; }
+"$A" install garage --role web --yes > "$W/garage.out" 2>&1 && ok "garage add-on: bucket 'pitr' + bucket-scoped key" || { it_why "$W/garage.out" 30; fail "garage install"; }
 "$A" laravel-env garage --out "$W/garage.env" > /dev/null 2>&1
 kv() { sed -n "s/^$1=//p" "$W/garage.env"; }
 gc="$(docker ps -q --filter label=com.docker.compose.project=vsw-garage --filter label=com.docker.compose.service=garage | head -1)"
@@ -52,6 +52,8 @@ umask 077
 umask 022
 REGION="$(kv AWS_DEFAULT_REGION)"
 printf 'PG_BASE_IMAGE=postgres:18\nPG_IMAGE=vsw-test/postgres:18\n' > "$W/dbm.conf"; chmod 600 "$W/dbm.conf"
+# the host disk is the laptop's, not a server's: its fill level must not fail doctor (the 1.4 upgrade flake)
+export DOCTOR_DISK_WARN_PCT=100 DOCTOR_DISK_BAD_PCT=100
 export DB_DIR="$D" PRIVATE_IP=127.0.0.1 VPC_CIDR=127.0.0.0/8 DBM_CONFIG="$W/dbm.conf" \
   DBM_LOCK="$W/lock" DBM_LOG="$W/run.log" BACKUP_DIR="$W/backups" MIN_FREE_MB=10 \
   STATE_DIR="$W/state" ENV_SECRETS_DIR="$W/secrets" OFFSITE_CREDS_FILE="$W/offsite.env" \
@@ -69,7 +71,7 @@ archived() { local w _; w="$(psq 'select pg_walfile_name(pg_switch_wal())')"
 if OFFSITE_ENDPOINT="http://$HOSTNAME_S3:8443" run validate_config > "$W/v.out" 2>&1; then fail "http:// endpoint accepted for an S3 PITR repo"; fi
 grep -q 'HTTPS only' "$W/v.out" && ok "validate: an http:// S3 endpoint is refused (pgBackRest speaks HTTPS only)" || { cat "$W/v.out"; fail "http refusal"; }
 
-run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "install with PITR=pgbackrest, s3 repo" || { tail -40 "$W/install.out"; fail "install"; }
+run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "install with PITR=pgbackrest, s3 repo" || { it_why "$W/install.out" 40; fail "install"; }
 conf="$D/postgres/conf/pgbackrest.conf"
 grep -qx 'repo1-s3-endpoint=s3.vsw.test' "$conf" && grep -qx 'repo1-storage-port=8443' "$conf" && grep -qx 'repo1-s3-uri-style=path' "$conf" \
   && grep -qx 'repo1-storage-ca-file=/etc/postgresql/vsw/s3-ca.crt' "$conf" && ok "pgbackrest.conf: endpoint, port, path style, CA" || { cat "$conf"; fail "pgbackrest.conf"; }
@@ -78,7 +80,7 @@ sk="$(kv AWS_SECRET_ACCESS_KEY)"
   && ok "S3 secret only in postgres/pitr.env (600), not in pgbackrest.conf" || fail "secret placement"
 docker network connect --alias "$HOSTNAME_S3" "$DOCKER_NETWORK" "$FRONT"
 
-run cmd_pitr setup > "$W/setup.out" 2>&1 && grep -q 'PITR ready' "$W/setup.out" && ok "pitr setup over S3: stanza + full backup" || { tail -40 "$W/setup.out"; fail "pitr setup"; }
+run cmd_pitr setup > "$W/setup.out" 2>&1 && grep -q 'PITR ready' "$W/setup.out" && ok "pitr setup over S3: stanza + full backup" || { it_why "$W/setup.out" 40; fail "pitr setup"; }
 ! cat "$W"/*.out "$W/run.log" 2>/dev/null | grep -qF "$sk" && ok "the S3 secret is never printed or logged" || fail "secret printed"
 psq 'create table t_pitr (id int primary key); insert into t_pitr select generate_series(1, 100)' >/dev/null
 archived || fail "WAL before T not archived"
@@ -95,9 +97,9 @@ s3get() { printf 'user = "%s:%s"\naws-sigv4 = "aws:amz:%s:s3"\n' "$(kv AWS_ACCES
 [ "$(s3get /db-main/backup/main/backup.info)" = 200 ] && ! grep -q '^\[backrest\]' "$W/obj" \
   && ok "repository files are encrypted at rest (no plaintext backup.info)" || fail "backup.info plaintext or missing"
 
-WORKBENCH_CONFIRM=prd FORCE=1 run cmd_pitr restore --target "$T" --force-prod </dev/null > "$W/restore.out" 2>&1 && grep -q 'PITR restore done' "$W/restore.out" || { tail -40 "$W/restore.out"; fail "pitr restore"; }
+WORKBENCH_CONFIRM=prd FORCE=1 run cmd_pitr restore --target "$T" --force-prod </dev/null > "$W/restore.out" 2>&1 && grep -q 'PITR restore done' "$W/restore.out" || { it_why "$W/restore.out" 40; fail "pitr restore"; }
 n="$(psq 'select count(*) || '"' '"' || min(id) || '"' '"' || max(id) from t_pitr')"
 [ "$n" = "100 1 100" ] && ok "restore from S3 --target T: exactly the 100 rows from before T" || fail "after restore: $n (want 100 1 100)"
-run cmd_verify > "$W/verify.out" 2>&1 && [ "$(psq 'select pg_is_in_recovery()')" = f ] && ok "verify after restore; promoted and writable" || { tail -20 "$W/verify.out"; fail "verify"; }
-run cmd_pitr backup diff > "$W/diff.out" 2>&1 && ok "pitr backup diff on the new timeline" || { tail -20 "$W/diff.out"; fail "diff after restore"; }
+run cmd_verify > "$W/verify.out" 2>&1 && [ "$(psq 'select pg_is_in_recovery()')" = f ] && ok "verify after restore; promoted and writable" || { it_why "$W/verify.out" 20; fail "verify"; }
+run cmd_pitr backup diff > "$W/diff.out" 2>&1 && ok "pitr backup diff on the new timeline" || { it_why "$W/diff.out" 20; fail "diff after restore"; }
 echo "pitr-s3-it: $pass checks passed"

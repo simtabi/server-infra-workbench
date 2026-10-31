@@ -203,6 +203,8 @@ HEALTHCHECK_URL="${HEALTHCHECK_URL:-}"              # check-in URL (healthchecks
 ALERT_COMMAND="${ALERT_COMMAND:-}"                  # local hook: <cmd> <event> <ok|fail> <message>
 BACKUP_MAX_AGE_H="${BACKUP_MAX_AGE_H:-26}"
 RESTORE_TEST_MAX_AGE_D="${RESTORE_TEST_MAX_AGE_D:-8}"
+DOCTOR_DISK_WARN_PCT="${DOCTOR_DISK_WARN_PCT:-80}"   # doctor: disk use on DB_DIR that warns
+DOCTOR_DISK_BAD_PCT="${DOCTOR_DISK_BAD_PCT:-90}"     # ... and that is a PROBLEM (Postgres stops at 100%)
 SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 
 log()  { printf '\n==> %s\n' "$*"; }
@@ -1715,6 +1717,8 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
   [ "$PG_ADMIN_USER" != "$PG_USER" ] || err "PG_ADMIN_USER must differ from PG_USER"
   if [ -n "$RETENTION" ]; then for v in $RETENTION; do [[ "$v" =~ ^(daily|weekly|monthly|yearly)=[0-9]+$ ]] || err "RETENTION item '$v' (want daily=N weekly=N monthly=N yearly=N)"; done; fi
   for v in BINLOG_DAYS PITR_DAYS FRESH_BACKUP_MIN TRASH_DAYS BACKUP_MAX_AGE_H TLS_DAYS; do [[ "${!v}" =~ ^[0-9]+$ ]] || err "$v must be a whole number"; done
+  { [[ "$DOCTOR_DISK_WARN_PCT" =~ ^[0-9]+$ ]] && [[ "$DOCTOR_DISK_BAD_PCT" =~ ^[0-9]+$ ]] && [ "$DOCTOR_DISK_WARN_PCT" -le "$DOCTOR_DISK_BAD_PCT" ] && [ "$DOCTOR_DISK_BAD_PCT" -le 100 ]; } \
+    || err "DOCTOR_DISK_WARN_PCT <= DOCTOR_DISK_BAD_PCT <= 100 (whole numbers)"
   unset -f err
   [ "$bad" = 0 ] || die "config invalid - fix it (see config/db-server.env.example); nothing was changed"
   echo "config ok"
@@ -2566,7 +2570,7 @@ doctor_host() {
   else d_warn "unattended-upgrades not enabled (apt install unattended-upgrades)"; fi
   [ -f /var/run/reboot-required ] && d_warn "reboot required (server update --reboot-window)" || d_ok "no reboot pending"
   local use; use="$(df -P "$DB_DIR" 2>/dev/null | awk 'NR==2 {gsub("%","",$5); print $5}')"
-  if [ -n "$use" ]; then if [ "$use" -ge 90 ]; then d_bad "disk $use% used on $DB_DIR"; elif [ "$use" -ge 80 ]; then d_warn "disk $use% used on $DB_DIR"; else d_ok "disk $use% used"; fi; fi
+  if [ -n "$use" ]; then if [ "$use" -ge "$DOCTOR_DISK_BAD_PCT" ]; then d_bad "disk $use% used on $DB_DIR (limit $DOCTOR_DISK_BAD_PCT%)"; elif [ "$use" -ge "$DOCTOR_DISK_WARN_PCT" ]; then d_warn "disk $use% used on $DB_DIR"; else d_ok "disk $use% used"; fi; fi
   local need have; need="$(engine_ram_mb)"; have="$(host_ram_mb)"
   if [ "$have" -gt 0 ] && [ "$have" -lt "$((need * 90 / 100))" ]; then
     d_warn "RAM ${have}MB < ${need}MB for the enabled engines. Resize: bin/workbench do resize <droplet> --size $(size_for_mb "$need")  (or disable an engine: engine disable mysql)"

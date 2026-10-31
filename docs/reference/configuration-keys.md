@@ -163,6 +163,8 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `ALERT_COMMAND` | (empty) | local hook: <cmd> <event> <ok\|fail> <message> |
 | `BACKUP_MAX_AGE_H` | `26` |  |
 | `RESTORE_TEST_MAX_AGE_D` | `8` |  |
+| `DOCTOR_DISK_WARN_PCT` | `80` | doctor warns at this disk use on DB_DIR |
+| `DOCTOR_DISK_BAD_PCT` | `90` | ... and reports a PROBLEM (exit 1, fails `upgrade`) from here |
 
 ## Per-environment keys (not in the example)
 

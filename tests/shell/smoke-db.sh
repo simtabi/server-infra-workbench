@@ -122,6 +122,7 @@ EXTRA_BIND_IPS=203.0.113.5 L validate_config 2>"$T/e" && fail "public bind accep
 EXTRA_BIND_IPS=203.0.113.5 ALLOW_PUBLIC_BIND=1 TLS_MODE=require L validate_config 2>"$T/e" && ok "public bind accepted with ALLOW_PUBLIC_BIND=1 + TLS_MODE=require" || { cat "$T/e"; fail "public bind ok"; }
 PRIVATE_IP=203.0.113.5 L validate_config 2>"$T/e" && fail "public PRIVATE_IP" || { grep -q 'not a private' "$T/e" && ok "PRIVATE_IP must be a private address"; } || fail "private ip"
 PEER_REGIONS="nyc 1" L validate_config 2>"$T/e" && fail "bad region" || { grep -q 'PEER_REGIONS entry' "$T/e" && ok "PEER_REGIONS validated"; } || fail "region slug"
+DOCTOR_DISK_WARN_PCT=95 DOCTOR_DISK_BAD_PCT=90 L validate_config 2>"$T/e" && fail "warn > bad accepted" || { grep -q 'DOCTOR_DISK_WARN_PCT <= DOCTOR_DISK_BAD_PCT' "$T/e" && ok "doctor disk thresholds validated"; } || fail "disk pct"
 mkdir -p "$T/meta"; printf 'nyc1' > "$T/meta/region"
 mkdir -p "$T/mbin"; printf '#!/bin/sh\nfor a; do u="$a"; done; cat "%s/meta/${u##*/}"\n' "$T" > "$T/mbin/curl"; chmod +x "$T/mbin/curl"
 PATH="$T/mbin:$PATH" PEER_REGIONS=ams3 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true

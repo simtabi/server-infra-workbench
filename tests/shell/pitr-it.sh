@@ -19,6 +19,8 @@ cleanup() { rm -rf /tmp/vsw-pitr-last; mkdir -p /tmp/vsw-pitr-last; cp "$W"/*.ou
 trap cleanup EXIT
 [ "${IT_KEEP:-0}" = 1 ] && trap 'echo "kept: $W (W=$W D=$D)"' EXIT
 printf 'PG_BASE_IMAGE=postgres:18\nPG_IMAGE=vsw-test/postgres:18\n' > "$W/dbm.conf"; chmod 600 "$W/dbm.conf"
+# the host disk is the laptop's, not a server's: its fill level must not fail doctor (the 1.4 upgrade flake)
+export DOCTOR_DISK_WARN_PCT=100 DOCTOR_DISK_BAD_PCT=100
 export DB_DIR="$D" PRIVATE_IP=127.0.0.1 VPC_CIDR=127.0.0.0/8 DBM_CONFIG="$W/dbm.conf" \
   DBM_LOCK="$W/lock" DBM_LOG="$W/run.log" BACKUP_DIR="$W/backups" MIN_FREE_MB=10 \
   STATE_DIR="$W/state" ENV_SECRETS_DIR="$W/secrets" OFFSITE_CREDS_FILE="$W/offsite.env" \
@@ -33,8 +35,8 @@ archived() { # wait until the current WAL segment is in the repo
   for _ in $(seq 1 60); do [ "$(psq "select coalesce(last_archived_wal >= '$w', false) from pg_stat_archiver")" = t ] && return 0; sleep 1; done; return 1
 }
 
-run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "install with PITR=pgbackrest (posix repo)" || { tail -40 "$W/install.out"; fail "install"; }
-run cmd_pitr setup > "$W/setup.out" 2>&1 && grep -q 'PITR ready' "$W/setup.out" && ok "pitr setup: stanza + full backup" || { tail -40 "$W/setup.out"; fail "pitr setup"; }
+run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "install with PITR=pgbackrest (posix repo)" || { it_why "$W/install.out" 40; fail "install"; }
+run cmd_pitr setup > "$W/setup.out" 2>&1 && grep -q 'PITR ready' "$W/setup.out" && ok "pitr setup: stanza + full backup" || { it_why "$W/setup.out" 40; fail "pitr setup"; }
 # pgBackRest echoes its options but masks secrets as <redacted>; fail on the real value or any unmasked option
 cp_val="$(sed -n 's/^PITR_CIPHER_PASS=//p' "$D/.env" 2>/dev/null || true)"
 { [ -n "$cp_val" ] && grep -qF "$cp_val" "$W/setup.out"; } || grep -qE 'cipher-pass=[^<]|CIPHER_PASS=' "$W/setup.out" \
@@ -50,11 +52,11 @@ if run cmd_pitr restore > "$W/r0.out" 2>&1; then fail "restore without --target 
 grep -q 'usage: pitr restore --target' "$W/r0.out" && ok "pitr restore needs --target" || fail "restore usage"
 if FORCE=1 run cmd_pitr restore --target "$T" </dev/null > "$W/r1.out" 2>&1; then fail "prd restore without --force-prod accepted"; fi
 grep -q 'force-prod' "$W/r1.out" && ok "pitr restore on a prd cluster refused without --force-prod" || { cat "$W/r1.out"; fail "restore guard"; }
-WORKBENCH_CONFIRM=prd FORCE=1 run cmd_pitr restore --target "$T" --force-prod </dev/null > "$W/restore.out" 2>&1 && grep -q 'PITR restore done' "$W/restore.out" || { tail -40 "$W/restore.out"; fail "pitr restore"; }
+WORKBENCH_CONFIRM=prd FORCE=1 run cmd_pitr restore --target "$T" --force-prod </dev/null > "$W/restore.out" 2>&1 && grep -q 'PITR restore done' "$W/restore.out" || { it_why "$W/restore.out" 40; fail "pitr restore"; }
 n="$(psq 'select count(*) || '"' '"' || min(id) || '"' '"' || max(id) from t_pitr')"
 [ "$n" = "100 1 100" ] && ok "pitr restore --target T: exactly the 100 rows from before T" || fail "after restore: $n (want 100 1 100)"
 ls "$BACKUP_DIR"/*/manifest.txt >/dev/null 2>&1 && ok "restore took a dump backup first" || fail "no pre-restore backup"
-run cmd_verify > "$W/verify.out" 2>&1 && ok "verify after restore (postgres + pgbouncer)" || { tail -20 "$W/verify.out"; fail "verify"; }
+run cmd_verify > "$W/verify.out" 2>&1 && ok "verify after restore (postgres + pgbouncer)" || { it_why "$W/verify.out" 20; fail "verify"; }
 [ "$(psq 'select pg_is_in_recovery()')" = f ] && ok "promoted: writable after recovery" || fail "still in recovery"
-run cmd_pitr backup full > "$W/full.out" 2>&1 && ok "pitr backup full on the new timeline" || { tail -20 "$W/full.out"; fail "full after restore"; }
+run cmd_pitr backup full > "$W/full.out" 2>&1 && ok "pitr backup full on the new timeline" || { it_why "$W/full.out" 20; fail "full after restore"; }
 echo "pitr-it: $pass checks passed"

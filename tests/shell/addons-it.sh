@@ -31,6 +31,8 @@ SEAWEED_ADMIN_PORT=22535
 RUSTFS_PORT=29000
 RUSTFS_CONSOLE_PORT=29001
 STORAGE_BUCKET=itbucket
+ADDON_DISK_WARN_PCT=100
+ADDON_DISK_BAD_PCT=100
 CONF
 export ADDON_CONF="$W/addons.conf" ADDON_ALLOW_NONROOT=1
 ad() { "$A" "$@"; }
@@ -44,7 +46,7 @@ echo "hello from addons-it" > "$W/obj.txt"
 
 # ---- gotenberg ----------------------------------------------------------------------------
 ad plan gotenberg > "$W/plan.out" 2>&1 && [ ! -e "$W/root/gotenberg" ] && ok "plan writes nothing" || { cat "$W/plan.out"; fail "plan"; }
-ad install gotenberg --yes > "$W/g1.out" 2>&1 && ok "gotenberg: install (pinned $(grep -o 'gotenberg/gotenberg:[0-9.]*' "$W/plan.out" | head -1))" || { tail -30 "$W/g1.out"; fail "gotenberg install"; }
+ad install gotenberg --yes > "$W/g1.out" 2>&1 && ok "gotenberg: install (pinned $(grep -o 'gotenberg/gotenberg:[0-9.]*' "$W/plan.out" | head -1))" || { it_why "$W/g1.out" 30; fail "gotenberg install"; }
 printf '<html><body><h1>invoice</h1></body></html>' > "$W/index.html"
 [ "$(curl -s -o "$W/o.pdf" -w '%{http_code}' -F files=@"$W/index.html" http://127.0.0.1:23000/forms/chromium/convert/html)" = 200 ] \
   && [ "$(head -c 5 "$W/o.pdf")" = "%PDF-" ] && ok "gotenberg: HTML -> PDF" || fail "gotenberg convert"
@@ -52,7 +54,7 @@ printf '<html><body><h1>invoice</h1></body></html>' > "$W/index.html"
   && ok "gotenberg: SSRF guard refuses a private-IP URL (403)" || fail "gotenberg SSRF guard"
 ad doctor gotenberg > "$W/gd.out" 2>&1 && grep -q '0 problem' "$W/gd.out" && ok "gotenberg: doctor clean" || { cat "$W/gd.out"; fail "gotenberg doctor"; }
 echo "GOTENBERG_BASIC_AUTH=true" >> "$W/addons.conf"
-ad install gotenberg --yes > "$W/g2.out" 2>&1 || { tail -30 "$W/g2.out"; fail "gotenberg re-install with auth"; }
+ad install gotenberg --yes > "$W/g2.out" 2>&1 || { it_why "$W/g2.out" 30; fail "gotenberg re-install with auth"; }
 ad laravel-env gotenberg --out "$W/g.env" > "$W/ge.out" 2>&1
 pw="$(sed -n 's/^GOTENBERG_PASSWORD=//p' "$W/g.env")"; us="$(sed -n 's/^GOTENBERG_USERNAME=//p' "$W/g.env")"
 [ "$(curl -s -o /dev/null -w '%{http_code}' -F files=@"$W/index.html" http://127.0.0.1:23000/forms/chromium/convert/html)" = 401 ] \
@@ -62,7 +64,7 @@ pw="$(sed -n 's/^GOTENBERG_PASSWORD=//p' "$W/g.env")"; us="$(sed -n 's/^GOTENBER
   && ok "gotenberg: laravel-env + secrets are 600, password never printed" || fail "gotenberg secret handling"
 
 # ---- garage -------------------------------------------------------------------------------
-ad install garage --role web --yes > "$W/ga1.out" 2>&1 && grep -q 'garage: app key' "$W/ga1.out" && ok "garage: install, layout, bucket, app key" || { tail -30 "$W/ga1.out"; fail "garage install"; }
+ad install garage --role web --yes > "$W/ga1.out" 2>&1 && grep -q 'garage: app key' "$W/ga1.out" && ok "garage: install, layout, bucket, app key" || { it_why "$W/ga1.out" 30; fail "garage install"; }
 ad laravel-env garage --out "$W/ga.env" > "$W/gae.out" 2>&1; ep="$(sed -n 's/^AWS_ENDPOINT=//p' "$W/ga.env")"
 grep -q '^AWS_USE_PATH_STYLE_ENDPOINT=true' "$W/ga.env" && [ "$ep" = http://127.0.0.1:23900 ] && ok "garage: Laravel keys (endpoint, path style)" || fail "garage laravel-env"
 [ "$(s3 "$W/ga.env" PUT "$ep/itbucket/a.txt" --data-binary @"$W/obj.txt")" = 200 ] && [ "$(s3 "$W/ga.env" GET "$ep/itbucket/a.txt")" = 200 ] \
@@ -70,14 +72,14 @@ grep -q '^AWS_USE_PATH_STYLE_ENDPOINT=true' "$W/ga.env" && [ "$ep" = http://127.
 [ "$(s3 "$W/ga.env" PUT "$ep/otherbucket")" = 403 ] && [ "$(s3 "$W/ga.env" DELETE "$ep/itbucket")" = 403 ] \
   && [ "$(curl -s -o /dev/null -w '%{http_code}' "$ep/itbucket/a.txt")" = 403 ] && ok "garage: app key cannot create/delete buckets; anonymous denied" || fail "garage least privilege"
 ad install garage --role web --yes > "$W/ga2.out" 2>&1 && ! grep -qE 'garage: (layout|bucket|app key)' "$W/ga2.out" \
-  && [ "$(s3 "$W/ga.env" GET "$ep/itbucket/a.txt")" = 200 ] && ok "garage: re-install is idempotent (same key, data kept)" || { tail -20 "$W/ga2.out"; fail "garage idempotent"; }
+  && [ "$(s3 "$W/ga.env" GET "$ep/itbucket/a.txt")" = 200 ] && ok "garage: re-install is idempotent (same key, data kept)" || { it_why "$W/ga2.out" 20; fail "garage idempotent"; }
 ad doctor garage > "$W/gad.out" 2>&1 && grep -q '0 problem' "$W/gad.out" && ok "garage: doctor clean" || { cat "$W/gad.out"; fail "garage doctor"; }
 if ad plan seaweedfs > "$W/excl.out" 2>&1; then fail "second object store accepted"; fi
 grep -q 'already installed' "$W/excl.out" && ok "one object store per node" || fail "exclusivity"
 ad remove garage --yes > "$W/gar.out" 2>&1 && ls -d "$W"/root/.removed-garage-* >/dev/null && ok "garage: remove keeps data + credentials" || { cat "$W/gar.out"; fail "garage remove"; }
 
 # ---- seaweedfs ----------------------------------------------------------------------------
-ad install seaweedfs --role web --yes > "$W/s1.out" 2>&1 && ok "seaweedfs: install, bucket, bucket-scoped identity" || { tail -30 "$W/s1.out"; fail "seaweedfs install"; }
+ad install seaweedfs --role web --yes > "$W/s1.out" 2>&1 && ok "seaweedfs: install, bucket, bucket-scoped identity" || { it_why "$W/s1.out" 30; fail "seaweedfs install"; }
 ad laravel-env seaweedfs --out "$W/s.env" > /dev/null 2>&1; ep="$(sed -n 's/^AWS_ENDPOINT=//p' "$W/s.env")"
 [ "$(s3 "$W/s.env" PUT "$ep/itbucket/a.txt" --data-binary @"$W/obj.txt")" = 200 ] && [ "$(s3 "$W/s.env" GET "$ep/itbucket/a.txt")" = 200 ] \
   && cmp -s "$W/s3.body" "$W/obj.txt" && ok "seaweedfs: app key writes and reads its bucket" || fail "seaweedfs put/get"
@@ -92,7 +94,7 @@ ad remove seaweedfs --yes > "$W/sr.out" 2>&1 || { cat "$W/sr.out"; fail "seaweed
 if ad install rustfs --yes > "$W/r0.out" 2>&1; then fail "rustfs installed without --accept-experimental"; fi
 grep -q EXPERIMENTAL "$W/r0.out" && [ ! -e "$W/root/rustfs/docker-compose.yml" ] && ok "rustfs: refused without --accept-experimental, nothing written" || { cat "$W/r0.out"; fail "rustfs gate"; }
 ad install rustfs --yes --accept-experimental > "$W/r1.out" 2>&1 && grep -q 'rustfs: bucket itbucket' "$W/r1.out" \
-  && ok "rustfs: install (pinned $(sed -n 's/^RUSTFS_IMAGE=//p' "$W/root/rustfs/stack.env")), bucket created with the generated root key" || { tail -30 "$W/r1.out"; fail "rustfs install"; }
+  && ok "rustfs: install (pinned $(sed -n 's/^RUSTFS_IMAGE=//p' "$W/root/rustfs/stack.env")), bucket created with the generated root key" || { it_why "$W/r1.out" 30; fail "rustfs install"; }
 printf 'AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\nAWS_DEFAULT_REGION=us-east-1\n' "$(sed -n 's/^RUSTFS_ACCESS_KEY=//p' "$W/root/rustfs/secrets.env")" \
   "$(sed -n 's/^RUSTFS_SECRET_KEY=//p' "$W/root/rustfs/secrets.env")" > "$W/r.root"; chmod 600 "$W/r.root"
 [ "$(s3 "$W/r.root" PUT "http://127.0.0.1:29000/itbucket/a.txt" --data-binary @"$W/obj.txt")" = 200 ] && [ "$(s3 "$W/r.root" GET "http://127.0.0.1:29000/itbucket/a.txt")" = 200 ] \

@@ -44,6 +44,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `reset` and `uninstall --purge` accept `--force-prod`. On a server with a protected env they told you to add
   the flag but never parsed it (only `RESET_FORCE_PROD=1` / `PURGE_FORCE_PROD=1` worked); unknown options are
   now refused instead of ignored.
+- `make it` flake: the DB manager's `doctor` measured the laptop's disk (`DB_DIR` sits in `/tmp` in the suites).
+  At 90% full it reported a PROBLEM, so `upgrade` rolled back and upgrade-it failed depending on how full the
+  disk was. The limits are now keys (`DOCTOR_DISK_WARN_PCT`/`DOCTOR_DISK_BAD_PCT`, 80/90; add-ons
+  `ADDON_DISK_WARN_PCT`/`ADDON_DISK_BAD_PCT`, 85/95), validated, and the suites set them to 100. Suites print
+  the PROBLEM / `!!` lines on failure (`it_why`), not only a tail that had scrolled past them.
 
 ### Added (P2: manager 1.5.0, monitoring, progress)
 

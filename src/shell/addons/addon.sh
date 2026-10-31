@@ -72,6 +72,8 @@ load_addon() { # pinned defaults, then the conf again so it wins, then what inst
   ADDON_NETWORK="${ADDON_NETWORK:-bridge}"; [ "$n" = garage ] || ADDON_NETWORK=bridge
   ADDON_DATA_DIR="${OPT_DATA_DIR:-${ADDON_DATA_DIR:-$ADDONS_DIR/$n}}"
   case "$ADDON_ROLE" in web|db|dedicated) ;; *) CODE=2 die "--role must be web, db or dedicated" ;; esac
+  local v; for v in "${ADDON_DISK_WARN_PCT:-85}" "${ADDON_DISK_BAD_PCT:-95}"; do
+    [[ "$v" =~ ^[0-9]+$ ]] && [ "$v" -le 100 ] || CODE=2 die "ADDON_DISK_WARN_PCT / ADDON_DISK_BAD_PCT must be 0-100"; done
   case "$ADDON_NETWORK" in host|bridge) ;; *) CODE=2 die "ADDON_NETWORK must be host or bridge" ;; esac
 }
 pinned_keys() { grep -oE '^[A-Z0-9_]+=' "$STACKS/$1/addon.env.example" | tr -d =; }
@@ -465,7 +467,8 @@ doctor_one() {
   esac
   if [ "$ADDON_KIND" = storage ] && [ -d "$ADDON_DATA_DIR" ]; then
     local use; use="$(df -P "$ADDON_DATA_DIR" | awk 'NR==2 {gsub("%","",$5); print $5}')"
-    if [ "${use:-0}" -ge 95 ]; then bad "data disk ${use}% full"; elif [ "${use:-0}" -ge 85 ]; then dwarn "data disk ${use}% full"; else ok "data disk ${use}% used"; fi
+    local dbad="${ADDON_DISK_BAD_PCT:-95}" dwrn="${ADDON_DISK_WARN_PCT:-85}"
+    if [ "${use:-0}" -ge "$dbad" ]; then bad "data disk ${use}% full (limit $dbad%)"; elif [ "${use:-0}" -ge "$dwrn" ]; then dwarn "data disk ${use}% full"; else ok "data disk ${use}% used"; fi
     [ "$ADDON_ROLE" = web ] && dwarn "storage on the web node: backups of the app droplet now include object data; prefer db/dedicated"
     dwarn "back up object data off this droplet (see stacks/addons/README.md#backups)"
   fi

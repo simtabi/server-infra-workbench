@@ -27,6 +27,8 @@ PG_IMAGE=vsw-test/postgres:18
 PGVECTOR_PKG=postgresql-18-pgvector
 CONF
 chmod 600 "$W/dbm.conf"
+# the host disk is the laptop's, not a server's: its fill level must not fail doctor (the 1.4 upgrade flake)
+export DOCTOR_DISK_WARN_PCT=100 DOCTOR_DISK_BAD_PCT=100
 export DB_DIR="$D" PRIVATE_IP=127.0.0.1 VPC_CIDR=127.0.0.0/8 DBM_CONFIG="$W/dbm.conf" \
   DBM_LOCK="$W/lock" DBM_LOG="$W/run.log" BACKUP_DIR="$W/backups" MIN_FREE_MB=10 \
   STATE_DIR="$W/state" ENV_SECRETS_DIR="$W/secrets" DOCKER_SUBNET=172.30.98.0/24 DOCKER_NETWORK=vsw_dbf \
@@ -39,7 +41,7 @@ psq()  { dcx exec -T postgres psql -X -tA -U "$1" -d "$2" -c "$3"; }
 cli()  { docker run --rm --network host -v "$W:/w:ro" "$@"; }
 
 # ---- install with verify-full + MySQL ----------------------------------------------
-run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "install: postgres + pgbouncer + mysql, TLS_MODE=verify-full" || { tail -40 "$W/install.out"; fail "install"; }
+run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "install: postgres + pgbouncer + mysql, TLS_MODE=verify-full" || { it_why "$W/install.out" 40; fail "install"; }
 pw="$(grep '^PG_PASSWORD=' "$D/.env" | cut -d= -f2-)"
 
 # ---- verify-full -----------------------------------------------------------------------
@@ -72,13 +74,13 @@ run cmd_create_db shopm mysql --readonly-user --out "$W/shopm.creds" > "$W/cdbm.
 
 # ---- metrics -----------------------------------------------------------------------------
 psq vsw_admin app "create table t_it(id int primary key, v text); insert into t_it select g, md5(g::text) from generate_series(1,500) g; grant select on t_it to app" >/dev/null  # the grant must survive pg-major-upgrade
-run cmd_backup > "$W/bk.out" 2>&1 || { tail -20 "$W/bk.out"; fail "backup"; }
+run cmd_backup > "$W/bk.out" 2>&1 || { it_why "$W/bk.out" 20; fail "backup"; }
 f="$W/textfile/vsw_db.prom"
 grep -q '^vsw_backup_last_success_timestamp_seconds{engine="all"} [0-9]\{10\}$' "$f" && grep -q '^vsw_tls_cert_expiry_timestamp_seconds{cert="db"} [0-9]\{10\}$' "$f" \
   && grep -q '^vsw_reboot_required [01]$' "$f" && [ "$(stat -f %Lp "$f" 2>/dev/null || stat -c %a "$f")" = 644 ] \
   && ok "backup writes textfile metrics (backup time, TLS expiry, reboot flag; 644)" || { cat "$f" 2>/dev/null; fail "metrics"; }
 run cmd_restore_test > "$W/rt.out" 2>&1 && grep -q 'restore test OK' "$W/rt.out" && grep -q '^vsw_restore_test_last_success_timestamp_seconds [0-9]' "$f" \
-  && ok "restore-test (postgres + mysql) ok and its metric written" || { tail -30 "$W/rt.out"; fail "restore-test"; }
+  && ok "restore-test (postgres + mysql) ok and its metric written" || { it_why "$W/rt.out" 30; fail "restore-test"; }
 if command -v promtool >/dev/null 2>&1; then promtool check metrics < "$f" >/dev/null 2>&1 && ok "promtool accepts the textfile" || fail "promtool metrics"
 else docker run --rm -i --entrypoint promtool prom/prometheus:v3.15.1 check metrics < "$f" >/dev/null 2>&1 && ok "promtool accepts the textfile" || fail "promtool metrics"; fi
 
@@ -101,9 +103,9 @@ MM_ALLOW_PLAIN=1 run cmd_migrate_managed --target-env "$W/target.env" --check > 
   && ok "migrate-managed --check passes, password never printed" || { cat "$W/mm3.out"; fail "mm check"; }
 FORCE=1 MM_ALLOW_PLAIN=1 run cmd_migrate_managed --target-env "$W/target.env" > "$W/mm4.out" 2>&1 && grep -q 'MIGRATE OK' "$W/mm4.out" \
   && [ "$(docker exec vsw-dbf-target psql -U doadmin -d app -tAc 'select count(*) from t_it')" = 500 ] && ! grep -q "$tpw" "$W/mm4.out" "$DBM_LOG" \
-  && ok "migrate-managed: data copied, row counts compared, password not in output or log" || { tail -30 "$W/mm4.out"; fail "mm copy"; }
+  && ok "migrate-managed: data copied, row counts compared, password not in output or log" || { it_why "$W/mm4.out" 30; fail "mm copy"; }
 FORCE=1 MM_ALLOW_PLAIN=1 run cmd_migrate_managed --target-env "$W/target.env" > "$W/mm5.out" 2>&1 && grep -q 'MIGRATE OK' "$W/mm5.out" \
-  && ok "migrate-managed: re-run (final sync) replaces the target copy" || { tail -30 "$W/mm5.out"; fail "mm rerun"; }
+  && ok "migrate-managed: re-run (final sync) replaces the target copy" || { it_why "$W/mm5.out" 30; fail "mm rerun"; }
 
 # ---- pg-major-upgrade --------------------------------------------------------------------
 run cmd_pg_major_upgrade --to 19 --base-image "$NEXT_BASE" --dry-run > "$W/pgmu0.out" 2>&1 && grep -q 'dry run: nothing changed' "$W/pgmu0.out" \
@@ -115,7 +117,7 @@ if docker pull -q "$NEXT_BASE" >/dev/null 2>&1; then
   if grep -q 'ROLLED BACK to 18' "$W/pgmu2.out" && [ "$(psq vsw_admin app 'select current_setting($$server_version_num$$)::int / 10000')" = 18 ] \
     && [ "$(psq vsw_admin app 'select count(*) from t_it')" = 500 ] && grep -q '^PG_BASE_IMAGE=postgres:18$' "$W/dbm.conf"; then
     ok "pg-major-upgrade forced failure -> rolled back to 18, data and config intact"
-    FORCE=1 run cmd_pg_major_upgrade --to 19 --base-image "$NEXT_BASE" > "$W/pgmu3.out" 2>&1 && grep -q 'PG MAJOR UPGRADE OK: 18 -> 19' "$W/pgmu3.out" || { tail -40 "$W/pgmu3.out"; fail "pgmu 19 run"; }
+    FORCE=1 run cmd_pg_major_upgrade --to 19 --base-image "$NEXT_BASE" > "$W/pgmu3.out" 2>&1 && grep -q 'PG MAJOR UPGRADE OK: 18 -> 19' "$W/pgmu3.out" || { it_why "$W/pgmu3.out" 40; fail "pgmu 19 run"; }
     v="$(psq vsw_admin app 'select current_setting($$server_version_num$$)::int / 10000')"; [ "$v" = 19 ] || fail "pgmu 19: server version is $v"
     [ "$(psq vsw_admin app 'select count(*) from t_it')" = 500 ] || fail "pgmu 19: row count"
     grep -q "^PG_BASE_IMAGE=$NEXT_BASE\$" "$W/dbm.conf" || { grep '^PG_' "$W/dbm.conf"; fail "pgmu 19: config not updated"; }
@@ -128,6 +130,6 @@ if docker pull -q "$NEXT_BASE" >/dev/null 2>&1; then
     run cmd_doctor > "$W/doctor2.out" 2>&1 && ok "doctor clean on 19" || { grep PROBLEM "$W/doctor2.out" || true; echo "note: doctor problems on 19 (see above)"; }
   elif grep -q 'build postgres 19' "$W/pgmu2.out" && grep -q 'ROLLED BACK' "$W/pgmu2.out"; then
     echo "skip pg-major-upgrade happy path: the 19 image did not build here (pgvector for 19 missing?) - rollback was exercised"
-  else tail -40 "$W/pgmu2.out"; fail "pgmu rollback"; fi
+  else it_why "$W/pgmu2.out" 40; fail "pgmu rollback"; fi
 else echo "skip pg-major-upgrade apply: cannot pull $NEXT_BASE"; fi
 echo "db-features-it: $pass checks passed"

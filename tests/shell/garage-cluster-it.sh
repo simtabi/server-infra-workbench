@@ -34,6 +34,8 @@ GARAGE_ZONE=dc$i
 GARAGE_CAPACITY=1G
 GARAGE_REPLICATION=3
 STORAGE_BUCKET=cluster
+ADDON_DISK_WARN_PCT=100
+ADDON_DISK_BAD_PCT=100
 CONF
 done
 # node N: its own conf and compose project (the template's `name:` is overridden by COMPOSE_PROJECT_NAME)
@@ -49,7 +51,7 @@ docker image inspect "$CURL_IMAGE" >/dev/null 2>&1 || docker pull -q "$CURL_IMAG
 openssl rand -hex 64 > "$W/obj.bin"
 
 node 1 install garage --role web --yes > "$W/n1.out" 2>&1 && grep -q 'layout staged' "$W/n1.out" && ! grep -q 'garage: bucket' "$W/n1.out" \
-  && ok "node 1: installed in host mode; layout staged (1 of 3), no bucket yet" || { tail -30 "$W/n1.out"; fail "node 1 install"; }
+  && ok "node 1: installed in host mode; layout staged (1 of 3), no bucket yet" || { it_why "$W/n1.out" 30; fail "node 1 install"; }
 c1="$(docker ps -q --filter label=com.docker.compose.project=vsw-gcl-n1)"
 [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$c1")" = host ] && [ -z "$(docker port "$c1")" ] \
   && ok "host networking: no published ports" || fail "network mode"
@@ -64,11 +66,11 @@ if node 2 install garage --role web --yes > "$W/n2a.out" 2>&1; then fail "node 2
 grep -q 'copy secrets.env' "$W/n2a.out" && [ ! -e "$W/n2/garage/docker-compose.yml" ] && ok "joining without the cluster's secrets.env is refused before anything is written" || { cat "$W/n2a.out"; fail "join gate"; }
 mkdir -p "$W/n2/garage" "$W/n3/garage"; chmod 700 "$W/n2" "$W/n3"
 (umask 077; cp "$W/n1/garage/secrets.env" "$W/n2/garage/secrets.env"; cp "$W/n1/garage/secrets.env" "$W/n3/garage/secrets.env")
-node 2 install garage --role web --yes > "$W/n2.out" 2>&1 && grep -q 'layout staged' "$W/n2.out" && ok "node 2: joined node 1; layout staged (2 of 3)" || { tail -30 "$W/n2.out"; fail "node 2 install"; }
+node 2 install garage --role web --yes > "$W/n2.out" 2>&1 && grep -q 'layout staged' "$W/n2.out" && ok "node 2: joined node 1; layout staged (2 of 3)" || { it_why "$W/n2.out" 30; fail "node 2 install"; }
 id2="$(node 2 garage-node-id)"
 printf 'GARAGE_PEERS=%s,%s\n' "$id1" "$id2" >> "$W/n3.conf"
 node 3 install garage --role web --yes > "$W/n3.out" 2>&1 && grep -q 'garage: layout apply version 1' "$W/n3.out" && grep -q 'garage: bucket cluster' "$W/n3.out" \
-  && grep -q 'garage: app key' "$W/n3.out" && ok "node 3: third zone applies layout v1, creates the bucket and app key" || { tail -30 "$W/n3.out"; fail "node 3 install"; }
+  && grep -q 'garage: app key' "$W/n3.out" && ok "node 3: third zone applies layout v1, creates the bucket and app key" || { it_why "$W/n3.out" 30; fail "node 3 install"; }
 gx 1 layout show > "$W/layout.out" 2>&1
 [ "$(sed '/STAGED/,$d' "$W/layout.out" | grep -cE '^[0-9a-f]{16} .* dc[123] ')" = 3 ] && grep -q 'Zone redundancy: maximum' "$W/layout.out" \
   && ok "layout: 3 nodes in 3 zones, maximum zone redundancy" || { cat "$W/layout.out"; fail "layout"; }
@@ -92,7 +94,7 @@ for _ in $(seq 1 30); do [ "$(gx 1 status 2>/dev/null | sed -n '/HEALTHY NODES/,
 node 1 doctor garage > "$W/doc.out" 2>&1 && grep -q 'healthy nodes: 3 (replication 3)' "$W/doc.out" && grep -q 'layout applied' "$W/doc.out" \
   && ok "doctor on node 1: layout applied, 3 healthy nodes" || { cat "$W/doc.out"; gx 1 status; fail "doctor"; }
 node 3 install garage --role web --yes > "$W/n3b.out" 2>&1 && ! grep -qE 'garage: (layout|bucket|app key)' "$W/n3b.out" \
-  && ok "re-install on node 3 is idempotent" || { tail -20 "$W/n3b.out"; fail "idempotent"; }
+  && ok "re-install on node 3 is idempotent" || { it_why "$W/n3b.out" 20; fail "idempotent"; }
 sed -i.bak 's/^GARAGE_REPLICATION=3/GARAGE_REPLICATION=1/' "$W/n1.conf"
 if node 1 plan garage > "$W/rf.out" 2>&1; then fail "replication change accepted"; fi
 grep -q 'cannot change it in place' "$W/rf.out" && ok "changing replication on an installed node is refused" || { cat "$W/rf.out"; fail "rf gate"; }

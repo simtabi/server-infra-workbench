@@ -139,7 +139,7 @@ Object storage on one droplet is not a backup: the droplet's snapshots and the d
 - Gotenberg: basic auth is on when the bind is not loopback, and the SSRF guard is on
 - Garage: the layout is applied, and the bucket and app key exist
 - SeaweedFS and RustFS: anonymous S3 requests are denied
-- data disk usage (warning at 85%, problem at 95%)
+- data disk usage (warning at 85%, problem at 95%; `ADDON_DISK_WARN_PCT` / `ADDON_DISK_BAD_PCT`)
 - free memory
 
 It also warns that object data needs a copy off the node.

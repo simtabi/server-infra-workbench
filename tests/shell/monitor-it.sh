@@ -27,6 +27,8 @@ trap cleanup EXIT
 docker network inspect vsw_monitor >/dev/null 2>&1 && { echo "monitor-it: a vsw_monitor network already exists here; refusing to touch it"; trap - EXIT; rm -rf "$W"; exit 1; }
 mkdir -p "$W/textfile"
 printf 'PG_BASE_IMAGE=postgres:18\nPG_IMAGE=vsw-test/postgres:18\nPGVECTOR_PKG=postgresql-18-pgvector\n' > "$W/dbm.conf"; chmod 600 "$W/dbm.conf"
+# the host disk is the laptop's, not a server's: its fill level must not fail doctor (the 1.4 upgrade flake)
+export DOCTOR_DISK_WARN_PCT=100 DOCTOR_DISK_BAD_PCT=100
 export DB_DIR="$D" PRIVATE_IP=127.0.0.1 VPC_CIDR=127.0.0.0/8 DBM_CONFIG="$W/dbm.conf" DBM_LOCK="$W/lock" DBM_LOG="$W/run.log" \
   BACKUP_DIR="$W/backups" MIN_FREE_MB=10 STATE_DIR="$W/state" ENV_SECRETS_DIR="$W/secrets" DOCKER_SUBNET=172.30.97.0/24 DOCKER_NETWORK=vsw_dbm \
   ENABLE_MYSQL=0 ENABLE_MARIADB=0 ENABLE_ADMINER=0 PG_PORT=25451 PGBOUNCER_PORT=26451 PG_USER=app PG_DB=app \
@@ -62,18 +64,18 @@ prom() { curl -fsS -m 10 "http://127.0.0.1:29090$1"; }
 q() { prom "/api/v1/query?query=$1" | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "")'; }
 
 # ---- the DB side: manager install, vsw_monitor role, a backup for the textfile metrics -----------------------------
-run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "manager install (postgres + pgbouncer)" || { tail -40 "$W/install.out"; docker logs --tail 30 vswmon-postgres-1 2>&1 | sed "s/^/  pg: /"; fail "install"; }
+run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "manager install (postgres + pgbouncer)" || { it_why "$W/install.out" 40; docker logs --tail 30 vswmon-postgres-1 2>&1 | sed "s/^/  pg: /"; fail "install"; }
 run cmd_monitor_user > "$W/mu.out" 2>&1 && [ "$(stat -f %Lp "$W/pg-monitor.pass" 2>/dev/null || stat -c %a "$W/pg-monitor.pass")" = 600 ] \
   && ! cat "$W/mu.out" "$DBM_LOG" 2>/dev/null | grep -qF "$(cat "$W/pg-monitor.pass")" && ok "monitor-user: role created, password file 600, never printed" || { cat "$W/mu.out"; fail "monitor-user"; }
 run cmd_monitor_user > "$W/mu2.out" 2>&1 && ok "monitor-user is idempotent" || { cat "$W/mu2.out"; fail "monitor-user rerun"; }
 (cd "$D" && docker compose --env-file .env --env-file stack.env exec -T postgres psql -X -tA -U vsw_admin -d postgres \
   -c "select rolsuper::int::text || pg_has_role('vsw_monitor','pg_monitor','member')::int::text || rolconnlimit::text from pg_roles where rolname='vsw_monitor'") | grep -qx '015' \
   && ok "vsw_monitor: not superuser, member of pg_monitor, connection limit 5" || fail "role attrs"
-run cmd_backup > "$W/bk.out" 2>&1 && grep -q 'vsw_backup_last_success_timestamp_seconds' "$W/textfile/vsw_db.prom" && ok "backup writes the textfile metrics" || { tail -20 "$W/bk.out"; fail "backup"; }
+run cmd_backup > "$W/bk.out" 2>&1 && grep -q 'vsw_backup_last_success_timestamp_seconds' "$W/textfile/vsw_db.prom" && ok "backup writes the textfile metrics" || { it_why "$W/bk.out" 20; fail "backup"; }
 
 # ---- monitoring install ----------------------------------------------------------------------------------------
 mon plan > "$W/plan.out" 2>&1 && grep -q 'postgres-exporter, pgbouncer-exporter' "$W/plan.out" && ok "plan: 5 units, DB exporters on" || { cat "$W/plan.out"; fail "plan"; }
-mon install --yes > "$W/mi.out" 2>&1 && grep -q 'monitoring is up on itnode' "$W/mi.out" && ok "install: beszel, beszel-agent, kuma, prometheus, exporters healthy" || { tail -60 "$W/mi.out"; fail "monitor install"; }
+mon install --yes > "$W/mi.out" 2>&1 && grep -q 'monitoring is up on itnode' "$W/mi.out" && ok "install: beszel, beszel-agent, kuma, prometheus, exporters healthy" || { it_why "$W/mi.out" 60; fail "monitor install"; }
 bad=0; for u in beszel beszel-agent kuma prometheus exporters; do for f in secrets.env stack.env; do
   [ "$(stat -f %Lp "$W/mon/$u/$f" 2>/dev/null || stat -c %a "$W/mon/$u/$f")" = 600 ] || bad=1; done; done
 [ "$bad" = 0 ] && ok "every secrets.env / stack.env is 600" || fail "modes"
@@ -116,7 +118,7 @@ mon targets > "$W/tg.out" 2>&1 || { cat "$W/tg.out"; fail "targets"; }
 for _ in $(seq 1 30); do [ "$(q 'probe_success')" = 1 ] && break; sleep 3; done
 [ "$(q 'probe_success')" = 1 ] && ok "targets: a new probe URL is picked up without a restart (blackbox probe_success 1)" || fail "probe"
 h1="$(cat "$W"/mon/*/secrets.env | shasum | cut -c1-12)"
-mon install --yes > "$W/mi2.out" 2>&1 && [ "$(cat "$W"/mon/*/secrets.env | shasum | cut -c1-12)" = "$h1" ] && ok "re-install is idempotent and keeps every secret" || { tail -30 "$W/mi2.out"; fail "reinstall"; }
+mon install --yes > "$W/mi2.out" 2>&1 && [ "$(cat "$W"/mon/*/secrets.env | shasum | cut -c1-12)" = "$h1" ] && ok "re-install is idempotent and keeps every secret" || { it_why "$W/mi2.out" 30; fail "reinstall"; }
 mon remove kuma --yes > "$W/rm.out" 2>&1 && ls -d "$W"/mon/.removed-kuma-* >/dev/null 2>&1 && [ -z "$(docker ps -q --filter name=vsw-mon-kuma)" ] \
   && ok "remove kuma: containers gone, files kept" || { cat "$W/rm.out"; fail "remove"; }
 grep -q 'unit=kuma removed; files kept' "$W/audit.log" && ok "audit log records installs and the removal" || fail "audit"

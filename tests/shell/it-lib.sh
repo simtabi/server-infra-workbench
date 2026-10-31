@@ -21,3 +21,9 @@ it_purge() {
     docker volume ls -q --filter "label=com.docker.compose.project=$p" | xargs -r docker volume rm >/dev/null 2>&1 || true
   done
 }
+# it_why FILE [N]: on a failure, show why before the tail: a long run's PROBLEM / !! / ERROR lines scroll
+# out of `tail -N` (the 1.4 upgrade flake printed "doctor: 1 problems" without the problem itself).
+it_why() {
+  echo "---- problem lines in $(basename "$1"):"; grep -E 'PROBLEM|^!!|ERROR|FATAL|unhealthy' "$1" 2>/dev/null | head -20 || true
+  echo "---- last ${2:-40} lines:"; tail -"${2:-40}" "$1" 2>/dev/null || true
+}
