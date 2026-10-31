@@ -86,7 +86,7 @@ fi
 
 remote="set -e
 if [ '$EXPECT' != skip ]; then
-  ip -4 addr | grep -q 'inet ${EXPECT//./\\.}/' || { echo \"ABORT: this is \$(hostname), not the db server ($EXPECT missing)\"; exit 1; }
+  ip -4 addr | grep 'inet ${EXPECT//./\\.}/' >/dev/null || { echo \"ABORT: this is \$(hostname), not the db server ($EXPECT missing)\"; exit 1; }
 fi
 echo \"OK: running on \$(hostname)\""
 [ "$UPLOAD" = 0 ] || remote+="

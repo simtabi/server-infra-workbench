@@ -68,7 +68,7 @@ ITEMS="timezone swap packages docker harden"
 want() { local i="$1"
   [ -n "$ONLY" ] && { [[ ",$ONLY," == *",$i,"* ]] || return 1; }
   [[ ",$SKIP," == *",$i,"* ]] && return 1; return 0; }
-pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed'; }
+pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep 'install ok installed' >/dev/null; }
 BASE_PKGS="ca-certificates curl gnupg jq unzip htop"
 F_SWAP="$R/swapfile" F_FSTAB="$R/etc/fstab" F_SWAPPY="$R/etc/sysctl.d/91-workbench-swap.conf"
 F_DAEMON="$R/etc/docker/daemon.json" F_DKEY="$R/etc/apt/keyrings/docker.asc" F_DLIST="$R/etc/apt/sources.list.d/docker.list"

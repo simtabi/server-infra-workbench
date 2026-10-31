@@ -101,11 +101,11 @@ CONF
     todo "Ploi server: add in Ploi -> Server -> Network: UDP $PORT from $PEER_EP (Ploi owns ufw)"
     [ -z "$DB_PORTS" ] || todo "Ploi server: and TCP ${DB_PORTS} from $PEER_IP"
   elif have ufw; then
-    ufw status | grep -qE "^$PORT/udp +ALLOW( IN)? +${PEER_EP//./\\.}( |$)" \
+    ufw status | grep -E "^$PORT/udp +ALLOW( IN)? +${PEER_EP//./\\.}( |$)" >/dev/null \
       || ufw allow proto udp from "$PEER_EP" to any port "$PORT" comment 'vsw wireguard' >/dev/null
     ok "ufw: UDP $PORT from $PEER_EP only"
     local p; for p in ${DB_PORTS//,/ }; do
-      ufw status | grep -qE "^$p/tcp on $IFACE +ALLOW( IN)? +${PEER_IP//./\\.}( |$)" \
+      ufw status | grep -E "^$p/tcp on $IFACE +ALLOW( IN)? +${PEER_IP//./\\.}( |$)" >/dev/null \
         || ufw allow in on "$IFACE" proto tcp from "$PEER_IP" to any port "$p" comment 'vsw wireguard db' >/dev/null
       ok "ufw: TCP $p on $IFACE from $PEER_IP only"
     done

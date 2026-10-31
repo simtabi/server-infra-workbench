@@ -52,7 +52,7 @@ done
 # ---- collect (key<TAB>value, one fact per line) -------------------------------------------
 fact() { printf '%s\t%s\n' "$1" "$(printf '%s' "${2:-}" | tr '\t\n' '  ' | sed 's/[[:space:]]*$//')"; }
 ver() { "$@" 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true; }
-pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed'; }
+pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep 'install ok installed' >/dev/null; }
 collect() { # best effort: a missing tool or file is a "?" fact, never an abort (runs in its own subshell)
   set +e +o pipefail
   local os_name kernel n=0 l

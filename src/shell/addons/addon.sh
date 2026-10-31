@@ -111,7 +111,7 @@ ram_report() { # $1 addon; prints findings, never fails
   if [ "$ADDON_KIND" = storage ] && [ "$ADDON_ROLE" = web ] && [ "$total" -le 2048 ]; then
     warn "object storage on a ${total} MB web node competes with PHP-FPM; prefer the db node (once MySQL/MariaDB are off) or a dedicated droplet"
   fi
-  if [ "$ADDON_ROLE" = db ] && command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -qE 'mysql|mariadb'; then
+  if [ "$ADDON_ROLE" = db ] && command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -E 'mysql|mariadb' >/dev/null; then
     warn "MySQL/MariaDB still run on this db node; disable them first or size up (docker-db-server-manager.sh engines)"
   fi
 }
@@ -312,7 +312,7 @@ g() { dca garage exec -T -e RUST_LOG=warn garage /garage "$@"; }
 garage_setup() {
   local ver id key="vsw-app-$STORAGE_BUCKET"
   for _ in $(seq 1 30); do g status >/dev/null 2>&1 && break; sleep 2; done
-  if g status 2>/dev/null | grep -q 'NO ROLE ASSIGNED'; then
+  if g status 2>/dev/null | grep 'NO ROLE ASSIGNED' >/dev/null; then
     id="$(g node id -q 2>/dev/null | head -1 | cut -d@ -f1)"; [ -n "$id" ] || die "garage: no node id"
     ver="$(g layout show 2>/dev/null | sed -n 's/.*[Cc]urrent cluster layout version: *\([0-9]*\).*/\1/p' | head -1)"
     log "garage: layout zone=$GARAGE_ZONE capacity=$GARAGE_CAPACITY version $(( ${ver:-0} + 1 ))"
@@ -329,7 +329,7 @@ garage_setup() {
 sw_shell() { dca seaweedfs exec -T seaweedfs weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888; }
 seaweed_setup() {
   for _ in $(seq 1 30); do echo "s3.bucket.list" | sw_shell >/dev/null 2>&1 && break; sleep 2; done
-  if ! echo "s3.bucket.list" | sw_shell 2>/dev/null | grep -qE "(^|[[:space:]])$STORAGE_BUCKET([[:space:]]|$)"; then
+  if ! echo "s3.bucket.list" | sw_shell 2>/dev/null | grep -E "(^|[[:space:]])$STORAGE_BUCKET([[:space:]]|$)" >/dev/null; then
     log "seaweedfs: bucket $STORAGE_BUCKET"; echo "s3.bucket.create -name $STORAGE_BUCKET" | sw_shell >/dev/null
   fi
   log "seaweedfs: app identity vsw-app limited to $STORAGE_BUCKET (s3.json)"
@@ -408,7 +408,7 @@ doctor_one() {
     [ -z "$hostips" ] && dwarn "no published ports found"
     [ -n "$hostips" ] && [ "$exposed" = 0 ] && ok "published only on: $(echo "$hostips" | tr ' ' '\n' | sort -u | tr '\n' ' ')"
   elif command -v ss >/dev/null 2>&1; then
-    if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -E ":(${GARAGE_S3_PORT}|${GARAGE_RPC_PORT}|${GARAGE_ADMIN_PORT})$" | grep -qE '^(0\.0\.0\.0|\*|\[::\]):'; then
+    if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -E ":(${GARAGE_S3_PORT}|${GARAGE_RPC_PORT}|${GARAGE_ADMIN_PORT})$" | grep -E '^(0\.0\.0\.0|\*|\[::\]):' >/dev/null; then
       bad "garage listens on all interfaces; check garage.toml bind addresses"
     else ok "garage listens on $ADDON_BIND / 127.0.0.1 only"; fi
   else dwarn "ss not available; listening addresses not checked"; fi
@@ -417,8 +417,8 @@ doctor_one() {
       if ! is_loopback "$ADDON_BIND" && [ "$GOTENBERG_BASIC_AUTH_ON" != true ]; then bad "bound to $ADDON_BIND without basic auth"; fi
       [ "$GOTENBERG_DENY_PRIVATE_IPS" = true ] && ok "SSRF guard on (private IPs denied)" || dwarn "GOTENBERG_DENY_PRIVATE_IPS is off: rendered HTML can reach internal services" ;;
     garage)
-      g status 2>/dev/null | grep -q 'NO ROLE ASSIGNED' && bad "layout not applied (re-run install)" || ok "layout applied"
-      if g bucket info "$STORAGE_BUCKET" 2>/dev/null | grep -q "vsw-app-$STORAGE_BUCKET"; then ok "bucket $STORAGE_BUCKET has key vsw-app-$STORAGE_BUCKET"
+      g status 2>/dev/null | grep 'NO ROLE ASSIGNED' >/dev/null && bad "layout not applied (re-run install)" || ok "layout applied"
+      if g bucket info "$STORAGE_BUCKET" 2>/dev/null | grep "vsw-app-$STORAGE_BUCKET" >/dev/null; then ok "bucket $STORAGE_BUCKET has key vsw-app-$STORAGE_BUCKET"
       else bad "bucket $STORAGE_BUCKET or its app key is missing (re-run install)"; fi ;;
     seaweedfs|rustfs)
       local port code; port="$([ "$n" = seaweedfs ] && echo "$SEAWEED_S3_PORT" || echo "$RUSTFS_PORT")"

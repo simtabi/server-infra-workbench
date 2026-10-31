@@ -124,7 +124,7 @@ if [ -n "$qc" ] && [ "$qc" != sync ]; then
   else warn "QUEUE_CONNECTION=$qc but no queue:work/horizon process"; why "jobs pile up silently; add a daemon: workbench ploi daemon-create"; fi
 fi
 if [ -f "$APP/artisan" ]; then
-  if crontab -l -u "$OWNER" 2>/dev/null | grep -q 'schedule:run'; then ok "scheduler in $OWNER's crontab"
+  if crontab -l -u "$OWNER" 2>/dev/null | grep 'schedule:run' >/dev/null; then ok "scheduler in $OWNER's crontab"
   else warn "no schedule:run in $OWNER's crontab"; why "scheduled tasks (backups, pruning, reports) never run"; fi
 fi
 # -- web stack

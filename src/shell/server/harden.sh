@@ -128,7 +128,7 @@ F_SYSCTL="$R/etc/sysctl.d/90-workbench.conf"
 F_JOURNAL="$R/etc/systemd/journald.conf.d/90-workbench.conf"
 
 same() { [ -f "$1" ] && cmp -s "$1" <("$2"); }
-pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed'; }
+pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep 'install ok installed' >/dev/null; }
 docker_members() { # non-root members of the docker group that are not allowed, one per line
   local line u; line="$(grep -E '^docker:' "$R/etc/group" 2>/dev/null | head -1 || true)"
   [ -n "$line" ] || return 0
@@ -176,7 +176,7 @@ plan_item() { # plan_item NAME : prints the state, queues the item when it needs
       fi ;;
     firewall)
       if ploi_managed; then warn "firewall: Ploi server - skipped (manage rules in Ploi > Network)"; return 0; fi
-      if have ufw && ufw status 2>/dev/null | grep -q 'Status: active'; then ok "firewall: ufw active (review: ufw status verbose)"
+      if have ufw && ufw status 2>/dev/null | grep 'Status: active' >/dev/null; then ok "firewall: ufw active (review: ufw status verbose)"
       else todo "firewall: ufw allow OpenSSH${ALLOW:+ + $ALLOW}, default deny incoming, enable"; PENDING+=(firewall); why "defence in depth behind the DO cloud firewall"; fi ;;
   esac
 }
@@ -226,7 +226,7 @@ apply_item() {
 # ---- run -------------------------------------------------------------------------
 say "harden plan (role $ROLE$(ploi_managed && echo ', Ploi server')):"
 for i in $ITEMS; do want "$i" && plan_item "$i"; done
-if have docker && docker ps --format '{{.Ports}}' 2>/dev/null | grep -q '0\.0\.0\.0:'; then
+if have docker && docker ps --format '{{.Ports}}' 2>/dev/null | grep '0\.0\.0\.0:' >/dev/null; then
   warn "docker publishes a port on 0.0.0.0 - Docker bypasses ufw; bind to the private IP"
 fi
 if [ "${#PENDING[@]}" -eq 0 ]; then summary; say "nothing to change"; exit $(( c_fail > 0 ? 1 : 0 )); fi

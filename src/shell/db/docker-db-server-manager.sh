@@ -321,7 +321,7 @@ detect_ip() {
 # unless that address is actually configured on this host.
 guard_host() {
   [ -n "${EXPECTED_PRIVATE_IP:-}" ] || return 0
-  ip -4 -o addr show 2>/dev/null | grep -q "inet ${EXPECTED_PRIVATE_IP//./\\.}/" \
+  ip -4 -o addr show 2>/dev/null | grep "inet ${EXPECTED_PRIVATE_IP//./\\.}/" >/dev/null \
     || die "ABORT: $(hostname) does not have $EXPECTED_PRIVATE_IP - wrong server?"
 }
 
@@ -823,7 +823,7 @@ ensure_tls() {
   (umask 077; mkdir -p "$d")
   local want_ip have_sans; have_sans="$(openssl x509 -noout -ext subjectAltName -in "$d/server.crt" 2>/dev/null || true)"
   for want_ip in "$PRIVATE_IP" $(extra_binds); do
-    [ -z "$have_sans" ] || grep -q "IP Address:$want_ip\$\|IP Address:$want_ip," <<<"$have_sans" || { echo "TLS: certificate lacks $want_ip - reissuing"; rm -f "$d/server.crt"; break; }
+    [ -z "$have_sans" ] || grep "IP Address:$want_ip\$\|IP Address:$want_ip," >/dev/null <<<"$have_sans" || { echo "TLS: certificate lacks $want_ip - reissuing"; rm -f "$d/server.crt"; break; }
   done
   if [ ! -f "$d/server.crt" ] || ! openssl x509 -checkend $((30 * 86400)) -noout -in "$d/server.crt" >/dev/null 2>&1; then
     echo "TLS: generating a CA and server certificate in $d ($TLS_DAYS days)"
@@ -1136,7 +1136,7 @@ firewall() {
         ufw allow proto tcp from "$VPC_CIDR" to any port "$p"
       fi
     done
-    ufw status | grep -q "Status: active" || warn "ufw is installed but NOT active"
+    ufw status | grep "Status: active" >/dev/null || warn "ufw is installed but NOT active"
   else
     warn "ufw not installed - skipping firewall rules (ports are bound to $PRIVATE_IP only)"
   fi
@@ -1754,8 +1754,8 @@ preflight() {
   ports="$(dc ps --format '{{.Service}} {{.Ports}}')"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    if echo "$line" | grep -qE '(^| |,)(0\.0\.0\.0|\[?::\]?):[0-9]+->'; then echo "  PUBLIC port: $line - PROBLEM"; bad=2; fi
-    case "$line" in adminer*) echo "$line" | grep -qE '127\.0\.0\.1:[0-9]+->' || { echo "  adminer not on loopback: $line - PROBLEM"; bad=2; } ;; esac
+    if echo "$line" | grep -E '(^| |,)(0\.0\.0\.0|\[?::\]?):[0-9]+->' >/dev/null; then echo "  PUBLIC port: $line - PROBLEM"; bad=2; fi
+    case "$line" in adminer*) echo "$line" | grep -E '127\.0\.0\.1:[0-9]+->' >/dev/null || { echo "  adminer not on loopback: $line - PROBLEM"; bad=2; } ;; esac
   done <<<"$ports"
   [ "$bad" = 2 ] && warn "a port is published on every interface now; the upgrade rewrites bindings to $PRIVATE_IP / 127.0.0.1"
   echo "preflight ok"
@@ -1805,7 +1805,7 @@ savepoint() {
   if [ -f "$prev" ]; then cp -p "$prev" "$SAVE/manager.sh"; else warn "manager script not found at $SELF; savepoint has no script copy"; fi
   local cfg="${DBM_PREV_CONFIG:-$DBM_CONFIG.prev}"; [ -f "$cfg" ] || cfg="$DBM_CONFIG"
   [ -f "$cfg" ] && cp -p "$cfg" "$SAVE/manager.conf"
-  if on "$ENABLE_PGBOUNCER" && dc ps --status running --services 2>/dev/null | grep -qx pgbouncer; then
+  if on "$ENABLE_PGBOUNCER" && dc ps --status running --services 2>/dev/null | grep -x pgbouncer >/dev/null; then
     mkdir -p "$SAVE/pgbouncer"
     dc exec -T pgbouncer cat /etc/pgbouncer/pgbouncer.ini > "$SAVE/pgbouncer/pgbouncer.ini" 2>/dev/null || true
     dc exec -T pgbouncer cat /etc/pgbouncer/userlist.txt > "$SAVE/pgbouncer/userlist.txt" 2>/dev/null || true
@@ -2111,7 +2111,7 @@ soft_drop() { # engine db: protected envs never lose data in one step
       local d="$BACKUP_DIR/dropped"; (umask 077; mkdir -p "$d")
       local cli=mysqldump rv=MYSQL_ROOT_PASSWORD; [ "$1" = mariadb ] && cli=mariadb-dump rv=MARIADB_ROOT_PASSWORD
       dc exec -T "$1" sh -c "MYSQL_PWD=\"\$$rv\" exec $cli -uroot --databases '$2' --single-transaction --routines --events --triggers" | gzip > "$d/$2-$ts.sql.gz"
-      gzip -cd "$d/$2-$ts.sql.gz" | tail -c 500 | grep -q 'Dump completed' || die "dump of $2 failed; NOT dropped"
+      gzip -cd "$d/$2-$ts.sql.gz" | tail -c 500 | grep 'Dump completed' >/dev/null || die "dump of $2 failed; NOT dropped"
       chmod 600 "$d/$2-$ts.sql.gz"
       printf 'DROP DATABASE `%s`;\n' "$2" | my_q "$1"
       echo "dropped $2 after a dump to $d/$2-$ts.sql.gz (kept $DROPPED_DUMP_DAYS days)" ;;
@@ -2179,7 +2179,7 @@ prune_backups() {
   else keep="$(printf '%s\n' "$all" | head -n "$KEEP")"; fi
   keep="$keep
 $(printf '%s\n' "$all" | head -1)"   # never delete the newest
-  for old in $all; do printf '%s\n' "$keep" | grep -qx "$old" || { echo "pruning $old"; rm -rf "${BACKUP_DIR:?}/$old"; }; done
+  for old in $all; do printf '%s\n' "$keep" | grep -x "$old" >/dev/null || { echo "pruning $old"; rm -rf "${BACKUP_DIR:?}/$old"; }; done
 }
 
 bk_pg() { dc exec -T postgres pg_dumpall -U "$(pg_su)" --clean --if-exists | gzip > "$1"; }
@@ -2228,12 +2228,12 @@ cmd_backup() { # [--cron]
 }
 verify_backup() { # $1 dir: every enabled engine present, gzip ok, dump trailer present, checksums
   local d="$1"; [ -n "$d" ] && [ -d "$d" ] || die "no backup to verify"
-  on "$ENABLE_POSTGRES" && { gzip -cd "$d/postgres.sql.gz" | tail -c 2000 | grep -q 'dump complete' || die "postgres dump in $d is incomplete"; }
+  on "$ENABLE_POSTGRES" && { gzip -cd "$d/postgres.sql.gz" | tail -c 2000 | grep 'dump complete' >/dev/null || die "postgres dump in $d is incomplete"; }
   local e; for e in mysql mariadb; do
     if [ "$e" = mysql ]; then on "$ENABLE_MYSQL" || continue; else on "$ENABLE_MARIADB" || continue; fi
     [ -f "$d/$e.sql.gz" ] || die "$e dump missing in $d"
     if [ -n "$(gzip -cd "$d/$e.sql.gz" | head -c 1)" ]; then
-      gzip -cd "$d/$e.sql.gz" | tail -c 500 | grep -q 'Dump completed' || die "$e dump in $d is incomplete"
+      gzip -cd "$d/$e.sql.gz" | tail -c 500 | grep 'Dump completed' >/dev/null || die "$e dump in $d is incomplete"
     fi
   done
   if [ -f "$d/SHA256SUMS" ]; then
@@ -2487,7 +2487,7 @@ d_ok() { echo "  ok    $*"; }
 d_warn() { echo "  warn  $*"; D_WARN=$((D_WARN + 1)); }
 d_bad() { echo "  PROBLEM  $*"; D_BAD=$((D_BAD + 1)); }
 d_stale() { if [ "${DOCTOR_CONTEXT:-}" = upgrade ]; then d_warn "$*"; else d_bad "$*"; fi; }
-stack_up() { [ -f "$DB_DIR/docker-compose.yml" ] && (cd "$DB_DIR" && dc ps --status running --services 2>/dev/null | grep -qx "$1"); }
+stack_up() { [ -f "$DB_DIR/docker-compose.yml" ] && (cd "$DB_DIR" && dc ps --status running --services 2>/dev/null | grep -x "$1" >/dev/null); }
 
 doctor_exposure() {
   log "Exposure: DB ports must listen on $PRIVATE_IP${EXTRA_BIND_IPS:+ and $EXTRA_BIND_IPS} only"
@@ -2496,7 +2496,7 @@ doctor_exposure() {
     l="$(listen_addrs "$p")"
     if [ "$l" = "?" ]; then d_warn "$p: unknown (no ss or lsof)"
     elif [ -z "$l" ]; then d_warn "$p: not listening"
-    elif echo "$l" | grep -qE '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):'; then d_bad "$p: PUBLIC ($l)"
+    elif echo "$l" | grep -E '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):' >/dev/null; then d_bad "$p: PUBLIC ($l)"
     else
       x=""; for a in $l; do a="${a%:*}"; [ "$a" = "$PRIVATE_IP" ] || in_list "$a" "$(extra_binds)" || x="$x $a"; done
       if [ -n "$x" ]; then d_bad "$p: listens on unexpected address(es)$x ($l)"; else d_ok "$p: $l"; fi
@@ -2506,7 +2506,7 @@ doctor_exposure() {
   echo "  (Docker-published ports bypass ufw; binding to the private IP keeps them off the internet.)"
   if on "$ENABLE_ADMINER"; then
     l="$(listen_addrs "$ADMINER_PORT")"
-    if [ -n "$l" ] && [ "$l" != "?" ] && echo "$l" | grep -qvE '^(127\.0\.0\.1:[0-9]+[[:space:]]*)+$'; then d_bad "adminer $ADMINER_PORT not loopback-only ($l)"
+    if [ -n "$l" ] && [ "$l" != "?" ] && echo "$l" | grep -vE '^(127\.0\.0\.1:[0-9]+[[:space:]]*)+$' >/dev/null; then d_bad "adminer $ADMINER_PORT not loopback-only ($l)"
     else d_ok "adminer: ${l:-not listening} (tunnel only)"; fi
   fi
 }
@@ -2517,7 +2517,7 @@ doctor_network() { # region / VPC sanity: DO VPCs are per region (docs/cross-reg
   local region="" r wg=0 a
   command -v curl >/dev/null 2>&1 && region="$(curl -fsS --max-time 2 "$METADATA_URL/region" 2>/dev/null || true)"
   [[ "$region" =~ ^[a-z]{3}[0-9]$ ]] || region=""
-  for a in $(extra_binds); do ip -4 -o addr show dev wg0 2>/dev/null | grep -q "inet $a/" && wg=1; done
+  for a in $(extra_binds); do ip -4 -o addr show dev wg0 2>/dev/null | grep "inet $a/" >/dev/null && wg=1; done
   if [ -z "$region" ]; then d_warn "region: unknown (not a DigitalOcean droplet, or metadata unreachable)"; return 0; fi
   d_ok "this droplet is in $region"
   [ -n "$PEER_REGIONS" ] || { echo "  (set PEER_REGIONS to the app servers' regions to check them)"; return 0; }
@@ -2532,8 +2532,8 @@ doctor_network() { # region / VPC sanity: DO VPCs are per region (docs/cross-reg
 doctor_host() {
   log "Host"
   if command -v ufw >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
-    if ufw status verbose | grep -q 'Status: active'; then d_ok "ufw active"; else d_bad "ufw is not active"; fi
-    ufw status verbose | grep -q 'deny (incoming)' && d_ok "ufw default deny incoming" || d_bad "ufw default incoming is not deny"
+    if ufw status verbose | grep 'Status: active' >/dev/null; then d_ok "ufw active"; else d_bad "ufw is not active"; fi
+    ufw status verbose | grep 'deny (incoming)' >/dev/null && d_ok "ufw default deny incoming" || d_bad "ufw default incoming is not deny"
   else d_warn "ufw: unknown (needs root and ufw)"; fi
   if systemctl is-enabled unattended-upgrades >/dev/null 2>&1; then d_ok "unattended-upgrades enabled"
   else d_warn "unattended-upgrades not enabled (apt install unattended-upgrades)"; fi

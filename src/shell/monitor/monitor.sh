@@ -169,7 +169,7 @@ pg_on() { # agent side: run the DB exporters?
 db_node() {
   case "$MONITOR_DB_NODE" in 1) return 0 ;; 0) return 1 ;; esac
   [ -f /etc/docker-db-server-manager.conf ] && return 0
-  command -v docker >/dev/null 2>&1 && docker ps --format '{{.Image}}' 2>/dev/null | grep -qE '(^|/)(postgres|postgis|mysql|mariadb)'
+  command -v docker >/dev/null 2>&1 && docker ps --format '{{.Image}}' 2>/dev/null | grep -E '(^|/)(postgres|postgis|mysql|mariadb)' >/dev/null
 }
 mem() { awk -v k="$1" '$1==k":" {print int($2/1024); exit}' "$MONITOR_MEMINFO" 2>/dev/null || true; }
 
@@ -216,7 +216,8 @@ cmd_plan() {
   side_on agent && [ "$MONITOR_ROLE" = agent ] && fw_hint
   ram_gate
 }
-in_units() { units | grep -qx "$1"; }
+# no `units | grep -q`: grep exits at the first match, units gets SIGPIPE, and pipefail turns a hit into a miss
+in_units() { local l; l="$(units)"; [[ $'\n'"$l"$'\n' == *$'\n'"$1"$'\n'* ]]; }
 local_targets_desc() { if side_on agent && in_units exporters; then echo "$MONITOR_NODE_NAME=local"; else echo "(no local exporters)"; fi; }
 alert_desc() {
   local d=""; [ -n "$MONITOR_ALERT_WEBHOOK_FILE" ] && d="webhook"; [ -n "$MONITOR_ALERT_EMAIL" ] && d="${d:+$d + }email $MONITOR_ALERT_EMAIL"
@@ -359,7 +360,7 @@ cmd_beszel_register() {
   valid_host "$host" || CODE=2 die "--host must be an IP or DNS name"
   [[ "$port" =~ ^[0-9]{1,5}$ ]] || CODE=2 die "--port must be a number"
   bz_auth; list="$(bz_api GET "/api/collections/systems/records?perPage=200")"
-  if printf '%s' "$list" | grep -q "\"name\":\"$name\""; then echo "beszel: system $name already registered"; return 0; fi
+  if printf '%s' "$list" | grep -F "\"name\":\"$name\"" >/dev/null; then echo "beszel: system $name already registered"; return 0; fi
   bz_api POST /api/collections/systems/records "$(printf '{"name":"%s","host":"%s","port":"%s","users":["%s"]}' "$name" "$host" "$port" "$BZ_UID")" >/dev/null \
     || die "beszel: register failed"
   audit beszel "registered system $name ($host:$port)"
@@ -513,7 +514,7 @@ doctor_unit() {
     done
   done
   if [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$(dcu "$u" ps -q 2>/dev/null | head -1)" 2>/dev/null)" = host ] && command -v ss >/dev/null 2>&1; then
-    ss -ltnH 2>/dev/null | awk '{print $4}' | grep -E ':(45876|9100|19999)$' | grep -qE '^(0\.0\.0\.0|\*|\[::\]):' && bad "a host-network monitor port listens on all interfaces" || ok "host-network listeners bound to $MONITOR_BIND / the agent IP only"
+    ss -ltnH 2>/dev/null | awk '{print $4}' | grep -E ':(45876|9100|19999)$' | grep -E '^(0\.0\.0\.0|\*|\[::\]):' >/dev/null && bad "a host-network monitor port listens on all interfaces" || ok "host-network listeners bound to $MONITOR_BIND / the agent IP only"
   fi
   [ "$u" = prometheus ] && doctor_prometheus
   return 0
@@ -524,7 +525,7 @@ doctor_prometheus() {
   up="$(curl -fsS -m 5 "http://$MONITOR_BIND:$p/api/v1/targets?state=active" 2>/dev/null | grep -o '"health":"up"' | wc -l | tr -d ' ')"
   down="$(curl -fsS -m 5 "http://$MONITOR_BIND:$p/api/v1/targets?state=active" 2>/dev/null | grep -o '"health":"down"' | wc -l | tr -d ' ')"
   [ "${down:-0}" = 0 ] && ok "prometheus targets: ${up:-0} up" || dwarn "prometheus targets: ${up:-0} up, $down down (http://127.0.0.1:$p/targets through the tunnel)"
-  curl -fsS -m 5 "http://$MONITOR_BIND:$p/api/v1/rules" 2>/dev/null | grep -q VswBackupStale && ok "alert rules loaded" || bad "alert rules not loaded"
+  curl -fsS -m 5 "http://$MONITOR_BIND:$p/api/v1/rules" 2>/dev/null | grep VswBackupStale >/dev/null && ok "alert rules loaded" || bad "alert rules not loaded"
   [ "$(curl -s -o /dev/null -w '%{http_code}' -m 5 "http://$MONITOR_BIND:$g/api/dashboards/uid/vsw-overview")" = 401 ] && ok "grafana refuses anonymous access" || dwarn "grafana anonymous check inconclusive"
 }
 cmd_doctor() {

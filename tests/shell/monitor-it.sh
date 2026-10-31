@@ -77,7 +77,7 @@ bad=0; for u in beszel beszel-agent kuma prometheus exporters; do for f in secre
 [ "$bad" = 0 ] && ok "every secrets.env / stack.env is 600" || fail "modes"
 leak=0; for u in beszel prometheus exporters; do while IFS='=' read -r _ v; do [ -n "$v" ] && [ "${#v}" -ge 12 ] && grep -qF "$v" "$W/mi.out" "$W/audit.log" && leak=1; done < <(grep -v '^#' "$W/mon/$u/secrets.env"); done
 [ "$leak" = 0 ] && ok "no generated secret appears in the output or the audit log" || fail "secret leaked"
-ips="$(docker ps --filter name=vsw-mon- --format '{{.Ports}}' | tr ',' '\n' | grep -oE '^ *[0-9.:\[\]]+:[0-9]+->' | sed -E 's/^ *//; s/:[0-9]+->$//' | sort -u | tr '\n' ' ')"
+ips="$(docker ps --filter name=vsw-mon- --format '{{.Ports}}' | tr ',' '\n' | grep -oE '^ *[][0-9a-f.:]+:[0-9]+->' | sed -E 's/^ *//; s/:[0-9]+->$//' | sort -u | tr '\n' ' ')" || true
 [ "$ips" = "127.0.0.1 " ] && ok "every published monitor port is on 127.0.0.1" || fail "binds: '$ips'"
 
 # ---- Prometheus: targets, DB exporters, textfile metrics, rules --------------------------------------------------

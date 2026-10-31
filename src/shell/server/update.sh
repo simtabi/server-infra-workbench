@@ -77,7 +77,7 @@ say "update plan ($(hostname 2>/dev/null), server time $NOW):"
 if [ "$n" -eq 0 ]; then ok "no upgradable packages"; else todo "$n upgradable: $(printf '%s\n' "$UPG" | head -15 | tr '\n' ' ')$([ "$n" -gt 15 ] && echo '...')"; fi
 held=""
 running=0; have docker && running="$(docker ps -q 2>/dev/null | grep -c . || true)"
-for p in $DOCKER_PKGS; do printf '%s\n' "$UPG" | grep -qx "$p" && held+="$p "; done
+for p in $DOCKER_PKGS; do printf '%s\n' "$UPG" | grep -x "$p" >/dev/null && held+="$p "; done
 if [ -n "$held" ] && [ "$running" -gt 0 ] && [ "$ALLOW_DOCKER" = 0 ]; then
   warn "docker packages upgradable ($held) with $running running container(s): held for this run"
   why "a Docker upgrade restarts every container (DB downtime); do it in a window with --allow-docker"
@@ -105,7 +105,7 @@ if [ "$BACKUP_FIRST" = 1 ]; then
 fi
 was_held="$(apt-mark showhold 2>/dev/null || true)"
 newly=""
-for p in $held; do printf '%s\n' "$was_held" | grep -qx "$p" || newly+="$p "; done
+for p in $held; do printf '%s\n' "$was_held" | grep -x "$p" >/dev/null || newly+="$p "; done
 # shellcheck disable=SC2086  # word lists
 unhold() { [ -z "$newly" ] || apt-mark unhold $newly >/dev/null 2>&1 || true; newly=""; }
 # shellcheck disable=SC2086  # word lists

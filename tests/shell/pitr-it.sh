@@ -33,7 +33,10 @@ archived() { # wait until the current WAL segment is in the repo
 
 run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "install with PITR=pgbackrest (posix repo)" || { tail -40 "$W/install.out"; fail "install"; }
 run cmd_pitr setup > "$W/setup.out" 2>&1 && grep -q 'PITR ready' "$W/setup.out" && ok "pitr setup: stanza + full backup" || { tail -40 "$W/setup.out"; fail "pitr setup"; }
-grep -q 'CIPHER_PASS\|cipher-pass=' "$W/setup.out" && fail "cipher pass printed" || ok "pitr setup: repo cipher pass not printed"
+# pgBackRest echoes its options but masks secrets as <redacted>; fail on the real value or any unmasked option
+cp_val="$(sed -n 's/^PITR_CIPHER_PASS=//p' "$D/.env" 2>/dev/null || true)"
+{ [ -n "$cp_val" ] && grep -qF "$cp_val" "$W/setup.out"; } || grep -qE 'cipher-pass=[^<]|CIPHER_PASS=' "$W/setup.out" \
+  && fail "cipher pass printed" || ok "pitr setup: repo cipher pass not printed (pgBackRest masks it)"
 psq 'create table t_pitr (id int primary key); insert into t_pitr select generate_series(1, 100)' >/dev/null
 archived || fail "WAL before T not archived"
 sleep 2; T="$(psq "select to_char(now() at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') || '+00'")"; sleep 2

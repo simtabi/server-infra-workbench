@@ -120,7 +120,7 @@ valid_key() { # ssh-keygen must parse it; without ssh-keygen, the type + base64 
   awk '{ exit !($2 ~ /^[A-Za-z0-9+\/]+=*$/ && length($2) >= 60) }' <<<"$(key_of "$1")"; }
 key_lines() { [ -f "$AK_FILE" ] || return 0; while IFS= read -r l || [ -n "$l" ]; do case "$l" in ''|\#*) continue ;; esac; [ -n "$(key_of "$l")" ] && printf '%s\n' "$l"; done <"$AK_FILE"; }
 count_keys() { key_lines | grep -c . || true; }
-has_key() { local want; want="$(key_of "$1")"; key_lines | while IFS= read -r l; do [ "$(key_of "$l")" = "$want" ] && { echo y; break; }; done | grep -q y; }
+has_key() { local want; want="$(key_of "$1")"; key_lines | while IFS= read -r l; do [ "$(key_of "$l")" = "$want" ] && { echo y; break; }; done | grep y >/dev/null; }
 
 set_owner() { [ -n "$UID_GID" ] && [ "$(id -u)" -eq 0 ] && chown "$UID_GID" "$@" 2>/dev/null; have restorecon && [ -z "$ROOT" ] && restorecon -F "$@" 2>/dev/null; return 0; }
 ensure_file() { # ~/.ssh: 700 + owner; a shared dir from AuthorizedKeysFile (/etc/ssh/keys) is only created, never re-owned
@@ -210,7 +210,7 @@ do_diagnose() { local m o hm
       grep -q '^pubkeyauthentication no' <<<"$t" && say "  FIX   PubkeyAuthentication is off"
       [ "$AK_USER" = root ] && grep -q '^permitrootlogin no' <<<"$t" && say "  FIX   PermitRootLogin no - root cannot log in at all; use a sudo user"
       grep -qE '^allowusers ' <<<"$t" && ! grep -qE "^allowusers .*\b$AK_USER(@|\b)" <<<"$t" && say "  FIX   AllowUsers does not include $AK_USER"
-      grep -qE '^pubkeyacceptedalgorithms ' <<<"$t" && key_lines | grep -q '^ssh-rsa\|[[:space:]]ssh-rsa ' && ! grep -q 'rsa-sha2' <<<"$t" && say "  warn  RSA keys need rsa-sha2-* in PubkeyAcceptedAlgorithms"
+      grep -qE '^pubkeyacceptedalgorithms ' <<<"$t" && key_lines | grep '^ssh-rsa\|[[:space:]]ssh-rsa ' >/dev/null && ! grep -q 'rsa-sha2' <<<"$t" && say "  warn  RSA keys need rsa-sha2-* in PubkeyAcceptedAlgorithms"
     fi
   elif [ -r "$sd" ]; then
     say "  info  (no sshd -T: reading $sd and sshd_config.d/*.conf; first match wins)"
