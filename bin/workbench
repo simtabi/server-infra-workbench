@@ -1,35 +1,50 @@
 #!/usr/bin/env bash
-# vsw - vps-server-workbench dispatcher: one entry point for every tool in the repo.
+# workbench - vps-server-workbench front door: one entry point for every tool in the repo.
 #
-#   bin/vsw list                         every tool and where it lives
-#   bin/vsw <area> <tool> [args...]      run shell/<area>/<tool>.sh   e.g. bin/vsw db remote-run --help
-#   bin/vsw php <command> [args...]      run the PHP package CLI      e.g. bin/vsw php ping --env web-db.env
-#   bin/vsw py <command> [args...]       run the Python package CLI   e.g. bin/vsw py ping 10.0.0.5 6432
+#   bin/workbench list                       every tool and where it lives
+#   bin/workbench <area> <tool> [args...]    run shell/<area>/<tool>.sh    e.g. bin/workbench db remote-run --help
+#   bin/workbench do|cf|ploi|gcp ...         platform APIs (PHP core)      e.g. bin/workbench do snapshot 123 --dry-run
+#   bin/workbench credentials                which API credentials are set (never prints values)
+#   bin/workbench py <command> [args...]     the Python package CLI        e.g. bin/workbench py ping 10.0.0.5 6432
 #
-# It only resolves paths and execs; every tool keeps its own flags and behaviour.
+# Writes need --yes (or typing yes), destructive ones also --force; --dry-run sends nothing.
+# Shell tools keep their own flags; this script only resolves paths and execs.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)"
 
-usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
+die() { echo "workbench: $*" >&2; exit "${CODE:-2}"; }
+
 list() {
-  echo "shell tools (bin/vsw <area> <tool>):"
+  echo "shell tools (bin/workbench <area> <tool>):"
   find "$ROOT/shell" -mindepth 2 -maxdepth 2 -name '*.sh' | sort | while read -r f; do
     a="$(basename "$(dirname "$f")")"; t="$(basename "$f" .sh)"; printf '  %-8s %-28s shell/%s/%s.sh\n' "$a" "$t" "$a" "$t"
   done
-  echo "php:    bin/vsw php ping ...     (php/bin/vsw-php)"
-  echo "python: bin/vsw py ping ...      (python -m vps_server_workbench)"
+  echo "platform APIs (PHP core, php/):"
+  printf '  %-37s %s\n' "do droplets|snapshot|snapshots" "DigitalOcean" "cf zones|dns list|upsert|delete" "Cloudflare" \
+    "ploi servers|sites|deploy" "Ploi" "gcp instances|snapshots|firewalls" "Google Compute Engine" "credentials" "credential check"
+  echo "python (python/):"
+  printf '  %-37s %s\n' "py ping [host port] [--env FILE]" "TCP reachability probe"
+}
+
+php_core() {
+  command -v php >/dev/null 2>&1 || CODE=127 die "php is not installed (PHP 8.4+ needed for '$1')"
+  php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' || CODE=1 die "PHP 8.4+ is required, found $(php -r 'echo PHP_VERSION;')"
+  [ -f "$ROOT/php/vendor/autoload.php" ] || CODE=1 die "PHP dependencies missing; run: composer install --working-dir=\"$ROOT/php\""
+  exec php "$ROOT/php/bin/workbench-php" "$@"
 }
 
 case "${1:-}" in
-  ""|-h|--help|help) usage ;;
+  ""|-h|--help|help) if [ -n "${2:-}" ]; then php_core help "$2"; else usage; fi ;;
   list) list ;;
-  php) shift; command -v php >/dev/null 2>&1 || { echo "vsw: php is not installed" >&2; exit 127; }
-       exec php "$ROOT/php/bin/vsw-php" "$@" ;;
-  py|python) shift; command -v python3 >/dev/null 2>&1 || { echo "vsw: python3 is not installed" >&2; exit 127; }
+  --version|version) php_core version ;;
+  do|digitalocean|cf|cloudflare|ploi|gcp|gcloud|credentials|creds) php_core "$@" ;;
+  php) shift; php_core "$@" ;;
+  py|python) shift; command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"
        PYTHONPATH="$ROOT/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vps_server_workbench "$@" ;;
   *) area="$1"; tool="${2:-}"
-     [[ "$area" =~ ^[a-z0-9-]+$ && "$tool" =~ ^[a-z0-9-]+$ ]] || { echo "vsw: usage: bin/vsw <area> <tool> [args] (see bin/vsw list)" >&2; exit 2; }
+     [[ "$area" =~ ^[a-z0-9-]+$ && "$tool" =~ ^[a-z0-9-]+$ ]] || die "usage: bin/workbench <area> <tool> [args] (see: bin/workbench list)"
      f="$ROOT/shell/$area/$tool.sh"
-     [ -f "$f" ] || { echo "vsw: no tool shell/$area/$tool.sh (see bin/vsw list)" >&2; exit 2; }
+     [ -f "$f" ] || die "no tool shell/$area/$tool.sh (see: bin/workbench list)"
      shift 2; exec "$f" "$@" ;;
 esac

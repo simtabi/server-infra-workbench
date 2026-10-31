@@ -17,11 +17,26 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      # ubuntu-latest ships shellcheck and docker; one gate, defined in the Makefile.
-      - name: Gate (bash -n, shellcheck, smoke tests, links, compose + caddy validate)
+      # ubuntu-latest ships shellcheck and docker; PHP and Python are pinned here.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, openssl
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ hashFiles('php/composer.lock') }}
+      # One gate, defined in the Makefile.
+      - name: Gate (bash -n, shellcheck, smoke, pint, phpstan, phpunit, python, links, compose + caddy)
         run: make ci

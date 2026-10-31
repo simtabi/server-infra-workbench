@@ -115,6 +115,28 @@ ok "deploy script avoids Ploi placeholder names"
 # --- deploy script sandbox (generic preset, hooks, first-install marker) -----
 bash tests/shell/deploy-sandbox.sh | grep -qE 'deploy sandbox (ok|skipped)' && ok "deploy sandbox" || fail "deploy sandbox"
 
+# --- bin/workbench dispatcher and old-path shims ---------------------------------
+grep -q 'shell/db/remote-run.sh' <<<"$(bin/workbench list)" && ok "workbench list" || fail "workbench list"
+bin/workbench db remote-run --dry-run --host h --expect-ip 10.0.0.5 -- env | grep 'docker-db-server-manager.sh env' >/dev/null \
+  && ok "workbench <area> <tool> runs shell tools" || fail "workbench <area> <tool>"
+if bin/workbench 'db;id' x 2>/dev/null || bin/workbench db ../../etc 2>/dev/null; then fail "workbench accepted a bad tool name"; fi
+ok "workbench rejects bad area/tool names"
+grep -q 'manager.sh env' <<<"$(scripts/db/remote-run.sh --dry-run --host h --expect-ip 10.0.0.5 -- env 2>"$T/shim")" \
+  && grep -q 'moved to shell/db/remote-run.sh' "$T/shim" && ok "old scripts/ paths still work (with a note)" || fail "scripts/ shim"
+if command -v python3 >/dev/null 2>&1; then
+  set +e; bin/workbench py ping 127.0.0.1 notaport >/dev/null 2>&1; rc=$?; set -e; [ "$rc" -eq 2 ] && ok "workbench py validates input" || fail "workbench py validation"
+fi
+if command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' && [ -f php/vendor/autoload.php ]; then
+  out="$(DIGITALOCEAN_TOKEN=smoke-not-a-token VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 --name pre-upgrade --dry-run)"
+  grep -q 'DRY RUN — nothing sent.*POST /v2/droplets/42/actions' <<<"$out" && ok "workbench do snapshot --dry-run sends nothing" || fail "do snapshot dry-run: $out"
+  set +e; DIGITALOCEAN_TOKEN=smoke-not-a-token VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 </dev/null 2>/dev/null; rc=$?; set -e
+  [ "$rc" -eq 3 ] && ok "workbench writes refuse without --yes" || fail "write without --yes exit $rc"
+  set +e; env -u DIGITALOCEAN_TOKEN VSW_CREDENTIALS_FILE=/nonexistent bin/workbench digitalocean droplets 2>"$T/cred"; rc=$?; set -e
+  [ "$rc" -eq 4 ] && grep -q 'DIGITALOCEAN_TOKEN is not set' "$T/cred" && ok "workbench reports missing credentials" || fail "missing credentials exit $rc"
+else
+  ok "workbench PHP checks skipped (php 8.4+ with php/vendor not available)"
+fi
+
 # --- core stays project-neutral -------------------------------------------------
 if git ls-files >/dev/null 2>&1; then core="$(git ls-files | grep -vE '^(examples/|CHANGELOG\.md$|tests/shell/smoke\.sh$)')"
 else core="$(find . -type f -not -path './.git/*' -not -path './examples/*' -not -name CHANGELOG.md -not -name smoke.sh)"; fi

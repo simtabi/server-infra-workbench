@@ -37,7 +37,7 @@ def scan(path):
 
 md = []
 for d, dirs, files in os.walk(root):
-    dirs[:] = [x for x in dirs if x not in (".git", "node_modules")]
+    dirs[:] = [x for x in dirs if x not in (".git", "node_modules", "vendor", ".venv", "__pycache__", ".phpunit.cache", ".phpstan.cache")]
     md += [os.path.join(d, f) for f in files if f.endswith(".md")]
 
 cache, bad, total = {}, 0, 0
