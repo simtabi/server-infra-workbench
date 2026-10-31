@@ -12,7 +12,7 @@ Optional: put it on your `PATH` with `ln -s "$PWD/bin/workbench" ~/.local/bin/wo
 
 ## Shell tools: `workbench <area> <tool>`
 
-Runs `shell/<area>/<tool>.sh` with the remaining arguments, unchanged.
+Runs `src/shell/<area>/<tool>.sh` with the remaining arguments, unchanged.
 
 ```bash
 bin/workbench db remote-run --host db-01 --expect-ip 10.0.0.5 -- doctor
@@ -24,7 +24,7 @@ Area and tool names must match `[a-z0-9-]+`, so nothing outside `shell/` can be 
 
 ## Platform APIs: `workbench do|cf|ploi|gcp`
 
-Requires PHP 8.4+ and `composer install --working-dir=php` (the dispatcher says so if either is missing).
+Requires PHP 8.4+ and `composer install --working-dir=src/php` (the dispatcher says so if either is missing).
 
 | Command | What it does |
 |---|---|
@@ -101,6 +101,6 @@ See [python.md](python.md).
 
 ## Checks
 
-`make test` exercises the dispatcher offline: listing, shell routing, bad names, the old `scripts/` shims,
+`make test` exercises the dispatcher offline: listing, shell routing, bad names, that no legacy `scripts/` or `tools/` path is back,
 Python input validation, and (when PHP is available) a DigitalOcean dry run, refusal without `--yes`, and
 the missing-credentials exit code.

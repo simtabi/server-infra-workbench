@@ -1,8 +1,8 @@
 # simtabi/vps-server-workbench
 
 [![CI](https://img.shields.io/github/actions/workflow/status/simtabi/vps-server-workbench/ci.yml?branch=main&label=ci)](https://github.com/simtabi/vps-server-workbench/actions/workflows/ci.yml)
-[![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4.svg)](php/composer.json)
-[![PHPStan](https://img.shields.io/badge/phpstan-level%20max-brightgreen.svg)](php/phpstan.neon)
+[![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4.svg)](src/php/composer.json)
+[![PHPStan](https://img.shields.io/badge/phpstan-level%20max-brightgreen.svg)](src/php/phpstan.neon)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > Tools and runbooks for hosting PHP (Laravel or not) apps on DigitalOcean droplets managed with Ploi: a
@@ -17,7 +17,7 @@ only in [`examples/`](examples).
 
 ```bash
 git clone <your remote or path> vps-server-workbench && cd vps-server-workbench
-composer install --working-dir=php        # only needed for the platform APIs (PHP 8.4+)
+composer install --working-dir=src/php        # only needed for the platform APIs (PHP 8.4+)
 bin/workbench list                        # every tool and where it lives
 ```
 
@@ -33,15 +33,15 @@ sshmgr host apply myproject prd-db-00 203.0.113.20 ploi db --reconcile
 ssh prd-db-00 whoami                                  # -> ploi
 
 # 1. Config for the DB server (no secrets in it): detects the private IP and VPC
-ssh prd-db-00 'bash -s -- init' < shell/db/docker-db-server-manager.sh > my-db-server.conf
+ssh prd-db-00 'bash -s -- init' < src/shell/db/docker-db-server-manager.sh > my-db-server.conf
 #    edit PG_USER / ENABLE_* ... (or start from config/db-server.env.example)
 
 # 2. Install + guard + backups + DB_* lines
-shell/db/remote-run.sh --host prd-db-00 --expect-ip 10.0.0.5 \
+src/shell/db/remote-run.sh --host prd-db-00 --expect-ip 10.0.0.5 \
   --config my-db-server.conf -- install, cron-install, env
 
 # 3. Save the printed DB_* lines as db.env (never commit it), put them on the web server, redeploy
-shell/web/update-env-db.sh --remote prd-web-00 --site example.com --from db.env
+src/shell/web/update-env-db.sh --remote prd-web-00 --site example.com --from db.env
 ```
 
 Platform APIs, read-only unless you confirm:
@@ -82,17 +82,16 @@ New project end to end: **[Getting started](docs/getting-started.md)** (about 10
 | Path | What |
 |---|---|
 | [`bin/workbench`](bin/workbench) | One entry point: `list`, `<area> <tool>` for shell tools, `do`/`cf`/`ploi`/`gcp` for platform APIs, `py` for Python helpers ([cli.md](docs/tools/cli.md)) |
-| [`shell/db/docker-db-server-manager.sh`](shell/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP, each engine optional. `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user logs backup restore cron-install cron-remove uninstall help` |
-| [`shell/db/remote-run.sh`](shell/db/remote-run.sh) | Run the manager on the DB server from your workstation, with a wrong-server guard |
-| [`shell/web/update-env-db.sh`](shell/web/update-env-db.sh) | Back up a shared Laravel `.env` and replace its `DB_*` keys idempotently (password masked in output); local or `--remote` |
-| [`shell/deploy/ploi-deploy.sh`](shell/deploy/ploi-deploy.sh) | Ploi deploy script for any PHP/Node app: `laravel` or `generic` preset, optional hooks (first install, migrations, post-deploy, health check), zero-downtime or in-place |
-| [`shell/tunnels/db-tunnel.sh`](shell/tunnels/db-tunnel.sh) | SSH tunnels from the Mac per engine (`postgres pgbouncer mysql mariadb adminer all`) for TablePlus, psql, Adminer |
-| [`shell/web/check-db-reach.sh`](shell/web/check-db-reach.sh) | TCP check from the web server to every DB port (no passwords needed) |
-| [`php/`](php) | Typed PHP 8.4 clients for DigitalOcean, Cloudflare, Ploi and GCP on PSR-18, with retries, pagination, redaction, pending actions and an audit log ([platform-api.md](docs/tools/platform-api.md)) |
-| [`python/`](python) | Small standard-library helpers (`ping`) with tests ([python.md](docs/tools/python.md)) |
-| [`stacks/caddy`](stacks/caddy) | Laravel (php-fpm, queue, scheduler) behind Caddy with automatic HTTPS, for a Ploi Docker web server; reverse-proxy and smoke-test variants |
-| [`config/`](config) | `.env.example`-style templates for every script |
-| [`tools/ploi-do-plan-finder`](tools/ploi-do-plan-finder) | List droplet plans/regions available through Ploi for your DO credentials |
+| [`src/shell/db/docker-db-server-manager.sh`](src/shell/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP, each engine optional. `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user logs backup restore cron-install cron-remove uninstall help` |
+| [`src/shell/db/remote-run.sh`](src/shell/db/remote-run.sh) | Run the manager on the DB server from your workstation, with a wrong-server guard |
+| [`src/shell/web/update-env-db.sh`](src/shell/web/update-env-db.sh) | Back up a shared Laravel `.env` and replace its `DB_*` keys idempotently (password masked in output); local or `--remote` |
+| [`src/shell/deploy/ploi-deploy.sh`](src/shell/deploy/ploi-deploy.sh) | Ploi deploy script for any PHP/Node app: `laravel` or `generic` preset, optional hooks (first install, migrations, post-deploy, health check), zero-downtime or in-place |
+| [`src/shell/tunnels/db-tunnel.sh`](src/shell/tunnels/db-tunnel.sh) | SSH tunnels from the Mac per engine (`postgres pgbouncer mysql mariadb adminer all`) for TablePlus, psql, Adminer |
+| [`src/shell/web/check-db-reach.sh`](src/shell/web/check-db-reach.sh) | TCP check from the web server to every DB port (no passwords needed) |
+| [`src/php`](src/php/README.md) | Typed PHP 8.4 clients for DigitalOcean, Cloudflare, Ploi and GCP on PSR-18, with retries, pagination, redaction, pending actions and an audit log ([platform-api.md](docs/tools/platform-api.md)) |
+| [`src/python`](src/python/README.md) | Standard-library helpers with tests: `ping` (TCP probe) and `plans` (which DO plans each region offers through Ploi) ([python.md](docs/tools/python.md)) |
+| [`stacks/caddy`](stacks/README.md) | Laravel (php-fpm, queue, scheduler) behind Caddy with automatic HTTPS, for a Ploi Docker web server; reverse-proxy and smoke-test variants |
+| [`config/`](config/README.md) | `.env.example`-style templates for every tool |
 | [`examples/`](examples/README.md) | Example configs per project (no secrets): a made-up generic Laravel app and a real deployment |
 
 Full map and conventions: [docs/structure.md](docs/structure.md).
@@ -141,7 +140,8 @@ compose checks. Missing PHP, Python or docker makes the matching targets skip wi
 ## Stability
 
 The shell tools and the DB manager (1.3.0) are used on production servers; their commands and flags change
-only with a changelog entry, and the old `scripts/` paths keep working until the next major release. The
+only with a changelog entry (the pre-release `scripts/` paths are gone, see
+[structure](docs/structure.md#old-to-new-paths)). The
 PHP library and CLI are **0.x**: the API may still change in a minor release, always noted in the
 [changelog](CHANGELOG.md). See [releasing](docs/release.md).
 

@@ -4,7 +4,7 @@ Typed, fluent PHP clients for **DigitalOcean**, **Cloudflare**, **Ploi** and **G
 one HTTP core. The [`bin/workbench` CLI](cli.md) is a thin layer over this library; you can also use it from any
 PHP 8.4+ project or script.
 
-- **Namespace** `Simtabi\VpsServerWorkbench\` (PSR-4, `php/src/`), package `simtabi/vps-server-workbench`.
+- **Namespace** `Simtabi\VpsServerWorkbench\` (PSR-4, `src/php/src/`), package `simtabi/vps-server-workbench`.
 - **Standards** PSR-18 HTTP client and PSR-17 factories (Guzzle by default; inject any client), PSR-3 logger,
   PSR-12/PER style enforced by Pint, PHPStan level `max` with strict rules.
 - **No vendor SDKs.** Each platform is a few small classes over the same `Transport` (see
@@ -15,7 +15,7 @@ PHP 8.4+ project or script.
 ## Install
 
 ```bash
-composer install --working-dir=php          # from the repo root; locked versions, PHP 8.4+
+composer install --working-dir=src/php          # from the repo root; locked versions, PHP 8.4+
 make php                                    # pint --test, phpstan, phpunit
 ```
 

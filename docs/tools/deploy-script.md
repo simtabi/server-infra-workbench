@@ -1,6 +1,6 @@
 # Deploy script (Ploi, native PHP)
 
-[`shell/deploy/ploi-deploy.sh`](../../shell/deploy/ploi-deploy.sh) is a deploy
+[`src/shell/deploy/ploi-deploy.sh`](../../src/shell/deploy/ploi-deploy.sh) is a deploy
 script for any PHP and/or Node app on a native (non-Docker) Ploi server. Edit
 its `SETTINGS` block and paste it into the site's deploy script in Ploi.
 

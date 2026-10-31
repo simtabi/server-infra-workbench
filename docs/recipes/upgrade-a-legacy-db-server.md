@@ -58,7 +58,7 @@ flowchart TD
 3. **Install the config and the new script, then check only:**
 
    ```sh
-   shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
+   src/shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
      --config my-db-server.conf -- status, verify
    ```
 
@@ -70,7 +70,7 @@ flowchart TD
    the current templates; keeps `.env` and data):
 
    ```sh
-   shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
+   src/shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
      --config my-db-server.conf -- install, cron-install
    ```
 

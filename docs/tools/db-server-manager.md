@@ -1,6 +1,6 @@
 # DB server: Docker DB Server Setup Manager
 
-[`shell/db/docker-db-server-manager.sh`](../../shell/db/docker-db-server-manager.sh) builds and runs a dedicated database droplet (DigitalOcean, Ubuntu) for a Laravel app. It installs, resets, checks, backs up and restores the stack, and it can uninstall it. Every name, port, image and path below is a default you can change (see [Configuration](#5-configuration)); `<user>`/`<db>` mean `PG_USER`/`PG_DB`.
+[`src/shell/db/docker-db-server-manager.sh`](../../src/shell/db/docker-db-server-manager.sh) builds and runs a dedicated database droplet (DigitalOcean, Ubuntu) for a Laravel app. It installs, resets, checks, backs up and restores the stack, and it can uninstall it. Every name, port, image and path below is a default you can change (see [Configuration](#5-configuration)); `<user>`/`<db>` mean `PG_USER`/`PG_DB`.
 
 ## Contents
 
@@ -37,7 +37,7 @@ Moving an existing server to this version: [upgrading.md](../recipes/upgrade-a-l
 5. Run the manager with the wrong-server guard:
 
 ```sh
-shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
+src/shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
   --config my-db-server.conf -- reset --yes, verify, cron-install, env
 ```
 
@@ -47,7 +47,7 @@ each command with sudo (one password prompt). Use `install` instead of `reset --
 existing data. The equivalent by hand:
 
 ```sh
-scp shell/db/docker-db-server-manager.sh <db-alias>:~/
+scp src/shell/db/docker-db-server-manager.sh <db-alias>:~/
 ssh -t <db-alias> 'ip -4 addr | grep -q "inet <private-ip>/" || { echo "ABORT: $(hostname)"; exit 1; }
   sudo install -m 755 ~/docker-db-server-manager.sh /root/docker-db-server-manager.sh &&
   sudo /root/docker-db-server-manager.sh reset --yes && sudo /root/docker-db-server-manager.sh cron-install &&
@@ -200,7 +200,7 @@ Prints the `DB_*` lines for `WEB_ENV` (the shared Laravel `.env`; see [web-serve
 
 ### `init`
 ```sh
-ssh <db-alias> 'bash -s -- init' < shell/db/docker-db-server-manager.sh > my-db-server.conf
+ssh <db-alias> 'bash -s -- init' < src/shell/db/docker-db-server-manager.sh > my-db-server.conf
 ```
 Prints a config for the host it runs on (`EXPECTED_PRIVATE_IP`, `PRIVATE_IP` and
 `VPC_CIDR` from `PRIVATE_IFACE`, engines, users). It contains no secrets. Edit it,
@@ -328,7 +328,7 @@ The init SQL only runs when the data volume is brand new. To get these into an e
 # on the db server
 sudo /root/docker-db-server-manager.sh env > ~/db.env   # contains the password
 # on your workstation (see web-server-ploi.md)
-shell/web/update-env-db.sh --remote <web-alias> --site <domain> --from db.env
+src/shell/web/update-env-db.sh --remote <web-alias> --site <domain> --from db.env
 # on the web server
 nc -zv <PRIVATE_IP> 5432      # should say "succeeded"
 ```

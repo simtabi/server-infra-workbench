@@ -21,7 +21,7 @@ ssh myproject-db whoami && ssh myproject-web whoami      # both: ploi
 
 ```sh
 mkdir -p examples/myproject     # or anywhere outside the repo
-ssh myproject-db 'bash -s -- init' < shell/db/docker-db-server-manager.sh > examples/myproject/db-server.conf
+ssh myproject-db 'bash -s -- init' < src/shell/db/docker-db-server-manager.sh > examples/myproject/db-server.conf
 ```
 
 Edit it: `PG_USER`/`PG_DB` (e.g. `myproject`), and switch off engines you don't
@@ -31,20 +31,20 @@ need (`ENABLE_MYSQL=0`, `ENABLE_MARIADB=0`, ...). All settings:
 **3. Install the DB stack**, with nightly backups, and print the `DB_*` lines:
 
 ```sh
-shell/db/remote-run.sh --host myproject-db --expect-ip 10.0.0.5 \
+src/shell/db/remote-run.sh --host myproject-db --expect-ip 10.0.0.5 \
   --config examples/myproject/db-server.conf -- install, cron-install, doctor, env > ~/myproject-db.env
 ```
 
 **4. Point the web server at it** (check reachability first; no passwords needed for that):
 
 ```sh
-shell/web/check-db-reach.sh --remote myproject-web 10.0.0.5
+src/shell/web/check-db-reach.sh --remote myproject-web 10.0.0.5
 # keep only the DB_* lines from step 3's output in ~/myproject-db.env, then:
-shell/web/update-env-db.sh --remote myproject-web --site app.example.com --from ~/myproject-db.env
+src/shell/web/update-env-db.sh --remote myproject-web --site app.example.com --from ~/myproject-db.env
 rm ~/myproject-db.env
 ```
 
-**5. Deploy script.** Copy [`shell/deploy/ploi-deploy.sh`](../shell/deploy/ploi-deploy.sh),
+**5. Deploy script.** Copy [`src/shell/deploy/ploi-deploy.sh`](../src/shell/deploy/ploi-deploy.sh),
 set the SETTINGS block (`SITE_DOMAIN`, `PRESET=laravel` or `generic`, `APP_SUBDIR`,
 any hooks; see [deploy.md](tools/deploy-script.md#settings)) and paste it into Ploi →
 site → Deploy script. Keep your SETTINGS block in `examples/myproject/` too.

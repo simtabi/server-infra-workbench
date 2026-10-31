@@ -8,12 +8,12 @@ The repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 | Part | Version lives in | Bump when |
 |---|---|---|
 | The repository (tags `vX.Y.Z`) | `CHANGELOG.md` headings | any release |
-| DB server manager | `VERSION=` in `shell/db/docker-db-server-manager.sh` (`--version`) | its behaviour or generated files change |
-| PHP library and CLI | `ClientOptions::VERSION` in `php/src/Http/ClientOptions.php` (`bin/workbench version`) | its public API or CLI changes |
-| Python package | `version` in `python/pyproject.toml` and `__version__` | its CLI or API changes |
+| DB server manager | `VERSION=` in `src/shell/db/docker-db-server-manager.sh` (`--version`) | its behaviour or generated files change |
+| PHP library and CLI | `ClientOptions::VERSION` in `src/php/src/Http/ClientOptions.php` (`bin/workbench version`) | its public API or CLI changes |
+| Python package | `version` in `src/python/pyproject.toml` and `__version__` | its CLI or API changes |
 
 **Major**: a removed command, flag, class or method; a changed default that alters what runs on a server;
-removing the `scripts/` shims. **Minor**: new commands, flags, platforms or options, backwards compatible.
+a moved tool path. **Minor**: new commands, flags, platforms or options, backwards compatible.
 **Patch**: fixes and docs. Until 1.0.0 the PHP and Python packages may make breaking changes in a minor
 release, called out under **Changed** in the changelog.
 

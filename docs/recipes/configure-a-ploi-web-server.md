@@ -26,7 +26,7 @@ ln -sfn /home/ploi/<site>-shared/.env /home/ploi/<site>/.env
 
 ## Update `DB_*` settings
 
-[`shell/web/update-env-db.sh`](../../shell/web/update-env-db.sh) backs up the
+[`src/shell/web/update-env-db.sh`](../../src/shell/web/update-env-db.sh) backs up the
 shared `.env` (`.env.bak.<timestamp>`), replaces only the `DB_*` keys you give
 it (idempotent; other keys such as `DB_SSLMODE` stay), and prints the result
 with `DB_PASSWORD=***`. Values come from a file or flags, never from the script.
@@ -38,7 +38,7 @@ sudo /root/docker-db-server-manager.sh env | grep '^DB_' > ~/db.env
 scp <db-alias>:db.env ./db.env && ssh <db-alias> rm db.env
 
 # from your workstation
-shell/web/update-env-db.sh --remote <web-alias> --site <domain> --from db.env
+src/shell/web/update-env-db.sh --remote <web-alias> --site <domain> --from db.env
 rm db.env
 
 # or, on the web server itself

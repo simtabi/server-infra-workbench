@@ -10,10 +10,10 @@ pass=0
 ok()   { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
 
-M=shell/db/docker-db-server-manager.sh
-W=shell/web/update-env-db.sh
-R=shell/db/remote-run.sh
-D=shell/deploy/ploi-deploy.sh
+M=src/shell/db/docker-db-server-manager.sh
+W=src/shell/web/update-env-db.sh
+R=src/shell/db/remote-run.sh
+D=src/shell/deploy/ploi-deploy.sh
 
 # --- manager ---------------------------------------------------------------
 "$M" --version | grep -q 'Docker DB Server Setup Manager' && ok "manager --version" || fail "manager --version"
@@ -66,7 +66,7 @@ baks=("$T"/app.env.bak.*); newest="${baks[${#baks[@]}-1]}"
   && ok ".env backup is chmod 600" || fail ".env backup is chmod 600"
 
 # --- check-db-reach --------------------------------------------------------------
-if shell/web/check-db-reach.sh 127.0.0.1 9 >/dev/null 2>&1; then fail "closed port reported open"; else ok "check-db-reach reports a closed port"; fi
+if src/shell/web/check-db-reach.sh 127.0.0.1 9 >/dev/null 2>&1; then fail "closed port reported open"; else ok "check-db-reach reports a closed port"; fi
 
 # --- adminer toggle + tunnel helper ----------------------------------------------
 grep -q 'adminer:' "$T/e1000/docker-compose.yml" && fail "adminer on by default" || ok "adminer off by default"
@@ -79,7 +79,7 @@ grep -q 'AUTH_USER: ${PG_USER}' "$T/adm/docker-compose.yml" && ok "pgbouncer aut
 for c in "create-user x" "grant 'a;b' db" "drop-db postgres" "drop-user root mysql" "create-db shop --extensions 'x;y'"; do
   if eval "PRIVATE_IP=10.0.0.5 \"\$M\" $c" >/dev/null 2>&1; then fail "unsafe args accepted: $c"; fi
 done; ok "user commands reject unsafe/protected args"
-TN=shell/tunnels/db-tunnel.sh
+TN=src/shell/tunnels/db-tunnel.sh
 "$TN" --print --host u@h --private-ip 10.0.0.5 mysql mariadb adminer | grep -q '127.0.0.1:13306:10.0.0.5:3306 -L 127.0.0.1:13307:10.0.0.5:3307 -L 127.0.0.1:8081:127.0.0.1:8081 u@h' \
   && ok "db-tunnel builds forwards" || fail "db-tunnel builds forwards"
 if "$TN" --print --host u@h postgres 2>/dev/null; then fail "db-tunnel without private ip"; else ok "db-tunnel needs --private-ip for engines"; fi
@@ -115,18 +115,17 @@ ok "deploy script avoids Ploi placeholder names"
 # --- deploy script sandbox (generic preset, hooks, first-install marker) -----
 bash tests/shell/deploy-sandbox.sh | grep -qE 'deploy sandbox (ok|skipped)' && ok "deploy sandbox" || fail "deploy sandbox"
 
-# --- bin/workbench dispatcher and old-path shims ---------------------------------
-grep -q 'shell/db/remote-run.sh' <<<"$(bin/workbench list)" && ok "workbench list" || fail "workbench list"
+# --- bin/workbench dispatcher ------------------------------------------------------
+grep -q 'src/shell/db/remote-run.sh' <<<"$(bin/workbench list)" && ok "workbench list" || fail "workbench list"
 bin/workbench db remote-run --dry-run --host h --expect-ip 10.0.0.5 -- env | grep 'docker-db-server-manager.sh env' >/dev/null \
   && ok "workbench <area> <tool> runs shell tools" || fail "workbench <area> <tool>"
 if bin/workbench 'db;id' x 2>/dev/null || bin/workbench db ../../etc 2>/dev/null; then fail "workbench accepted a bad tool name"; fi
 ok "workbench rejects bad area/tool names"
-grep -q 'manager.sh env' <<<"$(scripts/db/remote-run.sh --dry-run --host h --expect-ip 10.0.0.5 -- env 2>"$T/shim")" \
-  && grep -q 'moved to shell/db/remote-run.sh' "$T/shim" && ok "old scripts/ paths still work (with a note)" || fail "scripts/ shim"
+[ ! -e scripts ] && [ ! -e tools ] && [ ! -e bin/vsw ] && ok "no legacy scripts/, tools/ or bin/vsw" || fail "legacy paths are back"
 if command -v python3 >/dev/null 2>&1; then
   set +e; bin/workbench py ping 127.0.0.1 notaport >/dev/null 2>&1; rc=$?; set -e; [ "$rc" -eq 2 ] && ok "workbench py validates input" || fail "workbench py validation"
 fi
-if command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' && [ -f php/vendor/autoload.php ]; then
+if command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' && [ -f src/php/vendor/autoload.php ]; then
   out="$(DIGITALOCEAN_TOKEN=smoke-not-a-token VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 --name pre-upgrade --dry-run)"
   grep -q 'DRY RUN — nothing sent.*POST /v2/droplets/42/actions' <<<"$out" && ok "workbench do snapshot --dry-run sends nothing" || fail "do snapshot dry-run: $out"
   set +e; DIGITALOCEAN_TOKEN=smoke-not-a-token VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 </dev/null 2>/dev/null; rc=$?; set -e
@@ -134,7 +133,7 @@ if command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 
   set +e; env -u DIGITALOCEAN_TOKEN VSW_CREDENTIALS_FILE=/nonexistent bin/workbench digitalocean droplets 2>"$T/cred"; rc=$?; set -e
   [ "$rc" -eq 4 ] && grep -q 'DIGITALOCEAN_TOKEN is not set' "$T/cred" && ok "workbench reports missing credentials" || fail "missing credentials exit $rc"
 else
-  ok "workbench PHP checks skipped (php 8.4+ with php/vendor not available)"
+  ok "workbench PHP checks skipped (php 8.4+ with src/php/vendor not available)"
 fi
 
 # --- core stays project-neutral -------------------------------------------------

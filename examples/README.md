@@ -2,7 +2,7 @@
 
 One folder per project. Each holds only that project's settings (no secrets):
 the DB manager config, the deploy SETTINGS block and anything else specific.
-The scripts in `shell/` (and the `php/` and `python/` packages) stay project-neutral.
+Everything under `src/` (shell tools, the PHP and Python packages) stays project-neutral.
 
 | Folder | What |
 |---|---|

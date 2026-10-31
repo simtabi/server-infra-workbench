@@ -16,7 +16,7 @@
 #   MYSQL_PORT=3306 MARIADB_PORT=3307 ADMINER_PORT=8081); override with the same names.
 #
 # Example:
-#   shell/tunnels/db-tunnel.sh --host ploi@203.0.113.10 --private-ip 10.0.0.5 postgres adminer
+#   src/shell/tunnels/db-tunnel.sh --host ploi@203.0.113.10 --private-ip 10.0.0.5 postgres adminer
 set -euo pipefail
 
 HOST="${DB_TUNNEL_HOST:-}"; PIP="${DB_PRIVATE_IP:-}"; BG=0; PRINT=0; ENG=()

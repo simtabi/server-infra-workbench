@@ -10,7 +10,7 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-json
-        exclude: '^php/composer\.lock$'
+        exclude: '^src/php/composer\.lock$'
       - id: check-merge-conflict
       - id: check-executables-have-shebangs
       - id: detect-private-key
@@ -35,13 +35,13 @@ repos:
         entry: make php
         language: system
         pass_filenames: false
-        files: '^php/'
+        files: '^src/php/'
       - id: python
         name: python checks (make python)
         entry: make python
         language: system
         pass_filenames: false
-        files: '^python/'
+        files: '^src/python/'
       - id: links
         name: markdown links (make links)
         entry: make links

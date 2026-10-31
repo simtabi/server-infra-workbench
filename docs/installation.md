@@ -25,7 +25,7 @@ brew install bash shellcheck shfmt jq php composer python doctl
 ```bash
 git clone <your remote or path> vps-server-workbench
 cd vps-server-workbench
-composer install --working-dir=php       # only for the platform APIs
+composer install --working-dir=src/php       # only for the platform APIs
 bin/workbench list                       # every tool and where it lives
 ```
 

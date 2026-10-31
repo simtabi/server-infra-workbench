@@ -19,6 +19,9 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
-php/vendor/
-php/.phpunit.cache/
-php/.phpstan.cache/
+src/php/vendor/
+src/php/.phpunit.cache/
+src/php/.phpstan.cache/
+
+# local inventories pulled back from servers (bin/workbench server inventory --pull)
+/inventory/

@@ -21,12 +21,12 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 
 | Page | Tool |
 |---|---|
-| [DB server manager](tools/db-server-manager.md) | `shell/db/docker-db-server-manager.sh` and `remote-run.sh`: build, check, back up, upgrade the database droplet |
-| [Deploy script](tools/deploy-script.md) | `shell/deploy/ploi-deploy.sh`: zero-downtime Ploi deploys, presets, hooks, first run |
+| [DB server manager](tools/db-server-manager.md) | `src/shell/db/docker-db-server-manager.sh` and `remote-run.sh`: build, check, back up, upgrade the database droplet |
+| [Deploy script](tools/deploy-script.md) | `src/shell/deploy/ploi-deploy.sh`: zero-downtime Ploi deploys, presets, hooks, first run |
 | [Caddy stack](tools/caddy-stack.md) | `stacks/caddy`: the app in containers behind Caddy with automatic HTTPS |
 | [Command line](tools/cli.md) | `bin/workbench`: one entry point, platform commands, flags, exit codes |
-| [Platform API library](tools/platform-api.md) | `php/`: DigitalOcean, Cloudflare, Ploi, GCP clients, pending actions, audit log |
-| [Python package](tools/python.md) | `python/`: small helpers (`ping`) |
+| [Platform API library](tools/platform-api.md) | `src/php`: DigitalOcean, Cloudflare, Ploi, GCP clients, pending actions, audit log |
+| [Python package](tools/python.md) | `src/python`: `ping` probe and the `plans` finder (DO plans per region via Ploi) |
 
 ## Recipes
 
@@ -66,10 +66,10 @@ Diagrams are [Mermaid](https://mermaid.js.org); GitHub renders them inline; `mak
 | Tool | Runs on | Main commands / flags |
 |---|---|---|
 | [`bin/workbench`](../bin/workbench) | workstation | `list`, `<area> <tool>`, `do`, `cf`, `ploi`, `gcp`, `credentials`, `py`; `--dry-run --yes --force --json --verbose`, see [cli.md](tools/cli.md) |
-| [`docker-db-server-manager.sh`](../shell/db/docker-db-server-manager.sh) | DB server (root) | `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user backup restore cron-install cron-remove logs uninstall help`; `--yes --dry-run --non-interactive --snapshot --snapshot-taken --no-snapshot --config --version` |
-| [`remote-run.sh`](../shell/db/remote-run.sh) | workstation | `--host --expect-ip --config --script --no-upload --dry-run -- <cmd>, <cmd>` |
-| [`update-env-db.sh`](../shell/web/update-env-db.sh) | web server or workstation | `--env --site --from --set --remote --no-backup --dry-run` |
-| [`check-db-reach.sh`](../shell/web/check-db-reach.sh) | web server or workstation | `<db-ip> [ports]`, `--env FILE`, `--remote ALIAS` |
-| [`db-tunnel.sh`](../shell/tunnels/db-tunnel.sh) | workstation | `<postgres\|pgbouncer\|mysql\|mariadb\|adminer\|all> --host --private-ip --background --print` |
-| [`ploi-deploy.sh`](../shell/deploy/ploi-deploy.sh) | pasted into Ploi | SETTINGS block, see [deploy-script.md](tools/deploy-script.md#settings) |
+| [`docker-db-server-manager.sh`](../src/shell/db/docker-db-server-manager.sh) | DB server (root) | `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user backup restore cron-install cron-remove logs uninstall help`; `--yes --dry-run --non-interactive --snapshot --snapshot-taken --no-snapshot --config --version` |
+| [`remote-run.sh`](../src/shell/db/remote-run.sh) | workstation | `--host --expect-ip --config --script --no-upload --dry-run -- <cmd>, <cmd>` |
+| [`update-env-db.sh`](../src/shell/web/update-env-db.sh) | web server or workstation | `--env --site --from --set --remote --no-backup --dry-run` |
+| [`check-db-reach.sh`](../src/shell/web/check-db-reach.sh) | web server or workstation | `<db-ip> [ports]`, `--env FILE`, `--remote ALIAS` |
+| [`db-tunnel.sh`](../src/shell/tunnels/db-tunnel.sh) | workstation | `<postgres\|pgbouncer\|mysql\|mariadb\|adminer\|all> --host --private-ip --background --print` |
+| [`ploi-deploy.sh`](../src/shell/deploy/ploi-deploy.sh) | pasted into Ploi | SETTINGS block, see [deploy-script.md](tools/deploy-script.md#settings) |
 | [`stacks/caddy`](../stacks/caddy) | Docker web server | `docker compose up -d`, `caddy reload`, see [caddy-stack.md](tools/caddy-stack.md#day-2-reload-logs-upgrades) |

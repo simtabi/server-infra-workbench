@@ -7,7 +7,7 @@ Thanks for helping improve `simtabi/vps-server-workbench`. Please read the
 ## Getting set up
 
 ```bash
-composer install --working-dir=php       # PHP 8.4+, for the platform APIs
+composer install --working-dir=src/php       # PHP 8.4+, for the platform APIs
 make help                                # every target
 make ci                                  # the gate CI runs
 ```
@@ -33,7 +33,7 @@ Where things go and how to name them: [docs/structure.md](docs/structure.md#wher
   (`<token>`, `203.0.113.10`, `example.com`).
 - **No project names outside `examples/` and `CHANGELOG.md`**; `make test` enforces it.
 - **Tests never touch the network or a real server.** PHP tests use the mock PSR-18 client in
-  `php/tests/Fixtures`; shell tests stub `docker`/`ssh`.
+  `src/php/tests/Fixtures`; shell tests stub `docker`/`ssh`.
 - **Safe by default**: new platform writes return a `PendingAction` (destructive ones flagged), and new
   server commands support `--dry-run` and refuse to run on the wrong host. See [docs/adr](docs/adr/README.md).
 - **Pinned versions** for images and dependencies; prefer the newest stable release.

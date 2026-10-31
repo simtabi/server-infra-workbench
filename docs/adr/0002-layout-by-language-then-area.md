@@ -1,6 +1,6 @@
 # 0002. Lay the repository out by language, then by area
 
-- Status: Accepted
+- Status: Accepted, amended by [0006](0006-all-code-under-src-no-shims.md)
 - Date: 2026-10-31
 
 ## Context

@@ -577,7 +577,7 @@ cmd_env() { # [engine]: postgres (default when enabled), mysql, mariadb
   need_stack; load_env
   local e="${1:-$(engines | cut -d' ' -f1)}"
   echo "# paste into $WEB_ENV on the web server, then redeploy"
-  echo "# (or save to a file and run shell/web/update-env-db.sh --from <file>)"
+  echo "# (or save to a file and run src/shell/web/update-env-db.sh --from <file>)"
   case "$e" in
     postgres) on "$ENABLE_POSTGRES" || die "postgres is disabled"
       printf 'DB_CONNECTION=pgsql\nDB_HOST=%s\nDB_PORT=%s\nDB_DATABASE=%s\nDB_USERNAME=%s\nDB_PASSWORD=%s\n' \

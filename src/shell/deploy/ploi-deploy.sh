@@ -119,7 +119,7 @@ chmod 600 "$SHARED/.env"
 missing=""
 for v in $REQUIRED_VARS; do [ -n "$(env_get "$v" "$SHARED/.env" || true)" ] || missing="$missing $v"; done
 [ -z "$missing" ] || stop "Fill in these values in $SHARED/.env, then deploy again:$missing
-   Edit it with:  nano $SHARED/.env   (or shell/web/update-env-db.sh for DB_*)"
+   Edit it with:  nano $SHARED/.env   (or src/shell/web/update-env-db.sh for DB_*)"
 
 if [ "$PRESET" = laravel ]; then
   if [ ! -d "$SHARED/storage" ]; then

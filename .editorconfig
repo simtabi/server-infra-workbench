@@ -30,5 +30,5 @@ binary_next_line = true
 switch_case_indent = true
 space_redirects = false
 
-[php/**.php]
+[src/php/**.php]
 indent_size = 4

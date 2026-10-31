@@ -36,7 +36,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/composer
-          key: composer-${{ hashFiles('php/composer.lock') }}
+          key: composer-${{ hashFiles('src/php/composer.lock') }}
       # One gate, defined in the Makefile.
       - name: Gate (bash -n, shellcheck, smoke, pint, phpstan, phpunit, python, links, compose + caddy)
         run: make ci

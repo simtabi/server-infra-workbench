@@ -81,7 +81,7 @@ DBeaver: connection → *SSH* tab → *Use SSH Tunnel*, same values. DataGrip: *
 
 ```bash
 # Postgres + MySQL + MariaDB + Adminer in one tunnel (Ctrl-C closes it)
-shell/tunnels/db-tunnel.sh --host ploi@203.0.113.10 --private-ip 10.0.0.5 all
+src/shell/tunnels/db-tunnel.sh --host ploi@203.0.113.10 --private-ip 10.0.0.5 all
 
 # or by hand, one engine
 ssh -N -L 15432:10.0.0.5:5432 ploi@203.0.113.10
@@ -152,7 +152,7 @@ DB_USERNAME=app
 DB_PASSWORD=...     # from `env`
 ```
 
-Prove it from the web server: `shell/web/check-db-reach.sh --env /home/ploi/<site>-shared/.env`.
+Prove it from the web server: `src/shell/web/check-db-reach.sh --env /home/ploi/<site>-shared/.env`.
 
 ### Direct port vs PgBouncer for migrations
 
