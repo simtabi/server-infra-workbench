@@ -25,7 +25,7 @@ pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&
 # outputs of a failed run are kept in /tmp/vsw-it-last (no secrets: passwords are never printed)
 cleanup() { rm -rf /tmp/vsw-it-last; mkdir -p /tmp/vsw-it-last; cp "$W"/*.out "$DBM_LOG" /tmp/vsw-it-last/ 2>/dev/null || true
   [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true
-  docker ps -aq --filter name=vsw-restore-test | xargs -r docker rm -f >/dev/null 2>&1 || true; rm -rf "$W"; }
+  docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true; rm -rf "$W"; }
 trap cleanup EXIT
 export DB_DIR="$D" PRIVATE_IP=127.0.0.1 VPC_CIDR=127.0.0.0/8 DBM_CONFIG="$W/none.conf" \
   DBM_LOCK="$W/lock" DBM_LOG="$W/upgrade.log" BACKUP_DIR="$W/backups" MIN_FREE_MB=10 \
@@ -107,6 +107,7 @@ unset APP ENVS TENANT_ENVS PROTECTED_ENVS
 run cmd_backup > "$W/bk.out" 2>&1 && b="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '2*' | sort | tail -1)" && [ -f "$b/manifest.txt" ] && [ -f "$b/SHA256SUMS" ] \
   && ok "backup: dumps + manifest + checksums" || { cat "$W/bk.out"; fail "backup"; }
 run cmd_restore_test > "$W/rt.out" 2>&1 && grep -q 'restore test OK' "$W/rt.out" && ok "restore-test: loads into throwaway containers, manifest matches" || { tail -30 "$W/rt.out"; fail "restore-test"; }
+[ -z "$(docker ps -aq --filter name=vsw-rt-)" ] && ok "restore-test: throwaway containers removed" || fail "restore-test left vsw-rt-* containers behind"
 
 # ---- doctor flags a deviation ---------------------------------------------------------------------
 run cmd_doctor > "$W/doc.out" 2>&1 && ! grep -q PROBLEM "$W/doc.out" && ok "doctor clean after upgrade" || { cat "$W/doc.out"; fail "doctor clean"; }

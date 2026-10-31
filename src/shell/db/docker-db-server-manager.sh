@@ -2107,13 +2107,16 @@ cmd_restore_test() { # [dir] [--cron]
   verify_backup "$src"
   local tag="vsw-rt-$$" pw got want rc=0 e img
   pw="$(new_password)"
-  cleanup_rt() { docker rm -f "$tag-postgres" "$tag-mysql" "$tag-mariadb" >/dev/null 2>&1 || true; }
-  trap 'cleanup_rt' RETURN
+  # explicit cleanup on every path: a RETURN trap does not fire reliably here, and nightly
+  # cron runs would otherwise leave throwaway containers (and their RAM) behind
+  cleanup_rt() { docker rm -f "$tag-postgres" "$tag-mysql" "$tag-mariadb" >/dev/null 2>&1 || true; rm -f "/tmp/$tag.got"; }
+  rt_die() { cleanup_rt; die "$@"; }
+  docker ps -aq --filter name=vsw-rt- 2>/dev/null | xargs -r docker rm -f >/dev/null 2>&1 || true   # leftovers of older versions
   : > "/tmp/$tag.got"
   rt_wait() { local i; for i in $(seq 1 "$((RESTORE_TEST_TIMEOUT / 2))"); do docker exec "$1" sh -c "$2" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
   if on "$ENABLE_POSTGRES" && [ -f "$src/postgres.sql.gz" ]; then
     docker run -d --name "$tag-postgres" --network none -e POSTGRES_PASSWORD="$pw" -e POSTGRES_USER="$PG_ADMIN_USER" -e POSTGRES_DB=postgres "$PG_IMAGE" >/dev/null
-    rt_wait "$tag-postgres" "pg_isready -U $PG_ADMIN_USER -h 127.0.0.1" || die "restore test: postgres did not start"
+    rt_wait "$tag-postgres" "pg_isready -U $PG_ADMIN_USER -h 127.0.0.1" || rt_die "restore test: postgres did not start"
     sleep 2
     gunzip -c "$src/postgres.sql.gz" | grep -vE "^(DROP|CREATE|ALTER) ROLE (IF EXISTS )?\"?$PG_ADMIN_USER\"?( |;)" | docker exec -i "$tag-postgres" psql -X -q -v ON_ERROR_STOP=0 -U "$PG_ADMIN_USER" -d postgres >/dev/null 2>&1 || true
     for d in $(docker exec "$tag-postgres" psql -X -U "$PG_ADMIN_USER" -d postgres -tAc "select datname from pg_database where datallowconn and not datistemplate order by 1"); do
@@ -2125,12 +2128,12 @@ cmd_restore_test() { # [dir] [--cron]
     [ -f "$src/$e.sql.gz" ] || continue
     img="$MYSQL_IMAGE"; local cli=mysql pv=MYSQL_ROOT_PASSWORD; [ "$e" = mariadb ] && img="$MARIADB_IMAGE" cli=mariadb pv=MARIADB_ROOT_PASSWORD
     docker run -d --name "$tag-$e" --network none -e "$pv=$pw" "$img" >/dev/null
-    rt_wait "$tag-$e" "MYSQL_PWD='$pw' $cli -uroot -e 'select 1'" || die "restore test: $e did not start"
+    rt_wait "$tag-$e" "MYSQL_PWD='$pw' $cli -uroot -e 'select 1'" || rt_die "restore test: $e did not start"
     gunzip -c "$src/$e.sql.gz" | docker exec -i -e MYSQL_PWD="$pw" "$tag-$e" $cli -uroot || { warn "$e load reported errors"; rc=1; }
     docker exec -e MYSQL_PWD="$pw" "$tag-$e" $cli -uroot -NBe "select s.schema_name, count(t.table_name) from information_schema.schemata s left join information_schema.tables t on t.table_schema=s.schema_name and t.table_type='BASE TABLE' where s.schema_name not in ($MY_SYS_DBS) group by s.schema_name order by 1" \
       | awk -v e="$e" '{print e, $1, $2}' >> "/tmp/$tag.got"
   done
-  want="$( [ -f "$src/manifest.txt" ] && sort "$src/manifest.txt")"; got="$(sort "/tmp/$tag.got")"; rm -f "/tmp/$tag.got"
+  want="$( [ -f "$src/manifest.txt" ] && sort "$src/manifest.txt")"; got="$(sort "/tmp/$tag.got")"; cleanup_rt
   if [ -z "$want" ]; then warn "no manifest in $src (older backup): only checked that it loads"; printf '%s\n' "$got" | while IFS= read -r l; do echo "  $l"; done
   elif [ "$want" != "$got" ]; then
     echo "manifest mismatch (expected vs restored):"; diff <(echo "$want") <(echo "$got") | sed 's/^/  /' || true; rc=1
