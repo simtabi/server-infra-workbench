@@ -53,6 +53,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   could wait on an unresolvable endpoint and the init server's shutdown ran past 60 s. The front now joins as
   soon as compose creates the network, as a reachable Spaces endpoint would be; the docs say the repo must answer first.
 
+### Fixed (docs and command audit)
+
+- `remote-run.sh --no-upload --config FILE` now uploads the config; before, the remote installed whatever
+  `~/docker-db-server-manager.conf` an earlier run had left behind. Upgrade detection matches the command word
+  (`upgrade`/`apply`), so `env-apply` and `pg-major-upgrade` no longer get `--snapshot-taken` (which
+  `pg-major-upgrade` refused), and every upgrade segment in a `--` list gets the flag, not only the first.
+- `bin/workbench do|cf|ploi|gcp`: a value option given twice (`--droplet A --droplet B`) is a usage error;
+  it used to keep only the last one silently. Pass a comma-separated list.
+- Live rollout runbook: task 11 passed `--droplet` twice (only the web droplet got alerts); `firewall-delete`
+  and `alerts delete` rollbacks lacked `--force`.
+- `--help` of 12 shell tools no longer prints bare `#` lines; the manager help lists `gfs-keep` and the global
+  flags; `net wireguard` help lists `--ping`; `addon.sh` help lists `--force` and `--accept-experimental`.
+- Config examples list the keys the code reads: `MONITOR_PG_USER/HOST/SSLMODE`, `MONITOR_PGBOUNCER_*`,
+  `MONITOR_STACKS_DIR`, `CADDY_IMAGE` (monitor), `WAIT_TIMEOUT`, `ADDON_STACKS` (add-ons), `ALERT_ON_OK`,
+  `DO_TOKEN_FILE` (manager). `web-db.env.example` no longer ships a placeholder password. The monitor example
+  pointed at a non-existent `docs/decisions/` ADR path; `config/README.md` had the wrong add-ons conf path.
+- `docs/README.md` command reference lists every tool and manager command; `bin/workbench list` shows
+  `env`/`addon`/`monitor`/`status` as shell shortcuts (`env` was listed under Python) and `do resize|alerts`.
+- Ubuntu 24.04 or 26.04 LTS in the docs; the `droplet-create` default image (`ubuntu-24-04-x64`) is documented.
+- `examples/generic-laravel` gets the `example.conf` the catalog promised and says to copy into `local/`.
+
+### Added (docs and command audit)
+
+- `make docs-commands` checks DB manager commands (`M <cmd>`, the manager path, `remote-run.sh -- a, b`
+  lists) against its dispatch table and help, flags after `<placeholders>`, repeated PHP value options,
+  destructive PHP commands without `--force`, and the reverse: every manager command, shell tool and PHP
+  subcommand is documented somewhere.
+- `tests/docs/check-config-examples.py` in `make links`: missing and dead keys in the config examples.
+- [ADR 0013](docs/adr/0013-dev-on-2gb-postgres-only.md): dev and staging stay on 2 GB with Postgres only.
+- Runbook optional tasks 16-19: dev budget, OS updates with a reboot window, `web diagnose`, the first
+  off-site restore drill.
+
 ### Added (P2: manager 1.5.0, monitoring, progress)
 
 - **Monitoring** ([monitor](docs/tools/monitor.md), [ADR 0012](docs/adr/0012-monitoring-stack.md)): `bin/workbench monitor`
