@@ -1,0 +1,7 @@
+# Copy to .client-denylist (ignored by git) and list real client identifiers, one per line.
+# `make client-check` fails when any of them (case-insensitive, fixed strings) appears in a tracked file.
+# Lines starting with # and blank lines are ignored. Keep this example file generic.
+acme-corp
+acme-prd-db-00
+app.acme-corp.example
+198.51.100.23

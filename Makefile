@@ -72,4 +72,7 @@ test: ## offline smoke tests (no servers touched)
 it: ## Docker integration test of the guided upgrade (throwaway containers, ~3 min)
 	bash tests/shell/upgrade-it.sh
 
-ci: lint test php python links compose-check ## the gate CI runs
+client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
+	tests/shell/client-check.sh
+
+ci: lint test client-check php python links compose-check ## the gate CI runs

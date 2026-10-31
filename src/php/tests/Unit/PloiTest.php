@@ -32,8 +32,8 @@ final class PloiTest extends TestCase
         $server = $this->ploi()->servers()->find('12');
         self::assertSame([], $this->http->requests);
 
-        $this->http->json(['data' => ['id' => 12, 'name' => 'web-01', 'ip_address' => '203.0.113.9', 'internal_ip' => '10.0.0.5', 'sites_count' => 3]]);
-        self::assertSame('10.0.0.5', $server->get()->internalIp);
+        $this->http->json(['data' => ['id' => 12, 'name' => 'web-01', 'ip_address' => '203.0.113.9', 'internal_ip' => '10.0.0.6', 'sites_count' => 3]]);
+        self::assertSame('10.0.0.6', $server->get()->internalIp);
     }
 
     public function test_deploy_needs_confirmation(): void

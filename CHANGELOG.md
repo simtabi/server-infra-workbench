@@ -32,7 +32,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Docs follow the other Simtabi packages: guides at the top of `docs/`, tool references in `docs/tools/`,
   recipes in `docs/recipes/`, decisions in `docs/adr/`. Old to new paths are listed in `docs/structure.md`.
-- The rollout recipe and the myapp example run `doctl auth init` on its own line (it prompts for the
+- The rollout recipe and the reference example run `doctl auth init` on its own line (it prompts for the
   token, so a pasted block would feed it the next line) and show the `bin/workbench do snapshot` alternative.
 
 ### Changed (project renamed: vps-server-workbench)
@@ -77,7 +77,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `PUBLIC` loses CONNECT on new databases and `PG_DB`; protected bootstrap users and system DBs. Passwords
   from `openssl rand`, sent to the client on stdin (never in `ps`), printed once or `--out FILE` (chmod 600).
 - `create-db --extensions a,b` (pgvector, PostGIS, citext, hstore...); `citext` added to `PG_EXTENSIONS`.
-- `docs/runbooks/rollout-plan.md`: dry run, backup, rollback copies, install, verify, rollback; myapp checklist updated.
+- `docs/runbooks/rollout-plan.md`: dry run, backup, rollback copies, install, verify, rollback; project checklist updated.
 
 ### Fixed
 
@@ -98,7 +98,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ploi-deploy.sh` rewritten: `PRESET=laravel|generic`; optional hooks `FIRST_INSTALL_CMD`, `INSTALL_ENV_KEYS`,
   `MIGRATE_CMD`, `EXTRA_MIGRATE_CMDS`, `BUILD_CMDS`, `POST_DEPLOY_CMDS`, `HEALTHCHECK_CMD` (all empty by default);
   `ENV_DEFAULTS` replaces `TENANCY_DOMAIN_KEY`. Removed `INSTALL_COMMAND`, `INSTALL_NEEDS_ADMIN`, `TENANTS_MIGRATE`,
-  `DOCTOR_COMMAND` (see `examples/myapp/ploi-deploy.settings.sh` for the mapping). Works on in-place sites too,
+  `DOCTOR_COMMAND` (see `examples/generic-laravel/ploi-deploy.settings.sh` for the mapping). Works on in-place sites too,
   links `<site>/.env` to the shared file for Ploi's editor, enforces `chmod 600`, composer/npm steps only when
   `composer.json`/`package.json` exist, first-install marker in the shared dir (old `storage/installed` honoured).
 - Defaults: `APP_SUBDIR=.`, `PHP_MIN=8.3.0`, no Node version check unless `NODE_MIN_MAJOR` is set.
@@ -122,15 +122,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the `smoke` profile).
 - Mermaid diagrams: architecture, request flow, Caddy stack, deploy pipeline, DB command lifecycle, backup/restore,
   upgrade procedure, SSH key flow, "which machine am I on?". Port, settings and command reference tables.
-- `docs/README.md` index, `docs/upgrading.md` (moving an existing server to this version, myapp commands).
+- `docs/README.md` index, `docs/upgrading.md` (moving an existing server to this version).
 - `tests/check-links.py` + `make links`; `tests/render-mermaid.sh` + `make mermaid`; `make compose-check` now also runs
   `caddy validate` on every Caddyfile; `make ci` = lint + smoke + links + compose-check.
 
 ### Fixed
 
 - Deploy script required `TENANCY_CENTRAL_DOMAINS` for every app; `REQUIRED_VARS` and `TENANCY_DOMAIN_KEY` are now
-  settings (the myapp example sets both). `env_set` escapes `|`, `&` and `\` in values.
-- myapp example ran `reset --yes` against a server with data; now `status, verify` then `install`.
+  settings (a project example sets both). `env_set` escapes `|`, `&` and `\` in values.
+- A project example ran `reset --yes` against a server with data; now `status, verify` then `install`.
 - The Caddy example mounted the Caddyfile as a single file (edits not seen after reload) and proxied to whoami only.
 - Config example pinned `BACKUP_DIR`/`WEB_ENV` values that disagreed with derived defaults.
 - Docs: `verify` description (direct login is via `127.0.0.1:5432`), unverifiable Ploi menu paths reworded, daemon
@@ -151,11 +151,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   locally or over SSH.
 - `scripts/deploy/ploi-deploy.sh`: Ploi zero-downtime deploy script, with a SETTINGS block for site, branch, app
   directory, PHP/Node minimums, install and doctor commands, tenant migrations.
-- Caddy reverse-proxy compose example, config templates, the myapp example, the Ploi/DO plan finder tool.
+- Caddy reverse-proxy compose example, config templates, a generic Laravel example, the Ploi/DO plan finder tool.
 - Docs: architecture, DB server runbook, web server, deploy, daemons, SSH access, troubleshooting.
 - Makefile (`lint`, `test`, `ci`) and a GitHub Actions workflow running shellcheck and `bash -n`.
 
 ### Changed
 
 - Defaults are generic (`PG_USER`/`PG_DB` `app`, `VPC_CIDR` `10.0.0.0/8`, no fallback private IP). Existing installs
-  must set the old values in the config file; see `examples/myapp/README.md`.
+  must set the old values in the config file; see `docs/upgrading.md`.

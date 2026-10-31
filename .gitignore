@@ -25,3 +25,8 @@ src/php/.phpstan.cache/
 
 # local inventories pulled back from servers (bin/workbench server inventory --pull)
 /inventory/
+
+# client-specific setups and identifiers stay local (see local/README.md)
+/local/*
+!/local/README.md
+/.client-denylist

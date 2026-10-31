@@ -163,12 +163,9 @@ else
   ok "workbench PHP checks skipped (php 8.4+ with src/php/vendor not available)"
 fi
 
-# --- core stays project-neutral -------------------------------------------------
-if git ls-files >/dev/null 2>&1; then core="$(git ls-files | grep -vE '^(examples/|CHANGELOG\.md$|tests/shell/smoke\.sh$)')"
-else core="$(find . -type f -not -path './.git/*' -not -path './examples/*' -not -name CHANGELOG.md -not -name smoke.sh)"; fi
-# shellcheck disable=SC2086
-if grep -il 'myapp' $core; then fail "project name in core files (only examples/ may name a project)"
-else ok "core is project-neutral (no project names outside examples/)"; fi
+# --- no client data in tracked files -------------------------------------------
+if tests/shell/client-check.sh >"$T/cc" 2>&1; then ok "no client identifiers in tracked files ($(tail -1 "$T/cc"))"
+else cat "$T/cc"; fail "client identifiers in tracked files"; fi
 
 # --- no secrets committed -----------------------------------------------------
 if git ls-files >/dev/null 2>&1; then files="$(git ls-files)"; else files="$(find . -type f -not -path './.git/*')"; fi
