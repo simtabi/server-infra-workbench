@@ -68,7 +68,7 @@ run cmd_create_db shopm mysql --readonly-user --out "$W/shopm.creds" > "$W/cdbm.
   && ok "mysql: create-db with a read-only user, creds file 600" || { cat "$W/cdbm.out"; fail "mysql create-db"; }
 
 # ---- metrics -----------------------------------------------------------------------------
-psq vsw_admin app "create table t_it(id int primary key, v text); insert into t_it select g, md5(g::text) from generate_series(1,500) g" >/dev/null
+psq vsw_admin app "create table t_it(id int primary key, v text); insert into t_it select g, md5(g::text) from generate_series(1,500) g; grant select on t_it to app" >/dev/null  # the grant must survive pg-major-upgrade
 run cmd_backup > "$W/bk.out" 2>&1 || { tail -20 "$W/bk.out"; fail "backup"; }
 f="$W/textfile/vsw_db.prom"
 grep -q '^vsw_backup_last_success_timestamp_seconds{engine="all"} [0-9]\{10\}$' "$f" && grep -q '^vsw_tls_cert_expiry_timestamp_seconds{cert="db"} [0-9]\{10\}$' "$f" \
