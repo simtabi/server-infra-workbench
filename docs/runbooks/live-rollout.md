@@ -49,7 +49,7 @@ ALERT_EMAIL=<you@example.com>
 After task 11, deploy the web app with its new `DB_*` values (`bin/workbench env check --env <env>`, then a Ploi
 deploy) and run `bin/workbench web check-db-reach --env <path-to-.env>` on the web server.
 
-## Optional tasks (manager 1.5.0 and monitoring)
+## Optional tasks (manager 1.5.0, monitoring, dev budget, housekeeping)
 
 Do these after the 11 tasks, one per window. Each has a dry run and its own rollback.
 
@@ -59,6 +59,10 @@ Do these after the 11 tasks, one per window. Each has a dry run and its own roll
 | 13 | TLS `verify-full` | `TLS_MODE=verify-full` in `$CONF`, task 2 again, then `-- tls-ca --out /tmp/vsw-db-ca.crt` and copy the CA to the web host ([recipe](../recipes/verify-full-tls.md)) | `doctor`: "verify-full: server certificate chains to the CA"; the app connects with `DB_SSLMODE=verify-full` | `TLS_MODE=require` and `upgrade`; the app back to `DB_SSLMODE=require` |
 | 14 | Monitoring | `-- monitor-user`, then `monitor.sh plan` and `install` on each node, agents first ([monitor](../tools/monitor.md#typical-rollout-two-nodes-hub-on-web), [checklist 07](../checklists/07-monitoring.md)) | `monitor.sh doctor` 0 problems; Prometheus targets up through `monitor.sh tunnel` | `monitor.sh remove <unit>` (files kept) |
 | 15 | Add-on keys in the app `.env` | `bin/workbench env init --host $WEB --env <env> --site <domain> --addons --dry-run`, then without `--dry-run` | the output lists the add-ons and changed keys, no values; `env check` clean | the `.env.bak.*` the tool wrote |
+| 16 | Dev budget: Postgres only on 2 GB ([ADR 0013](../adr/0013-dev-on-2gb-postgres-only.md), non-prod servers only) | `bin/workbench configure --profile dev-budget --client <client> --dry-run`, then without `--dry-run`; then `src/shell/db/remote-run.sh --host $DB --expect-ip $DB_IP --no-upload -- engine disable mysql --dry-run, engine disable mariadb --dry-run`, then without `--dry-run` | `doctor` no longer warns about RAM; `docker ps` shows no MySQL or MariaDB container | `engine enable mysql` / `engine enable mariadb` (the volumes are kept) |
+| 17 | OS updates and reboot | `bin/workbench server update --host $DB` (plan only), then `bin/workbench server update --host $DB --yes --backup-first --reboot-window 02:00-04:00`; the same on `$WEB` without `--backup-first`. Docker packages are held unless you pass `--allow-docker` | the plan run lists nothing upgradable and no pending reboot; task 3 is clean after the reboot | restore the task 1 snapshot (packages don't downgrade cleanly) |
+| 18 | A site returns 502/503 | `bin/workbench web diagnose --host $WEB --site <domain> --env stg`, then add `--fix --dry-run`, then `--fix --yes` | exit 0 and the site answers 200 | the backups `--fix` writes before each change |
+| 19 | First off-site restore drill | the [monthly restore drill](../checklists/monthly-restore-drill.md) on a scratch droplet, from `offsite fetch` | the RTO is written down and the row counts match | destroy the scratch droplet and its copy of the key |
 
 `pg-major-upgrade` and `migrate-managed` are not part of this rollout. Run them only when you need them:
 [pg-major-upgrade](../recipes/pg-major-upgrade.md), [migrate-to-managed](../recipes/migrate-to-managed.md).
