@@ -50,7 +50,7 @@ WORKBENCH="${WORKBENCH:-$HERE/../../../bin/workbench}"
 die() { printf '!! %s\n' "$*" >&2; exit 1; }
 # usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
 # title box, so --help printed one line; awk counts the rules instead.
-usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^# ?/,""); sub(/^ /,""); print}' "$0"; }
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,""); print}' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in

@@ -35,7 +35,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../lib/common.sh"
 # usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
 # title box, so --help printed one line; awk counts the rules instead.
-usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); print}' "$0"; }
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,""); print}' "$0"; }
 
 SITE="" SITE_PATH="" OWNER="" ENVN="" FIX=0 HOST="" JSON=0
 ARGS=("$@")

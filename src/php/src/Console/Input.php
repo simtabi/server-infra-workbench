@@ -65,6 +65,11 @@ final readonly class Input
                 if ($value === null) {
                     $value = $argv[++$i] ?? throw new ValidationException("--{$key} needs a value");
                 }
+                // A repeated option used to keep only the last value, so `--droplet A --droplet B`
+                // silently targeted B alone. Lists are comma-separated; a repeat is a usage error.
+                if (array_key_exists($key, $values)) {
+                    throw new ValidationException("--{$key} given twice; pass a comma-separated list instead (--{$key} a,b)");
+                }
                 $values[$key] = $value;
             } else {
                 throw new ValidationException(sprintf('unknown option --%s (see: workbench help)', $key));
