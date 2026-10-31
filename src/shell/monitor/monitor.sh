@@ -292,6 +292,7 @@ copy_unit() {
   fi
 }
 owned_dir() { # dir uid: data dirs for containers that run as a fixed non-root user
+  # root (every real install: need_root) chowns + 700; the 777 branch only runs in the non-root container tests
   mkdir -p "$1"; if [ "$(id -u)" -eq 0 ]; then chown -R "$2" "$1"; chmod 700 "$1"; else chmod 777 "$1"; fi
 }
 prepare_unit() {
