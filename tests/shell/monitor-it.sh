@@ -60,7 +60,7 @@ prom() { curl -fsS -m 10 "http://127.0.0.1:29090$1"; }
 q() { prom "/api/v1/query?query=$1" | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "")'; }
 
 # ---- the DB side: manager install, vsw_monitor role, a backup for the textfile metrics -----------------------------
-run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "manager install (postgres + pgbouncer)" || { tail -40 "$W/install.out"; fail "install"; }
+run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "manager install (postgres + pgbouncer)" || { tail -40 "$W/install.out"; docker logs --tail 30 vswmon-postgres-1 2>&1 | sed "s/^/  pg: /"; fail "install"; }
 run cmd_monitor_user > "$W/mu.out" 2>&1 && [ "$(stat -f %Lp "$W/pg-monitor.pass" 2>/dev/null || stat -c %a "$W/pg-monitor.pass")" = 600 ] \
   && ! cat "$W/mu.out" "$DBM_LOG" 2>/dev/null | grep -qF "$(cat "$W/pg-monitor.pass")" && ok "monitor-user: role created, password file 600, never printed" || { cat "$W/mu.out"; fail "monitor-user"; }
 run cmd_monitor_user > "$W/mu2.out" 2>&1 && ok "monitor-user is idempotent" || { cat "$W/mu2.out"; fail "monitor-user rerun"; }
