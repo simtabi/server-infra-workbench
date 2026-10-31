@@ -1524,7 +1524,8 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
   valid_ipv4 "${PRIVATE_IP:-}" || err "PRIVATE_IP '${PRIVATE_IP:-}' is not an IPv4 address"
   case "${PRIVATE_IP:-}" in 0.0.0.0) err "PRIVATE_IP must not be 0.0.0.0 (would publish on every interface)" ;; esac
   [ -z "${EXPECTED_PRIVATE_IP:-}" ] || valid_ipv4 "$EXPECTED_PRIVATE_IP" || err "EXPECTED_PRIVATE_IP is not an IPv4 address"
-  ip_private "${PRIVATE_IP:-0}" || err "PRIVATE_IP '${PRIVATE_IP:-}' is not a private (VPC) address; use EXTRA_BIND_IPS for anything else"
+  case "${PRIVATE_IP:-}" in 127.*) ;; # loopback: single-node setups and tests
+    *) ip_private "${PRIVATE_IP:-0}" || err "PRIVATE_IP '${PRIVATE_IP:-}' is not a private (VPC) or loopback address; use EXTRA_BIND_IPS for anything else" ;; esac
   for v in $(extra_binds); do
     valid_ipv4 "$v" || { err "EXTRA_BIND_IPS entry '$v' is not an IPv4 address"; continue; }
     case "$v" in 0.0.0.0|127.*) err "EXTRA_BIND_IPS must not contain $v" ;; esac
