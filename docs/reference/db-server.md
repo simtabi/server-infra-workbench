@@ -1,6 +1,6 @@
 # DB server: Docker DB Server Setup Manager
 
-[`scripts/db/docker-db-server-manager.sh`](../scripts/db/docker-db-server-manager.sh) builds and runs a dedicated database droplet (DigitalOcean, Ubuntu) for a Laravel app. It installs, resets, checks, backs up and restores the stack, and it can uninstall it. Every name, port, image and path below is a default you can change (see [Configuration](#5-configuration)); `<user>`/`<db>` mean `PG_USER`/`PG_DB`.
+[`shell/db/docker-db-server-manager.sh`](../../shell/db/docker-db-server-manager.sh) builds and runs a dedicated database droplet (DigitalOcean, Ubuntu) for a Laravel app. It installs, resets, checks, backs up and restores the stack, and it can uninstall it. Every name, port, image and path below is a default you can change (see [Configuration](#5-configuration)); `<user>`/`<db>` mean `PG_USER`/`PG_DB`.
 
 ## Contents
 
@@ -18,7 +18,7 @@
 11. [Troubleshooting](#11-troubleshooting) ·
 12. [Uninstall](#12-uninstall)
 
-Moving an existing server to this version: [upgrading.md](upgrading.md).
+Moving an existing server to this version: [upgrading.md](../guides/upgrading.md).
 
 ## 0. Runbook (from your workstation)
 
@@ -37,7 +37,7 @@ Moving an existing server to this version: [upgrading.md](upgrading.md).
 5. Run the manager with the wrong-server guard:
 
 ```sh
-scripts/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
+shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
   --config my-db-server.conf -- reset --yes, verify, cron-install, env
 ```
 
@@ -47,14 +47,14 @@ each command with sudo (one password prompt). Use `install` instead of `reset --
 existing data. The equivalent by hand:
 
 ```sh
-scp scripts/db/docker-db-server-manager.sh <db-alias>:~/
+scp shell/db/docker-db-server-manager.sh <db-alias>:~/
 ssh -t <db-alias> 'ip -4 addr | grep -q "inet <private-ip>/" || { echo "ABORT: $(hostname)"; exit 1; }
   sudo install -m 755 ~/docker-db-server-manager.sh /root/docker-db-server-manager.sh &&
   sudo /root/docker-db-server-manager.sh reset --yes && sudo /root/docker-db-server-manager.sh cron-install &&
   sudo /root/docker-db-server-manager.sh env'
 ```
 
-6. Put the printed `DB_*` lines on the web server: [web-server-ploi.md](web-server-ploi.md#update-db_-settings).
+6. Put the printed `DB_*` lines on the web server: [web-server-ploi.md](../guides/web-server-ploi.md#update-db_-settings).
 
 ## 1. Overview
 
@@ -196,11 +196,11 @@ Runs these checks:
 It ends with `ALL CHECKS PASSED`, and any failure stops it with a line like `!! ERROR: line N`.
 
 ### `env`
-Prints the `DB_*` lines for `WEB_ENV` (the shared Laravel `.env`; see [web-server-ploi.md](web-server-ploi.md)). This output **contains the Postgres password**.
+Prints the `DB_*` lines for `WEB_ENV` (the shared Laravel `.env`; see [web-server-ploi.md](../guides/web-server-ploi.md)). This output **contains the Postgres password**.
 
 ### `init`
 ```sh
-ssh <db-alias> 'bash -s -- init' < scripts/db/docker-db-server-manager.sh > my-db-server.conf
+ssh <db-alias> 'bash -s -- init' < shell/db/docker-db-server-manager.sh > my-db-server.conf
 ```
 Prints a config for the host it runs on (`EXPECTED_PRIVATE_IP`, `PRIVATE_IP` and
 `VPC_CIDR` from `PRIVATE_IFACE`, engines, users). It contains no secrets. Edit it,
@@ -314,7 +314,7 @@ Prints the detailed help with examples.
 | `KEEP` | `7` | backups kept after each `backup` |
 | `FORCE=1` / `--yes` / `-y` | off | skip the typed confirmation (required when there's no terminal) |
 
-Also configurable: `PG_USER`/`PG_DB` (`app`), `PG_IMAGE`, `PG_BASE_IMAGE`, `PGVECTOR_PKG`, `PG_MAX_CONNECTIONS` (200), `PGBOUNCER_IMAGE`, `PGBOUNCER_MAX_CLIENT_CONN` (500), `PGBOUNCER_POOL_SIZE` (20), `MYSQL_IMAGE`, `MARIADB_IMAGE`, the four `*_PORT`s, `CRON_TIME`, `CRON_FILE`, `CRON_LOG`, `WEB_ENV`. Put them in `/etc/docker-db-server-manager.conf` (template: [`config/db-server.env.example`](../config/db-server.env.example)), or pass `--config FILE`. Environment variables beat the file. `shared_preload_libraries=pg_stat_statements` is fixed.
+Also configurable: `PG_USER`/`PG_DB` (`app`), `PG_IMAGE`, `PG_BASE_IMAGE`, `PGVECTOR_PKG`, `PG_MAX_CONNECTIONS` (200), `PGBOUNCER_IMAGE`, `PGBOUNCER_MAX_CLIENT_CONN` (500), `PGBOUNCER_POOL_SIZE` (20), `MYSQL_IMAGE`, `MARIADB_IMAGE`, the four `*_PORT`s, `CRON_TIME`, `CRON_FILE`, `CRON_LOG`, `WEB_ENV`. Put them in `/etc/docker-db-server-manager.conf` (template: [`config/db-server.env.example`](../../config/db-server.env.example)), or pass `--config FILE`. Environment variables beat the file. `shared_preload_libraries=pg_stat_statements` is fixed.
 
 ## 6. PostgreSQL extensions
 These are created in `<db>` **and in `template1`**, so every database created later gets them automatically:
@@ -328,7 +328,7 @@ The init SQL only runs when the data volume is brand new. To get these into an e
 # on the db server
 sudo /root/docker-db-server-manager.sh env > ~/db.env   # contains the password
 # on your workstation (see web-server-ploi.md)
-scripts/web/update-env-db.sh --remote <web-alias> --site <domain> --from db.env
+shell/web/update-env-db.sh --remote <web-alias> --site <domain> --from db.env
 # on the web server
 nc -zv <PRIVATE_IP> 5432      # should say "succeeded"
 ```
@@ -391,7 +391,7 @@ Major Postgres versions need a dump and restore; see [status.md](status.md#postg
 | Web server can't connect | Check `nc -zv <PRIVATE_IP> 5432` from the web server, `ufw status`, and that both droplets are in the same VPC. |
 | Ploi says ".env file not found" | Run `ln -sfn /home/ploi/<site>-shared/.env /home/ploi/<site>/.env` on the web server. |
 
-More real-world failures and fixes: [troubleshooting.md](troubleshooting.md).
+More real-world failures and fixes: [troubleshooting.md](../guides/troubleshooting.md).
 
 ## 12. Uninstall
 ```sh

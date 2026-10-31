@@ -2,7 +2,7 @@
 """Check relative links and #anchors in every Markdown file (offline).
 
 External http(s)/mailto links are skipped. Anchors use GitHub's heading slugs.
-Exit 1 on any broken link.  Usage: python3 tests/check-links.py [root]
+Exit 1 on any broken link.  Usage: python3 tests/docs/check-links.py [root]
 """
 import os, re, sys
 

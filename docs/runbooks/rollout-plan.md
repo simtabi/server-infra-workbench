@@ -5,7 +5,7 @@ apply, verify, and automatic rollback if anything fails. Run it **from the works
 through `remote-run.sh`, which refuses to run unless `--expect-ip` is on the host.
 
 Replace `db-alias` (ssh alias or `user@public-ip`), `10.0.0.5` (private IP) and `db-server.conf` with yours.
-Project examples: [`examples/`](../../examples). Full reference: [db-server.md](../db-server.md#upgrade).
+Project examples: [`examples/`](../../examples). Full reference: [db-server.md](../reference/db-server.md#upgrade).
 
 ```mermaid
 flowchart TD
@@ -29,7 +29,7 @@ flowchart TD
 ## 1. Dry run: what would change (writes nothing)
 
 ```bash
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --config db-server.conf -- upgrade --dry-run
+shell/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --config db-server.conf -- upgrade --dry-run
 ```
 
 Shows the preflight result and a unified diff of the compose file, `stack.env` and the Postgres files.
@@ -37,7 +37,7 @@ Shows the preflight result and a unified diff of the compose file, `stack.env` a
 ## 2. Upgrade
 
 ```bash
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --config db-server.conf -- upgrade
+shell/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --config db-server.conf -- upgrade
 ```
 
 You are asked, in order (every answer is validated; Enter takes the safe default):
@@ -56,8 +56,8 @@ Unattended (cron, CI): `upgrade --yes --no-snapshot` (or `--snapshot` / `--snaps
 ## 3. Afterwards
 
 ```bash
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- cron-install, doctor
-scripts/web/check-db-reach.sh --remote web-alias 10.0.0.5      # from the web server's side
+shell/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- cron-install, doctor
+shell/web/check-db-reach.sh --remote web-alias 10.0.0.5      # from the web server's side
 ```
 
 ## Why still a snapshot?
@@ -69,8 +69,8 @@ A droplet snapshot is the only undo for that, so the script recommends it and ma
 ## Optional: Adminer (loopback only)
 
 Add `ENABLE_ADMINER=1` to `db-server.conf`, run `upgrade` again, then
-`scripts/local/db-tunnel.sh --host db-alias adminer` and open http://127.0.0.1:8081.
-Details: [connections.md](../connections.md#2-admin-web-ui-adminer-optional).
+`shell/tunnels/db-tunnel.sh --host db-alias adminer` and open http://127.0.0.1:8081.
+Details: [connections.md](../guides/connections.md#2-admin-web-ui-adminer-optional).
 
 ## Rollback
 
@@ -78,7 +78,7 @@ Automatic on failure. To go back by hand after a *successful* upgrade, the newes
 
 ```bash
 ssh -t db-alias 'S=$(sudo ls -d /opt/db/upgrade-saves/* | tail -1); echo $S; cd /opt/db && sudo cp -a $S/docker-compose.yml $S/.env $S/stack.env . && sudo docker compose --env-file .env --env-file stack.env up -d --wait --remove-orphans'
-scripts/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- verify
+shell/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --no-upload -- verify
 ```
 
 If data is damaged: `restore /opt/db/backups/<ts> all` (asks you to type RESTORE), or the droplet snapshot.

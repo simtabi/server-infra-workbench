@@ -4,16 +4,16 @@
 # SC2016: patterns match literal ${VAR} text in generated files.
 # shellcheck disable=SC2015,SC2016
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 pass=0
 ok()   { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
 
-M=scripts/db/docker-db-server-manager.sh
-W=scripts/web/update-env-db.sh
-R=scripts/db/remote-run.sh
-D=scripts/deploy/ploi-deploy.sh
+M=shell/db/docker-db-server-manager.sh
+W=shell/web/update-env-db.sh
+R=shell/db/remote-run.sh
+D=shell/deploy/ploi-deploy.sh
 
 # --- manager ---------------------------------------------------------------
 "$M" --version | grep -q 'Docker DB Server Setup Manager' && ok "manager --version" || fail "manager --version"
@@ -66,7 +66,7 @@ baks=("$T"/app.env.bak.*); newest="${baks[${#baks[@]}-1]}"
   && ok ".env backup is chmod 600" || fail ".env backup is chmod 600"
 
 # --- check-db-reach --------------------------------------------------------------
-if scripts/web/check-db-reach.sh 127.0.0.1 9 >/dev/null 2>&1; then fail "closed port reported open"; else ok "check-db-reach reports a closed port"; fi
+if shell/web/check-db-reach.sh 127.0.0.1 9 >/dev/null 2>&1; then fail "closed port reported open"; else ok "check-db-reach reports a closed port"; fi
 
 # --- adminer toggle + tunnel helper ----------------------------------------------
 grep -q 'adminer:' "$T/e1000/docker-compose.yml" && fail "adminer on by default" || ok "adminer off by default"
@@ -79,7 +79,7 @@ grep -q 'AUTH_USER: ${PG_USER}' "$T/adm/docker-compose.yml" && ok "pgbouncer aut
 for c in "create-user x" "grant 'a;b' db" "drop-db postgres" "drop-user root mysql" "create-db shop --extensions 'x;y'"; do
   if eval "PRIVATE_IP=10.0.0.5 \"\$M\" $c" >/dev/null 2>&1; then fail "unsafe args accepted: $c"; fi
 done; ok "user commands reject unsafe/protected args"
-TN=scripts/local/db-tunnel.sh
+TN=shell/tunnels/db-tunnel.sh
 "$TN" --print --host u@h --private-ip 10.0.0.5 mysql mariadb adminer | grep -q '127.0.0.1:13306:10.0.0.5:3306 -L 127.0.0.1:13307:10.0.0.5:3307 -L 127.0.0.1:8081:127.0.0.1:8081 u@h' \
   && ok "db-tunnel builds forwards" || fail "db-tunnel builds forwards"
 if "$TN" --print --host u@h postgres 2>/dev/null; then fail "db-tunnel without private ip"; else ok "db-tunnel needs --private-ip for engines"; fi
@@ -113,10 +113,10 @@ fi
 ok "deploy script avoids Ploi placeholder names"
 
 # --- deploy script sandbox (generic preset, hooks, first-install marker) -----
-bash tests/deploy-sandbox.sh | grep -qE 'deploy sandbox (ok|skipped)' && ok "deploy sandbox" || fail "deploy sandbox"
+bash tests/shell/deploy-sandbox.sh | grep -qE 'deploy sandbox (ok|skipped)' && ok "deploy sandbox" || fail "deploy sandbox"
 
 # --- core stays project-neutral -------------------------------------------------
-if git ls-files >/dev/null 2>&1; then core="$(git ls-files | grep -vE '^(examples/|CHANGELOG\.md$|tests/smoke\.sh$)')"
+if git ls-files >/dev/null 2>&1; then core="$(git ls-files | grep -vE '^(examples/|CHANGELOG\.md$|tests/shell/smoke\.sh$)')"
 else core="$(find . -type f -not -path './.git/*' -not -path './examples/*' -not -name CHANGELOG.md -not -name smoke.sh)"; fi
 # shellcheck disable=SC2086
 if grep -il 'myapp' $core; then fail "project name in core files (only examples/ may name a project)"

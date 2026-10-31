@@ -14,7 +14,7 @@ set -euo pipefail
 # !! curly braces) in this text BEFORE bash runs it - comments included. A shell
 # !! variable written as dollar + brace + a placeholder name gets rewritten too,
 # !! and bash then fails with e.g. "main: unbound variable". So variables here
-# !! use non-placeholder names (DEPLOY_BRANCH, SITE_DOMAIN). See docs/deploy.md.
+# !! use non-placeholder names (DEPLOY_BRANCH, SITE_DOMAIN). See docs/guides/deploy.md.
 #
 # The first run bootstraps what it can and stops with clear instructions for
 # anything only a human can fill in. Later runs just deploy.
@@ -119,7 +119,7 @@ chmod 600 "$SHARED/.env"
 missing=""
 for v in $REQUIRED_VARS; do [ -n "$(env_get "$v" "$SHARED/.env" || true)" ] || missing="$missing $v"; done
 [ -z "$missing" ] || stop "Fill in these values in $SHARED/.env, then deploy again:$missing
-   Edit it with:  nano $SHARED/.env   (or scripts/web/update-env-db.sh for DB_*)"
+   Edit it with:  nano $SHARED/.env   (or shell/web/update-env-db.sh for DB_*)"
 
 if [ "$PRESET" = laravel ]; then
   if [ ! -d "$SHARED/storage" ]; then

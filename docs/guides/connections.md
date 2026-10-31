@@ -56,7 +56,7 @@ Confirm the live ports on the server with `sudo docker ps --format '{{.Names}}\t
 Credentials: Postgres user, database and password come from `sudo ./docker-db-server-manager.sh env`.
 MySQL and MariaDB root passwords live in `/opt/db/.env` (`sudo grep ROOT_PASSWORD /opt/db/.env`); better,
 create a per-app or read-only user (`create-db`, `create-user ... --readonly`, see
-[db-server.md](db-server.md#create-db-name-engine)) and use that.
+[db-server.md](../reference/db-server.md#create-db-name-engine)) and use that.
 
 ### TablePlus (built-in SSH)
 
@@ -81,7 +81,7 @@ DBeaver: connection → *SSH* tab → *Use SSH Tunnel*, same values. DataGrip: *
 
 ```bash
 # Postgres + MySQL + MariaDB + Adminer in one tunnel (Ctrl-C closes it)
-scripts/local/db-tunnel.sh --host ploi@203.0.113.10 --private-ip 10.0.0.5 all
+shell/tunnels/db-tunnel.sh --host ploi@203.0.113.10 --private-ip 10.0.0.5 all
 
 # or by hand, one engine
 ssh -N -L 15432:10.0.0.5:5432 ploi@203.0.113.10
@@ -152,7 +152,7 @@ DB_USERNAME=app
 DB_PASSWORD=...     # from `env`
 ```
 
-Prove it from the web server: `scripts/web/check-db-reach.sh --env /home/ploi/<site>-shared/.env`.
+Prove it from the web server: `shell/web/check-db-reach.sh --env /home/ploi/<site>-shared/.env`.
 
 ### Direct port vs PgBouncer for migrations
 

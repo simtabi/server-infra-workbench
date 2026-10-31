@@ -4,7 +4,7 @@
 # shellcheck disable=SC2016  # sed programs insert literal $VARS on purpose
 set -euo pipefail
 sed --version >/dev/null 2>&1 || { echo "deploy sandbox skipped (needs GNU sed, as on the Ubuntu servers and CI)"; exit 0; }
-D="$(cd "$(dirname "$0")/.." && pwd)/scripts/deploy/ploi-deploy.sh"
+D="$(cd "$(dirname "$0")/../.." && pwd)/shell/deploy/ploi-deploy.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 git init -q --bare "$T/origin.git"
 git clone -q "$T/origin.git" "$T/site" 2>/dev/null

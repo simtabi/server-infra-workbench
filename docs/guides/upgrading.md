@@ -1,7 +1,7 @@
 # Moving an existing DB server to this version
 
 > Server already on this repository's manager? Just run `upgrade` (backup, savepoint, auto-rollback): see the
-> [rollout plan](runbooks/rollout-plan.md). The steps below are for a server set up with the old single-file script.
+> [rollout plan](../runbooks/rollout-plan.md). The steps below are for a server set up with the old single-file script.
 
 For a DB server that was set up with the earlier, single-file version of the
 manager (values such as the Postgres user and image name were hardcoded). The
@@ -11,7 +11,7 @@ current version has generic defaults (`PG_USER=app`, `PG_DB=app`,
 without it would point it at an `app` database that doesn't exist and build a
 differently named image.
 
-A worked example for a real server is in [`examples/`](../examples/README.md).
+A worked example for a real server is in [`examples/`](../../examples/README.md).
 
 ## Rules
 
@@ -34,7 +34,7 @@ flowchart TD
 ```
 
 1. **Write the config.** Start from
-   [`config/db-server.env.example`](../config/db-server.env.example) and set
+   [`config/db-server.env.example`](../../config/db-server.env.example) and set
    every value the running stack uses: `EXPECTED_PRIVATE_IP`, `PRIVATE_IP`,
    `VPC_CIDR`, `PG_USER`, `PG_DB`, `PG_IMAGE`, and any port you changed. Find them on the server:
 
@@ -58,7 +58,7 @@ flowchart TD
 3. **Install the config and the new script, then check only:**
 
    ```sh
-   scripts/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
+   shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
      --config my-db-server.conf -- status, verify
    ```
 
@@ -70,7 +70,7 @@ flowchart TD
    the current templates; keeps `.env` and data):
 
    ```sh
-   scripts/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
+   shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
      --config my-db-server.conf -- install, cron-install
    ```
 

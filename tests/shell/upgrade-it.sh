@@ -6,9 +6,9 @@
 # secrets redacted in the log. Cleans up its containers and volumes.
 # shellcheck disable=SC2015,SC2016
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "upgrade-it skipped (no docker)"; exit 0; }
-M="$PWD/scripts/db/docker-db-server-manager.sh"
+M="$PWD/shell/db/docker-db-server-manager.sh"
 W="$(mktemp -d /tmp/vsw-up.XXXX)"; D="$W/vswitdb"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 cleanup() { [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true; rm -rf "$W"; }

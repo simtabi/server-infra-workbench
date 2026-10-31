@@ -11,4 +11,4 @@ and edit.
 | [`db-server.conf`](db-server.conf) | `/etc/docker-db-server-manager.conf` (Postgres + PgBouncer only) |
 | [`ploi-deploy.settings.sh`](ploi-deploy.settings.sh) | the SETTINGS block for the deploy script |
 
-Step by step: [docs/getting-started.md](../../docs/getting-started.md).
+Step by step: [docs/guides/getting-started.md](../../docs/guides/getting-started.md).

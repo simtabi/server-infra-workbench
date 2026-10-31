@@ -1,7 +1,7 @@
 # Web server with Caddy (Ploi Docker server)
 
 How to run a Laravel app behind [Caddy](https://caddyserver.com) on a Ploi
-**Docker** server, using the files in [`compose/caddy/`](../compose/caddy).
+**Docker** server, using the files in [`stacks/caddy/`](../../stacks/caddy).
 Caddy terminates TLS and gets and renews Let's Encrypt certificates by itself.
 For a native Ploi site (nginx + PHP-FPM, no Docker) use
 [web-server-ploi.md](web-server-ploi.md) instead.
@@ -104,7 +104,7 @@ Pick one:
 
   ```sh
   ssh <web-alias> mkdir -p /home/ploi/containers/myapp
-  scp -r compose/caddy/{docker-compose.yml,conf,variants,php,.env.example} \
+  scp -r stacks/caddy/{docker-compose.yml,conf,variants,php,.env.example} \
       <web-alias>:/home/ploi/containers/myapp/
   ```
 

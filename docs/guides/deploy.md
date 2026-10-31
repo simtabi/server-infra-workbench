@@ -1,6 +1,6 @@
 # Deploy script (Ploi, native PHP)
 
-[`scripts/deploy/ploi-deploy.sh`](../scripts/deploy/ploi-deploy.sh) is a deploy
+[`shell/deploy/ploi-deploy.sh`](../../shell/deploy/ploi-deploy.sh) is a deploy
 script for any PHP and/or Node app on a native (non-Docker) Ploi server. Edit
 its `SETTINGS` block and paste it into the site's deploy script in Ploi.
 
@@ -11,8 +11,8 @@ its `SETTINGS` block and paste it into the site's deploy script in Ploi.
   sites; it detects which one it's on.
 - **Hooks:** every project-specific step is an optional hook, empty by default.
 
-Examples: [generic Laravel](../examples/generic-laravel/ploi-deploy.settings.sh),
-and a multi-tenant app with an admin install command (see [examples/](../examples/README.md)).
+Examples: [generic Laravel](../../examples/generic-laravel/ploi-deploy.settings.sh),
+and a multi-tenant app with an admin install command (see [examples/](../../examples/README.md)).
 
 ## Contents
 
@@ -98,7 +98,7 @@ The first deploy may stop, on purpose:
 The queue worker and scheduler run as Ploi daemons ([daemons.md](daemons.md));
 `queue:restart` makes them load the new release. Don't also enable a
 `schedule:run` cron. `make test` runs the script end to end against a scratch
-repository ([`tests/deploy-sandbox.sh`](../tests/deploy-sandbox.sh)).
+repository ([`tests/shell/deploy-sandbox.sh`](../../tests/shell/deploy-sandbox.sh)).
 
 ## Ploi placeholder caveat
 
