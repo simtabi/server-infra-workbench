@@ -17,3 +17,4 @@ reverse. Number them in order; never rewrite an accepted record, supersede it wi
 | [0008](0008-database-topology.md) | Database topology: one hardened server now, managed prd before launch | Accepted |
 | [0009](0009-mongodb-off-by-default.md) | MongoDB is not managed by the DB manager | Accepted |
 | [0010](0010-least-privilege-database-roles.md) | Least-privilege database roles (the 1.4.0 role split) | Accepted |
+| [0011](0011-cross-region-connectivity.md) | Cross-region connectivity: same region first, then peering, then WireGuard | Accepted |

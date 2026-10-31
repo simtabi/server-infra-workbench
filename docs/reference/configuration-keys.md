@@ -93,6 +93,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `EXTRA_BIND_IPS` | (empty) | e.g. 10.200.0.1 (wg0); comma or space separated |
 | `ALLOW_PUBLIC_BIND` | `0` | 1 = a public EXTRA_BIND_IPS entry is on purpose (TLS_MODE=require is then mandatory) |
 | `PEER_REGIONS` | (empty) | app servers' regions, e.g. nyc1; doctor warns on a mismatch |
+| `VPC_PEERING` | `0` | 1 = the VPCs are joined by DO VPC peering (cross-region private IPs then work) |
 | `METADATA_URL` | `http://169.254.169.254/metadata/v1` | DO metadata (doctor region check) |
 | `PG_LOG_MIN_DURATION` | `500ms` |  |
 | `PG_LOG_CONNECTIONS` | `on` |  |

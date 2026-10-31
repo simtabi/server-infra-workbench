@@ -15,6 +15,7 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | [Repository structure](structure.md) | where things are, where new things go, old to new paths |
 | [Database environments](database-environments.md) | one app, several environments (tst/dev/stg/prd): isolation, topologies, set-up flow, guard rails |
 | [Backups and recovery](backups-and-recovery.md) | backup layers, retention, off-site, PITR, restore tests, which restore to use |
+| [Servers in different regions](cross-region.md) | web and DB in different regions: same region, VPC peering, WireGuard, public TLS, managed DB |
 | [High availability](high-availability.md) | removing single points of failure: managed prd, standby, two web nodes |
 | [Checklists](checklists/README.md) | new DB/web server, manager upgrade, pre-launch, monthly restore drill |
 | [Lessons learned](lessons-learned.md) | mistakes already made once and the rule each one produced |
@@ -31,6 +32,7 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | [Deploy script](tools/deploy-script.md) | `src/shell/deploy/ploi-deploy.sh`: zero-downtime Ploi deploys, presets, hooks, first run |
 | [Server tools](tools/server.md) | `src/shell/server/*` and `web/diagnose.sh`: harden, update with a reboot window, diagnose a Laravel site (plan, confirm, audit) |
 | [SSH keys](tools/ssh-keys.md) | `workbench keys` (provider accounts, servers) and `fixkeys.sh` console recovery; migration from vps-ssh-key-manager |
+| [Networking](tools/net.md) | `src/shell/net/wireguard.sh`: WireGuard tunnel between two servers (keys stay on the servers, peer-only ufw) |
 | [Laravel .env](tools/env.md) | `src/shell/env/env.sh`: `env init` (defaults, APP_KEY, validation, key-only diff, 600) and `env check` |
 | [Add-ons](tools/addons.md) | `src/shell/addons/addon.sh` + `stacks/addons`: Gotenberg and one object store (Garage, SeaweedFS, RustFS) per node |
 | [Caddy stack](tools/caddy-stack.md) | `stacks/caddy`: the app in containers behind Caddy with automatic HTTPS |

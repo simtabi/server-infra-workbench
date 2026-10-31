@@ -9,6 +9,7 @@ No test calls a real API or a real server.
 | [`shell/deploy-sandbox.sh`](shell/deploy-sandbox.sh) | the deploy script against a throwaway git site | `make test` |
 | [`shell/smoke-db.sh`](shell/smoke-db.sh) | DB manager functions (env-init, privileges, engines) | `make test` |
 | [`shell/smoke-addons.sh`](shell/smoke-addons.sh) | add-on planner and validation | `make test` |
+| [`shell/smoke-net.sh`](shell/smoke-net.sh) | `net wireguard` setup/status/remove on two fake roots with stub `wg`/`ufw`/`systemctl` | `make test` |
 | [`shell/smoke-server.sh`](shell/smoke-server.sh) | server init/harden/update/inventory, web diagnose, env init/check, ssh fixkeys against a fake root (`VSW_SYSROOT`) + stubs | `make test` |
 | [`shell/client-check.sh`](shell/client-check.sh) | no client name, IP or domain in tracked files or commit messages | `make client-check` |
 | [`shell/upgrade-it.sh`](shell/upgrade-it.sh) | the DB manager on real containers (docker) | `make it` |

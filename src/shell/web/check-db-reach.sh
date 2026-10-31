@@ -51,13 +51,14 @@ if [ -n "$region" ]; then
   echo "this droplet: region $region${my_ip:+, VPC address $my_ip/$mask}"
   if [ -n "$DB_REGION" ] && [ "$DB_REGION" != "$region" ]; then
     echo "WARNING: the DB is in $DB_REGION and this server in $region. DO VPCs are per region, so private"
-    echo "         addresses don't route between them: same region, WireGuard, or TLS over a public IP (docs/cross-region.md)"
+    echo "         addresses only route between them with VPC peering: same region, VPC peering, WireGuard, or TLS over a"
+    echo "         public IP (docs/cross-region.md)"
   fi
   if is_ip "$host" && is_ip "${my_ip:-}" && is_ip "${mask:-}"; then
     m="$(i2n "$mask")"
     if private "$host" && [ $(( $(i2n "$host") & m )) -ne $(( $(i2n "$my_ip") & m )) ] && [[ "$host" != 10.200.* ]]; then
       echo "WARNING: $host is a private address outside this droplet's VPC ($my_ip/$mask). It is probably in another"
-      echo "         VPC or region; private traffic won't reach it (docs/cross-region.md)"
+      echo "         VPC or region; it is only reachable if the VPCs are peered or a tunnel routes it (docs/cross-region.md)"
     elif ! private "$host"; then
       echo "note: $host is a public address: the DB traffic leaves the VPC. Use the DB's private IP, or TLS (sslmode=verify-full)"
       echo "      plus a cloud-firewall allowlist (docs/cross-region.md)"

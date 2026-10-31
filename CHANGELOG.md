@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (cross-region)
+
+- `bin/workbench net wireguard setup|status|remove` ([networking](docs/tools/net.md)): plan and confirm, keys
+  generated on each server and never printed (loaded by `PostUp`), ufw open to the peer only, Docker ordered
+  after the tunnel on the DB side, Ploi-aware; 14 offline tests (`tests/shell/smoke-net.sh`).
+- DB manager: `EXTRA_BIND_IPS` (tunnel or public address; public needs `ALLOW_PUBLIC_BIND=1` and
+  `TLS_MODE=require`), `PEER_REGIONS`, `VPC_PEERING`; `PRIVATE_IP` must be a private address; the TLS
+  certificate covers every bind address; `doctor` "Network: region and VPC" section (DO metadata).
+- `check-db-reach`: `--db-region`, and warnings for a private IP outside this droplet's VPC or a public DB address.
+- Docs: [Servers in different regions](docs/cross-region.md) (same region, VPC peering, WireGuard, public TLS
+  with an allowlist, managed trusted sources) and [ADR 0011](docs/adr/0011-cross-region-connectivity.md).
+
 ### Added (manager 1.4.0: least privilege, environments, backups)
 
 - **Least privilege** ([privileges](docs/reference/privileges.md), [ADR 0010](docs/adr/0010-least-privilege-database-roles.md)):

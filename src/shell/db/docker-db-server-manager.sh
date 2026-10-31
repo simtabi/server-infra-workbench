@@ -49,6 +49,7 @@
 #                 ALLOW_PUBLIC_BIND=1 and TLS_MODE=require (docs/cross-region.md)
 #    PEER_REGIONS regions of the app servers; doctor warns when they differ from
 #                 this droplet's region (DO VPCs are per region)
+#    VPC_PEERING=1 the VPCs are joined by DO VPC peering (cross-region private IPs work)
 #    PG_USER PG_DB PG_IMAGE PG_BASE_IMAGE PGVECTOR_PKG PGBOUNCER_IMAGE MYSQL_IMAGE
 #    MARIADB_IMAGE PG_PORT PGBOUNCER_PORT MYSQL_PORT MARIADB_PORT WEB_ENV CRON_TIME
 #    ADMINER_IMAGE ADMINER_PORT
@@ -144,6 +145,7 @@ TLS_DAYS="${TLS_DAYS:-825}"
 EXTRA_BIND_IPS="${EXTRA_BIND_IPS:-}"                # more bind addresses (WireGuard IP; public only with the two below)
 ALLOW_PUBLIC_BIND="${ALLOW_PUBLIC_BIND:-0}"         # 1 = a public EXTRA_BIND_IPS entry is intended (needs TLS_MODE=require)
 PEER_REGIONS="${PEER_REGIONS:-}"                    # app server regions, e.g. "nyc1"; doctor compares with this droplet
+VPC_PEERING="${VPC_PEERING:-0}"                     # 1 = this VPC is peered with the app servers' VPC (DO VPC peering)
 METADATA_URL="${METADATA_URL:-http://169.254.169.254/metadata/v1}"   # DO droplet metadata (doctor region check)
 PG_LOG_MIN_DURATION="${PG_LOG_MIN_DURATION:-500ms}"
 PG_LOG_CONNECTIONS="${PG_LOG_CONNECTIONS:-on}"
@@ -1533,6 +1535,7 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
     fi
   done
   case "$ALLOW_PUBLIC_BIND" in 0|1) ;; *) err "ALLOW_PUBLIC_BIND must be 0 or 1" ;; esac
+  case "$VPC_PEERING" in 0|1) ;; *) err "VPC_PEERING must be 0 or 1" ;; esac
   for v in ${PEER_REGIONS//,/ }; do [[ "$v" =~ ^[a-z]{3}[0-9]$ ]] || err "PEER_REGIONS entry '$v' is not a region slug (e.g. nyc1)"; done
   valid_cidr "$VPC_CIDR" || err "VPC_CIDR '$VPC_CIDR' is not a CIDR (e.g. 10.0.0.0/20)"
   for v in PG_PORT PGBOUNCER_PORT MYSQL_PORT MARIADB_PORT ADMINER_PORT; do valid_port "${!v}" || err "$v '${!v}' is not a port (1-65535)"; done
@@ -2383,9 +2386,10 @@ doctor_network() { # region / VPC sanity: DO VPCs are per region (docs/cross-reg
   [ -n "$PEER_REGIONS" ] || { echo "  (set PEER_REGIONS to the app servers' regions to check them)"; return 0; }
   for r in ${PEER_REGIONS//,/ }; do
     if [ "$r" = "$region" ]; then d_ok "peer region $r: same region, the VPC works"
+    elif [ "$VPC_PEERING" = 1 ]; then d_ok "peer region $r: different region, VPC peering (private IPs; \$0.01/GiB between regions)"
     elif [ "$wg" = 1 ]; then d_ok "peer region $r: different region, reached over WireGuard (wg0)"
     elif [ "$TLS_MODE" = require ] && [ "$ALLOW_PUBLIC_BIND" = 1 ]; then d_warn "peer region $r: different region over a public address with TLS; check the cloud firewall allowlist"
-    else d_bad "peer region $r differs from $region: the app can't reach $PRIVATE_IP (VPCs are per region). Move the servers, or: workbench net wireguard setup (docs/cross-region.md)"; fi
+    else d_bad "peer region $r differs from $region: the app can't reach $PRIVATE_IP (VPCs are per region). Move the servers, peer the VPCs (then VPC_PEERING=1), or: workbench net wireguard setup (docs/cross-region.md)"; fi
   done
 }
 doctor_host() {

@@ -78,6 +78,7 @@ test: ## offline smoke tests (no servers touched)
 	bash tests/shell/smoke-db.sh
 	bash tests/shell/smoke-addons.sh
 	bash tests/shell/smoke-server.sh
+	bash tests/shell/smoke-net.sh
 
 it: ## Docker integration tests: 1.3 -> 1.4 upgrade, privileges, envs, backups; add-ons; server tools on Ubuntu 24.04 (~9 min)
 	bash tests/shell/upgrade-it.sh

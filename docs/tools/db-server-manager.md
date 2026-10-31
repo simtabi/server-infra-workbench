@@ -29,6 +29,7 @@ Moving an existing server to this version: [upgrading.md](../recipes/upgrade-a-l
 | Backups | manifest + checksums, GFS `RETENTION`, encrypted `offsite`, `restore-test`, pgBackRest `pitr`, `binlog-ship`, alerts | [Backups and recovery](../backups-and-recovery.md) |
 | Engines | `engine enable\|disable`, RAM check with a resize hint | [sizing](../reference/sizing.md) |
 | TLS | `TLS_MODE=require` (self-signed, made on the server) | [Security](#9-security) |
+| Other regions | `EXTRA_BIND_IPS`, `PEER_REGIONS`, `VPC_PEERING`, `ALLOW_PUBLIC_BIND` | [Servers in different regions](../cross-region.md) |
 | Config | every key | [configuration keys](../reference/configuration-keys.md) |
 
 

@@ -119,6 +119,8 @@ mkdir -p "$T/mbin"; printf '#!/bin/sh\nfor a; do u="$a"; done; cat "%s/meta/${u#
 PATH="$T/mbin:$PATH" PEER_REGIONS=ams3 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
 grep -q 'this droplet is in nyc1' "$T/net.out" && grep -q 'PROBLEM  peer region ams3 differs from nyc1' "$T/net.out" && grep -q 'wireguard setup' "$T/net.out" \
   && ok "doctor: region mismatch without a tunnel is a PROBLEM with the fix" || { cat "$T/net.out"; fail "region mismatch"; }
+PATH="$T/mbin:$PATH" PEER_REGIONS=ams3 VPC_PEERING=1 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
+grep -q 'VPC peering' "$T/net.out" && grep -q 'bad=0' "$T/net.out" && ok "doctor: different region with VPC_PEERING=1 is ok" || { cat "$T/net.out"; fail "peering"; }
 PATH="$T/mbin:$PATH" PEER_REGIONS=nyc1 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
 grep -q 'peer region nyc1: same region' "$T/net.out" && grep -q 'bad=0' "$T/net.out" && ok "doctor: same region is ok" || { cat "$T/net.out"; fail "same region"; }
 PATH="$T/mbin:$PATH" PRIVATE_IP=10.0.0.5 VPC_CIDR=10.16.0.0/20 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
