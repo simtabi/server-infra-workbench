@@ -1,0 +1,6 @@
+{
+  "identities": [
+    {"name": "vsw-admin", "credentials": [{"accessKey": "<generated>", "secretKey": "<generated>"}], "actions": ["Admin", "Read", "Write", "List", "Tagging"]},
+    {"name": "vsw-app", "credentials": [{"accessKey": "<generated>", "secretKey": "<generated>"}], "actions": ["Read:app", "Write:app", "List:app", "Tagging:app"]}
+  ]
+}

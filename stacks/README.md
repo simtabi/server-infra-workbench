@@ -5,6 +5,7 @@ Docker Compose stacks that are deployed to servers.
 | Folder | What | Docs |
 |---|---|---|
 | [`caddy/`](caddy) | the app in containers behind Caddy with automatic HTTPS (alternative to Ploi's nginx) | [caddy-stack.md](../docs/tools/caddy-stack.md) |
+| [`addons/`](addons) | optional services: Gotenberg (PDF), Garage / SeaweedFS / RustFS (S3 storage), installed by `addon.sh` | [addons.md](../docs/tools/addons.md) |
 
 There is no `db/` stack here on purpose: the database stack (Postgres, PgBouncer, MySQL, Redis, MongoDB,
 backups) is **generated on the server** by

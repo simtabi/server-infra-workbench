@@ -2335,7 +2335,7 @@ doctor_host() {
   if [ -n "$use" ]; then if [ "$use" -ge 90 ]; then d_bad "disk $use% used on $DB_DIR"; elif [ "$use" -ge 80 ]; then d_warn "disk $use% used on $DB_DIR"; else d_ok "disk $use% used"; fi; fi
   local need have; need="$(engine_ram_mb)"; have="$(host_ram_mb)"
   if [ "$have" -gt 0 ] && [ "$have" -lt "$((need * 90 / 100))" ]; then
-    d_warn "RAM ${have}MB < ${need}MB for the enabled engines. Resize: bin/workbench do resize <droplet> --size $(size_for_mb "$need")  (or disable an engine: engine-disable mysql)"
+    d_warn "RAM ${have}MB < ${need}MB for the enabled engines. Resize: bin/workbench do resize <droplet> --size $(size_for_mb "$need")  (or disable an engine: engine disable mysql)"
   elif [ "$have" -gt 0 ]; then d_ok "RAM ${have}MB (engines need ~${need}MB)"; fi
   if [ -n "$(docker network ls --filter "name=^${DOCKER_NETWORK}\$" -q 2>/dev/null)" ]; then
     local sn; sn="$(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' "$DOCKER_NETWORK" 2>/dev/null)"

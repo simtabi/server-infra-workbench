@@ -13,3 +13,4 @@ reverse. Number them in order; never rewrite an accepted record, supersede it wi
 | [0004](0004-writes-are-pending-actions.md) | Every write is a pending action that must be confirmed | Accepted |
 | [0005](0005-credentials-outside-the-repo.md) | Credentials come from the environment or a private file outside the repo | Accepted |
 | [0006](0006-all-code-under-src-no-shims.md) | All code under src/, no compatibility shims | Accepted |
+| [0007](0007-object-storage-selection.md) | Object storage: DO Spaces by default, Garage when self-hosted | Accepted |

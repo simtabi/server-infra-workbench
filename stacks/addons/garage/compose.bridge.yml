@@ -1,0 +1,8 @@
+# Override for Docker Desktop and the container tests (ADDON_NETWORK=bridge): no host networking,
+# publish S3 on ADDON_BIND and the admin API on 127.0.0.1 only.
+services:
+  garage:
+    network_mode: bridge
+    ports:
+      - "${ADDON_BIND:?}:${GARAGE_S3_PORT:-3900}:3900"
+      - "127.0.0.1:${GARAGE_ADMIN_PORT:-3903}:3903"

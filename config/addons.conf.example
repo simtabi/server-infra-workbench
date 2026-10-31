@@ -1,0 +1,27 @@
+# /etc/vsw-addons.conf - settings for src/shell/addons/addon.sh on ONE node (chmod 600, owned by root).
+# Everything is optional: each add-on's pinned defaults live in stacks/addons/<name>/addon.env.example and
+# this file overrides them. `bin/workbench configure` writes a filled-in copy per node to local/<client>/addons-<role>.conf.
+# No secrets here: addon.sh generates them into /opt/vsw-addons/<name>/secrets.env (600).
+
+# ADDONS_DIR=/opt/vsw-addons            # rendered stacks, secrets, a copy of addon.sh + templates
+# AUDIT_LOG=/var/log/vsw-addons.log
+# ADDON_ROLE=                           # web | db | dedicated (default: the add-on's own default role)
+# ADDON_BIND=                           # default: 127.0.0.1 for web, the eth1 (VPC) address otherwise
+# ADDON_DATA_DIR=                       # default /opt/vsw-addons/<name>; a DO volume: /mnt/volume_<region>_01/garage
+# ADDON_ENV=dev                         # env this node serves; experimental add-ons are refused on PROTECTED_ENVS
+# PROTECTED_ENVS=prd
+
+# object storage
+# STORAGE_BUCKET=app
+# GARAGE_CAPACITY=20GB
+# GARAGE_ZONE=dc1
+# ADDON_NETWORK=host                    # Garage only: host (default) | bridge
+
+# Gotenberg
+# GOTENBERG_IMAGE=gotenberg/gotenberg:8.39.0
+# GOTENBERG_MEM=1g
+# GOTENBERG_BASIC_AUTH=auto             # auto | true | false
+# GOTENBERG_DENY_PRIVATE_IPS=true       # keep true unless the app renders internal URLs on purpose
+
+# RustFS is experimental: also needs --accept-experimental (or ACCEPT_EXPERIMENTAL=1) and a non-protected env
+# ACCEPT_EXPERIMENTAL=0

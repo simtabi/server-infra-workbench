@@ -1,0 +1,53 @@
+# SeaweedFS (S3 gateway). Rendered and started by src/shell/addons/addon.sh.
+# Only the S3 port is published (on ADDON_BIND); master/volume/filer stay inside the container.
+name: vsw-seaweedfs
+services:
+  seaweedfs:
+    image: ${SEAWEED_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    command:
+      - server
+      - -dir=/data
+      - -ip=127.0.0.1
+      - -ip.bind=0.0.0.0
+      - -master.volumeSizeLimitMB=${SEAWEED_VOLUME_MB:-1024}
+      - -volume.max=0
+      - -s3
+      - -s3.port=8333
+      - -s3.config=/etc/seaweedfs/s3.json
+    volumes:
+      - ${ADDON_DATA_DIR:?}/data:/data
+      - ./s3.json:/etc/seaweedfs/s3.json:ro
+    ports:
+      - "${ADDON_BIND:?}:${SEAWEED_S3_PORT:-8333}:8333"
+      - "127.0.0.1:${SEAWEED_ADMIN_PORT:-12535}:12535"
+    mem_limit: ${SEAWEED_MEM:-768m}
+    security_opt: [no-new-privileges:true]
+    labels: {vsw.config-sha: "${ADDON_CONFIG_SHA:-none}"}
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:9333/cluster/status]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+  admin:
+    image: ${SEAWEED_IMAGE:?pin an image tag}
+    profiles: [admin]
+    restart: unless-stopped
+    network_mode: service:seaweedfs
+    depends_on: {seaweedfs: {condition: service_healthy}}
+    command:
+      - admin
+      - -ip=0.0.0.0
+      - -port=12535
+      - -port.legacy=0
+      - -master=127.0.0.1:9333
+      - -dataDir=/data/admin
+      - -adminUser=admin
+      - -adminPassword=${SEAWEED_ADMIN_PASSWORD:?}
+    volumes:
+      - ${ADDON_DATA_DIR:?}/data:/data
+    mem_limit: 256m
+    security_opt: [no-new-privileges:true]
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}

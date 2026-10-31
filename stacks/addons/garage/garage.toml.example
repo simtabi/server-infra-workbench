@@ -1,0 +1,19 @@
+# What addon.sh writes to /opt/vsw-addons/garage/garage.toml (chmod 600). Secrets are generated on the server.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+metadata_auto_snapshot_interval = "6h"
+replication_factor = 1
+rpc_bind_addr = "10.10.0.5:3901"      # ADDON_BIND (0.0.0.0 inside the container in bridge mode)
+rpc_public_addr = "10.10.0.5:3901"
+rpc_secret = "<openssl rand -hex 32>"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "10.10.0.5:3900"
+root_domain = ".s3.garage.localhost"
+
+[admin]
+api_bind_addr = "127.0.0.1:3903"
+admin_token = "<openssl rand -base64 32>"
+metrics_token = "<openssl rand -base64 32>"

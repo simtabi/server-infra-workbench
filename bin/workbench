@@ -9,13 +9,16 @@
 #   bin/workbench credentials                which API credentials are set (never prints values)
 #   bin/workbench py <command> [args...]     the Python package CLI        e.g. bin/workbench py ping 10.0.0.5 6432
 #   bin/workbench plans [flags]              DO plans per region via Ploi  e.g. bin/workbench plans --regions nyc3
+#   bin/workbench addon <cmd> [name]         add-ons on this node (run on the server) e.g. bin/workbench addon plan garage
+#   bin/workbench configure [--profile P]    wizard: profile + overrides -> local/<client>/ (no secrets)
+#   bin/workbench profile list|show|diff     the setup profiles in config/profiles
 #
 # Writes need --yes (or typing yes), destructive ones also --force; --dry-run sends nothing.
 # Shell tools keep their own flags; this script only resolves paths and execs.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)"
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
 die() { echo "workbench: $*" >&2; exit "${CODE:-2}"; }
 
 list() {
@@ -32,7 +35,9 @@ list() {
     "health <url>..." "health endpoint check" "credentials" "credential check"
   echo "python (src/python):"
   printf '  %-37s %s\n' "py ping [host port] [--env FILE]" "TCP reachability probe" \
-    "plans [--regions ..] [--env-file F]" "droplet plans per region available through Ploi"
+    "plans [--regions ..] [--env-file F]" "droplet plans per region available through Ploi" \
+    "configure [--profile P --client C]" "setup wizard -> local/<client>/" \
+    "profile list|show|diff" "setup profiles (config/profiles)"
 }
 
 php_core() {
@@ -48,6 +53,9 @@ case "${1:-}" in
   --version|version) php_core version ;;
   do|digitalocean|cf|cloudflare|ploi|gcp|gcloud|keys|health|credentials|creds) php_core "$@" ;;
   php) shift; php_core "$@" ;;
+  addon|addons) shift; [ "${1:-}" = addon ] && shift; exec "$ROOT/src/shell/addons/addon.sh" "$@" ;;
+  configure|profile) command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"
+       VSW_ROOT="$ROOT" PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vps_server_workbench "$@" ;;
   plans) shift; command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"
        PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vps_server_workbench plans "$@" ;;
   py|python) shift; command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"

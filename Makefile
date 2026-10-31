@@ -52,9 +52,15 @@ py-test: ## unittest for src/python
 
 python: py-lint py-test ## all Python checks
 
-compose-check: ## docker compose config + caddy validate for stacks/caddy (needs docker)
+compose-check: ## docker compose config for stacks/caddy + stacks/addons, caddy validate (needs docker)
 	@command -v docker >/dev/null 2>&1 || { echo "docker not installed - skipping"; exit 0; }
 	cd stacks/caddy && SITE_DOMAIN=example.com docker compose config -q && echo "compose ok  stacks/caddy"
+	@for d in stacks/addons/*/; do n=$$(basename $$d); \
+	  { cat $$d/addon.env.example; printf 'ADDON_BIND=127.0.0.1\nADDON_DATA_DIR=/tmp/vsw-cc\nRUSTFS_ACCESS_KEY=x\nRUSTFS_SECRET_KEY=y\nSEAWEED_ADMIN_PASSWORD=z\n'; } \
+	    | sed 's/[[:space:]]*#.*//' > /tmp/vsw-cc-$$n.env; \
+	  (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env config -q) && echo "compose ok  stacks/addons/$$n" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; \
+	  if [ -f $$d/compose.bridge.yml ]; then (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env -f docker-compose.yml -f compose.bridge.yml config -q) \
+	    && echo "compose ok  stacks/addons/$$n (bridge)" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; fi; rm -f /tmp/vsw-cc-$$n.env; done
 	@for f in stacks/caddy/conf/Caddyfile stacks/caddy/variants/*.Caddyfile; do \
 	  docker run --rm -e SITE_DOMAIN=example.com -v "$$PWD/$$f:/c/Caddyfile:ro" $${CADDY_IMAGE:-caddy:2.11} \
 	    caddy validate --config /c/Caddyfile --adapter caddyfile >/dev/null 2>&1 \
@@ -69,9 +75,11 @@ mermaid: ## render every Mermaid block to /tmp/vsw-mermaid (needs node; download
 test: ## offline smoke tests (no servers touched)
 	bash tests/shell/smoke.sh
 	bash tests/shell/smoke-db.sh
+	bash tests/shell/smoke-addons.sh
 
-it: ## Docker integration tests: 1.3 -> 1.4 upgrade, privileges, envs, backups (throwaway containers, ~5 min)
+it: ## Docker integration tests: 1.3 -> 1.4 upgrade, privileges, envs, backups; add-ons (throwaway containers, ~6 min)
 	bash tests/shell/upgrade-it.sh
+	bash tests/shell/addons-it.sh
 
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
 	tests/shell/client-check.sh

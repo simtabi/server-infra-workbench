@@ -1,0 +1,22 @@
+# Garage (S3-compatible object storage). Rendered and started by src/shell/addons/addon.sh.
+# Host networking as Garage recommends; garage.toml binds S3/RPC to ADDON_BIND and admin to 127.0.0.1 only.
+name: vsw-garage
+services:
+  garage:
+    image: ${GARAGE_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - ${ADDON_DATA_DIR:?}/meta:/var/lib/garage/meta
+      - ${ADDON_DATA_DIR:?}/data:/var/lib/garage/data
+    mem_limit: ${GARAGE_MEM:-512m}
+    security_opt: [no-new-privileges:true]
+    labels: {vsw.config-sha: "${ADDON_CONFIG_SHA:-none}"}
+    healthcheck:
+      test: [CMD, /garage, status]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}

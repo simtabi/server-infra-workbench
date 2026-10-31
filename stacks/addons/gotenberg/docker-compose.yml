@@ -1,0 +1,35 @@
+# Gotenberg (HTML/Office -> PDF). Rendered and started by src/shell/addons/addon.sh; do not edit on the server.
+# Bound to ADDON_BIND only (127.0.0.1 on a web node), so Docker's ufw bypass never exposes it publicly.
+name: vsw-gotenberg
+services:
+  gotenberg:
+    image: ${GOTENBERG_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --api-port=3000
+      - --api-timeout=${GOTENBERG_TIMEOUT:-60s}
+      - --log-level=${GOTENBERG_LOG_LEVEL:-warn}
+      - --gotenberg-hide-banner
+      - --webhook-disable
+      - --api-enable-basic-auth=${GOTENBERG_BASIC_AUTH_ON:-false}
+      - --chromium-deny-private-ips=${GOTENBERG_DENY_PRIVATE_IPS:-true}
+      - --libreoffice-deny-private-ips=${GOTENBERG_DENY_PRIVATE_IPS:-true}
+      - --api-download-from-deny-private-ips=${GOTENBERG_DENY_PRIVATE_IPS:-true}
+    environment:
+      GOTENBERG_API_BASIC_AUTH_USERNAME: ${GOTENBERG_USERNAME:-}
+      GOTENBERG_API_BASIC_AUTH_PASSWORD: ${GOTENBERG_PASSWORD:-}
+    ports:
+      - "${ADDON_BIND:?}:${GOTENBERG_PORT:-3000}:3000"
+    mem_limit: ${GOTENBERG_MEM:-1g}
+    cpus: ${GOTENBERG_CPUS:-1.0}
+    pids_limit: 512
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    healthcheck:
+      test: [CMD, curl, -fsS, -o, /dev/null, http://127.0.0.1:3000/health]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
