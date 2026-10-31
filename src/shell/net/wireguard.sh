@@ -13,7 +13,8 @@
 #
 #  USAGE
 #    wireguard.sh setup --host <db-ssh> --peer <web-ssh> [--dry-run|--yes]
-#    wireguard.sh status --host <ssh>        handshake age, transfer, ping (no keys)
+#    wireguard.sh status --host <ssh> [--ping TUNNEL_IP] [--iface wg0]
+#                                            handshake age, transfer, ping (no keys)
 #    wireguard.sh remove --host <ssh> [--yes]  stop + disable; config kept as .bak
 #
 #  SETUP OPTIONS
