@@ -31,3 +31,4 @@
 # ACCEPT_EXPERIMENTAL=0
 
 # WAIT_TIMEOUT=180                      # seconds for `docker compose up --wait`
+# ADDON_STACKS=                         # templates dir (default: stacks/addons in the repo)

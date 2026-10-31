@@ -20,7 +20,7 @@
 | Monitoring (P2) | `bin/workbench monitor`: Beszel, Uptime Kuma, Netdata, Prometheus + Grafana + exporters, per role, loopback UIs, private agents, RAM gate; backup/restore-test textfile metrics and alert rules; `bin/workbench status`; [monitor](tools/monitor.md), [ADR 0012](adr/0012-monitoring-stack.md) |
 | Manager 1.5.0 | `TLS_MODE=verify-full` + `tls-ca`, `monitor-user`, `metrics`, `migrate-managed`, `pg-major-upgrade` (auto-rollback, `--cleanup`); [recipes](recipes/pg-major-upgrade.md) |
 | Progress UX | one contract for shell, PHP and Python: steps, bars, spinners; plain lines off a TTY, `NO_COLOR`, `--quiet` |
-| Docs | [lessons learned](lessons-learned.md), [checklists](checklists/README.md) per phase (command, verify, why), [privileges](reference/privileges.md) with the reason per row, ADRs 0001-0012 |
+| Docs | [lessons learned](lessons-learned.md), [checklists](checklists/README.md) per phase (command, verify, why), [privileges](reference/privileges.md) with the reason per row, ADRs 0001-0013, the [live rollout runbook](runbooks/live-rollout.md) |
 | Add-ons | Gotenberg; Garage, SeaweedFS, RustFS (experimental) object stores; [add-ons](tools/addons.md) |
 | Quality | pinned shellcheck, smoke tests, runnable examples, deploy sandbox, nine Docker integration suites in `make it` (upgrade, add-ons, server tools, DB features, PITR posix and S3, Garage cluster, monitoring, WireGuard) with a leak guard, secrets check (scanner + gitleaks), link, table and documented-command checks, generated config-keys check, compose validation, client-data check, Pint, PHPStan max, PHPUnit (mock HTTP server), Python unittest, CI and `make ci-local` ([tests](../tests/README.md)) |
 

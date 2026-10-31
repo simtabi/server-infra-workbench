@@ -28,6 +28,7 @@ No test calls a real API or a real server.
 | [`../src/php/tests/Integration`](../src/php/tests/Integration) | DO, Ploi, Cloudflare, GCP clients against a local mock HTTP server through real Guzzle | `make php` |
 | [`docs/check-links.py`](docs/check-links.py) | every relative Markdown link resolves | `make links` |
 | [`docs/gen-config-keys.py`](docs/gen-config-keys.py) | `docs/reference/configuration-keys.md` matches `config/db-server.env.example` (`--check`; run without it to regenerate) | `make links` |
+| [`docs/check-config-examples.py`](docs/check-config-examples.py) | `config/*.example` list every key the manager, `monitor.sh` and `addon.sh` read, and no dead keys | `make links` |
 | [`docs/render-mermaid.sh`](docs/render-mermaid.sh) | every Mermaid diagram renders | `make mermaid` |
 
 `make ci` is the gate: secrets, lint (pinned shellcheck), tests, client check, PHP, Python, links, documented

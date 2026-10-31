@@ -55,3 +55,4 @@
 # ---- misc ----------------------------------------------------------------------------------
 # WAIT_TIMEOUT=240                      # seconds for `docker compose up --wait`
 # MONITOR_STACKS_DIR=                   # templates dir (default: stacks/monitor next to monitor.sh)
+# CADDY_IMAGE=caddy:2.11               # only for MONITOR_PUBLIC=1 (the basic-auth front)
