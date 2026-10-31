@@ -46,6 +46,16 @@ final readonly class DigitalOcean
         return new Snapshots($this->transport);
     }
 
+    public function firewalls(): Firewalls
+    {
+        return new Firewalls($this->transport);
+    }
+
+    public function uptime(): Uptime
+    {
+        return new Uptime($this->transport);
+    }
+
     public function actions(): Actions
     {
         return new Actions($this->transport);

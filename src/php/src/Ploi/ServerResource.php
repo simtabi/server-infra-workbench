@@ -22,6 +22,11 @@ final readonly class ServerResource
         return Server::fromArray(Data::map($this->transport->get("/servers/{$this->id}")->json, 'data'));
     }
 
+    public function daemons(): Daemons
+    {
+        return new Daemons($this->transport, $this->id);
+    }
+
     public function sites(): Sites
     {
         return new Sites($this->transport, $this->id);

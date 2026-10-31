@@ -25,6 +25,19 @@ final class Help
                 workbench do snapshot <droplet-id> [--name N] [--wait] [--timeout S]   take a snapshot (write)
                 workbench do snapshot-delete <snapshot-id> --force   delete a snapshot (destructive)
                 workbench do account                            check the token
+                workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image ubuntu-24-04-x64]
+                        [--vpc UUID] [--tag T[,T]] [--backups] [--user-data FILE]   create a droplet (write; idempotent by name)
+                workbench do firewalls                          cloud firewalls (WORLD-OPEN marks non-web ports open to all)
+                workbench do firewall-apply db|web --vpc VPC_ID|CIDR [--name N] [--ssh-from CIDR[,CIDR]]
+                        [--ports 5432,6379] [--droplet ID[,ID]] [--tag T]   create or update a preset (write)
+                workbench do firewall-delete <firewall-id> --force   (destructive)
+                workbench do uptime [checks]                    uptime checks
+                workbench do uptime state <check-id>            up/down per region
+                workbench do uptime check-create <name> <url> [--type https|http|ping] [--regions us_east,eu_west]   (write)
+                workbench do uptime check-delete <check-id> --force   (destructive)
+                workbench do uptime alerts <check-id>
+                workbench do uptime alert-create <check-id> down|down_global|latency|ssl_expiry --email a@x[,b@y]
+                        [--threshold N] [--period 2m|5m|...|1h] [--name N]   (write)
                 TXT.self::COMMON,
             'cf', 'cloudflare' => <<<'TXT'
                 workbench cf zones                              list zones
@@ -38,6 +51,13 @@ final class Help
                 workbench ploi server <server-id>               one server
                 workbench ploi sites <server-id>                sites on a server
                 workbench ploi deploy <server-id> <site-id>     run the site's deploy script (write)
+                workbench ploi site-create <server-id> <domain> [--web-directory /public] [--project-type laravel] [--user ploi]   (write)
+                workbench ploi site-delete <server-id> <site-id> --force   (destructive)
+                workbench ploi deploy-script <server-id> <site-id>         print the deploy script
+                workbench ploi deploy-script-set <server-id> <site-id> --file deploy.sh   replace it (write; no-op if identical)
+                workbench ploi daemons <server-id>
+                workbench ploi daemon-create <server-id> --command "php artisan queue:work" [--user ploi] [--processes 1] [--directory D]   (write)
+                workbench ploi daemon-delete <server-id> <daemon-id> --force   (destructive)
                 TXT.self::COMMON,
             'gcp', 'gcloud' => <<<'TXT'
                 workbench gcp instances [--zone Z] [--project P]
@@ -45,13 +65,41 @@ final class Help
                 workbench gcp firewalls [--project P]           WORLD-OPEN marks rules open to 0.0.0.0/0
                 workbench gcp snapshot <zone> <disk> [--name N] [--wait]   snapshot a disk (write)
                 TXT.self::COMMON,
+            'keys' => <<<'TXT'
+                workbench keys                                  interactive menu (account and server keys)
+                workbench keys providers                        providers, and which have credentials
+                workbench keys fingerprint [--key-file F.pub | --public-key "ssh-ed25519 ..."]
+                workbench keys account list   --provider P
+                workbench keys account add    --provider P --name N [--key-file F.pub | --public-key "..."]   (write)
+                workbench keys account rename <key-id> --provider P --name N   (write)
+                workbench keys account remove <key-id> --provider P --force    (destructive; servers keep the key)
+                workbench keys server list      --host user@host [--ssh-opt "-p 2222"]
+                workbench keys server add       --host user@host [--key-file F.pub | --public-key "..."]   (write)
+                workbench keys server remove <n|SHA256:fp|comment> --host user@host [--force]   (write)
+                workbench keys server fix-perms --host user@host   (write)
+
+                Providers: digitalocean, vultr, hetzner, linode, scaleway, plus "extra_providers" from
+                --config FILE, $VSW_KEYS_CONFIG, $VPSKEYS_CONFIG or ~/.config/vps-server-workbench/keys.json.
+                The key file defaults to ~/.ssh/id_ed25519.pub; private keys are never read.
+                Server edits: the current session's key can't be removed; the last key, your own local keys,
+                or an unknown session key need --force; the file is backed up, written atomically, read back,
+                and a fresh login is tested (the backup is restored if it fails).
+                TXT.self::COMMON,
+            'health' => <<<'TXT'
+                workbench health <url> [<url>...] [--expect 200] [--contains TEXT] [--max-ms 1500]
+
+                GETs each URL (no auth, no redirects) and checks status, body and latency.
+                Exit 0 when all pass, 1 when any fails. Use it after a deploy or from cron.
+                TXT.self::COMMON,
             default => <<<'TXT'
                 workbench — VPS and platform tooling (vps-server-workbench)
 
                 Platform APIs (PHP core):
-                  workbench do ...           DigitalOcean: droplets, snapshots
+                  workbench do ...           DigitalOcean: droplets, snapshots, firewalls, uptime checks
                   workbench cf ...           Cloudflare: zones, DNS records
-                  workbench ploi ...         Ploi: servers, sites, deploys
+                  workbench ploi ...         Ploi: servers, sites, deploy scripts, daemons, deploys
+                  workbench keys ...         SSH keys: provider accounts (DO, Vultr, Hetzner, Linode, Scaleway) and servers
+                  workbench health <url>     check health endpoints
                   workbench gcp ...          Google Compute Engine: instances, snapshots, firewalls
                   workbench credentials      which credentials are configured (never shows values)
                   workbench help <area>      commands for one area

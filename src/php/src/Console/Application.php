@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Simtabi\VpsServerWorkbench\Console;
 
 use Simtabi\VpsServerWorkbench\Cloudflare\Data\DnsRecord;
+use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Droplet;
+use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Firewall;
+use Simtabi\VpsServerWorkbench\DigitalOcean\Data\UptimeAlert;
+use Simtabi\VpsServerWorkbench\DigitalOcean\Data\UptimeCheck;
+use Simtabi\VpsServerWorkbench\DigitalOcean\FirewallPreset;
 use Simtabi\VpsServerWorkbench\DigitalOcean\RunningAction;
 use Simtabi\VpsServerWorkbench\Exception\ApiException;
 use Simtabi\VpsServerWorkbench\Exception\ConfirmationRequiredException;
@@ -13,11 +18,15 @@ use Simtabi\VpsServerWorkbench\Exception\ValidationException;
 use Simtabi\VpsServerWorkbench\Exception\WorkbenchException;
 use Simtabi\VpsServerWorkbench\Gcp\RunningOperation;
 use Simtabi\VpsServerWorkbench\Http\ClientOptions;
+use Simtabi\VpsServerWorkbench\Keys\PublicKey;
+use Simtabi\VpsServerWorkbench\Keys\SshKey;
+use Simtabi\VpsServerWorkbench\Ploi\Data\Daemon;
+use Simtabi\VpsServerWorkbench\Ploi\Data\Site;
 use Simtabi\VpsServerWorkbench\Safety\PendingAction;
 use Simtabi\VpsServerWorkbench\Security\Credentials;
 
 /**
- * `bin/workbench do|cf|ploi|gcp|credentials ...`
+ * `bin/workbench do|cf|ploi|gcp|keys|health|credentials ...`
  *
  * Reads run straight away. Writes print what they will do and need --yes (or typing "yes" at the
  * prompt); destructive writes also need --force. --dry-run prints the plan and sends nothing.
@@ -43,9 +52,16 @@ final class Application
     /** @var \Closure(string): bool */
     private readonly \Closure $prompt;
 
-    /** @param (\Closure(string): bool)|null $prompt Asks the user; default reads "yes" from a terminal. */
-    public function __construct(?ProviderFactory $providers = null, ?Output $out = null, ?\Closure $prompt = null)
+    /** @var \Closure(string): ?string */
+    private readonly \Closure $reader;
+
+    /**
+     * @param (\Closure(string): bool)|null    $prompt Asks the user; default reads "yes" from a terminal.
+     * @param (\Closure(string): ?string)|null $reader Reads one answer for the interactive keys menu (null = end of input).
+     */
+    public function __construct(?ProviderFactory $providers = null, ?Output $out = null, ?\Closure $prompt = null, ?\Closure $reader = null)
     {
+        $this->reader = $reader ?? self::terminalReader(...);
         $this->out = $out ?? new Output;
         $this->providers = $providers ?? new ProviderFactory(ClientOptions::defaults(), Credentials::fromEnvironment());
         $this->prompt = $prompt ?? self::terminalPrompt(...);
@@ -71,6 +87,8 @@ final class Application
                 'cf', 'cloudflare' => $this->cloudflare($input),
                 'ploi' => $this->ploi($input),
                 'gcp', 'gcloud' => $this->gcp($input),
+                'keys' => $this->keys($input),
+                'health' => $this->health($input),
                 'credentials', 'creds' => $this->credentials($input),
                 'help', '--help', '-h' => $this->help($input),
                 'version', '--version' => $this->version(),
@@ -114,6 +132,39 @@ final class Application
             }),
             'snapshot-delete' => $this->write($in, $do()->snapshots()->delete($in->arg(1, 'snapshot-id')), fn (bool $ok): int => $this->done($in, $ok, 'snapshot deleted')),
             'account' => $this->showOne($in, $do()->account()),
+            'droplet-create' => $this->write($in, $do()->droplets()->create(
+                $in->arg(1, 'name'),
+                $in->value('region') ?? throw new ValidationException('--region is required (e.g. nyc3)'),
+                $in->value('size') ?? throw new ValidationException('--size is required (e.g. s-2vcpu-4gb; see: workbench plans)'),
+                $in->value('image') ?? 'ubuntu-24-04-x64',
+                $in->list('ssh-keys'),
+                $in->value('vpc'),
+                $in->list('tag'),
+                $in->flag('backups'),
+                $this->readFile($in->value('user-data')),
+            ), fn (Droplet $d): int => $this->showOne($in, $d, 'droplet created (it boots in about a minute; see: workbench do droplet '.$d->id.')')),
+            'firewalls' => $this->show($in, $do()->firewalls()->list(), ['id' => 'ID', 'name' => 'NAME', 'status' => 'STATUS', 'dropletIds' => 'DROPLETS', 'tags' => 'TAGS', 'openToWorld' => 'WORLD-OPEN']),
+            'firewall-apply' => $this->write($in, $do()->firewalls()->apply(FirewallPreset::build(
+                $in->arg(1, 'db|web'),
+                $in->value('name') ?? 'workbench-'.$in->arg(1, 'db|web'),
+                $this->vpcCidr($in),
+                $in->list('ssh-from'),
+                $in->value('ports') === null ? FirewallPreset::DB_PORTS : $in->ints('ports'),
+                $in->ints('droplet'),
+                $in->list('tag'),
+            )), fn (Firewall $f): int => $this->showOne($in, $f, 'firewall applied')),
+            'firewall-delete' => $this->write($in, $do()->firewalls()->delete($in->arg(1, 'firewall-id')), fn (bool $ok): int => $this->done($in, $ok, 'firewall deleted')),
+            'uptime' => match ($in->optionalArg(1)) {
+                'checks', null => $this->show($in, $do()->uptime()->checks(), ['id' => 'ID', 'name' => 'NAME', 'type' => 'TYPE', 'target' => 'TARGET', 'regions' => 'REGIONS', 'enabled' => 'ENABLED']),
+                'state' => $this->showOne($in, $do()->uptime()->state($in->arg(2, 'check-id'))),
+                'check-create' => $this->write($in, $do()->uptime()->createCheck($in->arg(2, 'name'), $in->arg(3, 'url-or-host'), $in->value('type') ?? 'https', $in->list('regions') === [] ? \Simtabi\VpsServerWorkbench\DigitalOcean\Uptime::REGIONS : $in->list('regions')),
+                    fn (UptimeCheck $c): int => $this->showOne($in, $c, 'uptime check saved')),
+                'check-delete' => $this->write($in, $do()->uptime()->deleteCheck($in->arg(2, 'check-id')), fn (bool $ok): int => $this->done($in, $ok, 'uptime check deleted')),
+                'alerts' => $this->show($in, $do()->uptime()->alerts($in->arg(2, 'check-id')), ['id' => 'ID', 'name' => 'NAME', 'type' => 'TYPE', 'threshold' => 'THRESHOLD', 'period' => 'PERIOD', 'emails' => 'EMAILS']),
+                'alert-create' => $this->write($in, $do()->uptime()->createAlert($in->arg(2, 'check-id'), $in->arg(3, 'type'), $in->list('email'), $in->int('threshold', 0), $in->value('period') ?? '2m', $in->value('name')),
+                    fn (UptimeAlert $a): int => $this->showOne($in, $a, 'uptime alert created')),
+                default => $this->usage('do'),
+            },
             null, 'help' => $this->usage('do'),
             default => throw new ValidationException(sprintf('unknown "do %s" (see: workbench do --help)', $in->arg(0, 'command'))),
         };
@@ -154,6 +205,19 @@ final class Application
             'server' => $this->showOne($in, $ploi()->servers()->get($in->arg(1, 'server-id'))),
             'sites' => $this->show($in, $ploi()->servers()->find($in->arg(1, 'server-id'))->sites()->list(), ['id' => 'ID', 'domain' => 'DOMAIN', 'status' => 'STATUS', 'projectType' => 'TYPE', 'phpVersion' => 'PHP', 'lastDeployAt' => 'LAST DEPLOY']),
             'deploy' => $this->write($in, $ploi()->servers()->find($in->arg(1, 'server-id'))->sites()->deploy($in->arg(2, 'site-id')), fn (bool $ok): int => $this->done($in, $ok, 'deploy queued on Ploi')),
+            'site-create' => $this->write($in, $ploi()->servers()->find($in->arg(1, 'server-id'))->sites()->create($in->arg(2, 'domain'), $in->value('web-directory') ?? '/public', $in->value('project-type') ?? '', $in->value('user') ?? 'ploi'),
+                fn (Site $site): int => $this->showOne($in, $site, 'site created')),
+            'site-delete' => $this->write($in, $ploi()->servers()->find($in->arg(1, 'server-id'))->sites()->delete($in->arg(2, 'site-id')), fn (bool $ok): int => $this->done($in, $ok, 'site deleted')),
+            'deploy-script' => $this->printScript($in, $ploi()->servers()->find($in->arg(1, 'server-id'))->sites()->deployScript($in->arg(2, 'site-id'))),
+            'deploy-script-set' => $this->write($in, $ploi()->servers()->find($in->arg(1, 'server-id'))->sites()->setDeployScript($in->arg(2, 'site-id'),
+                $this->readFile($in->value('file') ?? throw new ValidationException('--file <deploy.sh> is required')) ?? ''),
+                fn (bool $ok): int => $this->done($in, $ok, 'deploy script saved')),
+            'daemons' => $this->show($in, $ploi()->servers()->find($in->arg(1, 'server-id'))->daemons()->list(), ['id' => 'ID', 'command' => 'COMMAND', 'systemUser' => 'USER', 'processes' => 'PROCS', 'status' => 'STATUS']),
+            'daemon-create' => $this->write($in, $ploi()->servers()->find($in->arg(1, 'server-id'))->daemons()->create(
+                $in->value('command') ?? throw new ValidationException('--command is required (e.g. "php artisan queue:work")'),
+                $in->value('user') ?? 'ploi', $in->int('processes', 1), $in->value('directory') ?? ''),
+                fn (Daemon $d): int => $this->showOne($in, $d, 'daemon created')),
+            'daemon-delete' => $this->write($in, $ploi()->servers()->find($in->arg(1, 'server-id'))->daemons()->delete($in->arg(2, 'daemon-id')), fn (bool $ok): int => $this->done($in, $ok, 'daemon deleted')),
             null, 'help' => $this->usage('ploi'),
             default => throw new ValidationException(sprintf('unknown "ploi %s" (see: workbench ploi --help)', $in->arg(0, 'command'))),
         };
@@ -175,6 +239,302 @@ final class Application
             null, 'help' => $this->usage('gcp'),
             default => throw new ValidationException(sprintf('unknown "gcp %s" (see: workbench gcp --help)', $in->arg(0, 'command'))),
         };
+    }
+
+    /** `workbench health <url>...`: exit 0 only when every endpoint passes. */
+    private function health(Input $in): int
+    {
+        $urls = $in->args();
+        if ($urls === []) {
+            return $this->usage('health');
+        }
+        $check = $this->providers->health();
+        $results = array_map(fn (string $url) => $check->check($url, $in->int('expect', 200), $in->value('contains'), $in->value('max-ms') === null ? null : $in->int('max-ms', 0)), $urls);
+        if ($in->flag('json')) {
+            $this->out->json(array_map(self::row(...), $results));
+        } else {
+            $rows = array_map(static fn ($r): array => ['result' => $r->ok ? 'ok' : 'FAIL', 'url' => $r->url, 'status' => $r->status ?? '-', 'ms' => $r->ms, 'problems' => implode('; ', $r->problems)], $results);
+            $this->out->table($rows, ['result' => 'RESULT', 'url' => 'URL', 'status' => 'STATUS', 'ms' => 'MS', 'problems' => 'PROBLEMS']);
+        }
+
+        return array_filter($results, static fn ($r): bool => ! $r->ok) === [] ? self::OK : self::FAILED;
+    }
+
+    private function keys(Input $in): int
+    {
+        $config = $in->value('config');
+
+        return match ($in->optionalArg(0)) {
+            null => $this->keysMenu($in),
+            'providers' => $this->keyProviderList($in, $config),
+            'account' => $this->accountKeys($in, $config),
+            'server' => $this->serverKeys($in),
+            'fingerprint' => $this->showOne($in, (static fn (PublicKey $k): array => ['type' => $k->type, 'comment' => $k->comment, 'sha256' => $k->fingerprint(), 'md5' => $k->md5()])(PublicKey::parse($this->publicKey($in)))),
+            'help' => $this->usage('keys'),
+            default => throw new ValidationException(sprintf('unknown "keys %s" (see: workbench keys --help)', $in->arg(0, 'command'))),
+        };
+    }
+
+    private function keyProviderList(Input $in, ?string $config): int
+    {
+        $providers = $this->providers->keyProviders($config);
+        $available = $providers->available($this->providers->credentials());
+        $rows = [];
+        foreach ($providers->names() as $name) {
+            $spec = $providers->spec($name);
+            $rows[] = ['provider' => $name, 'configured' => in_array($name, $available, true), 'token' => $spec->tokenEnv.($spec->scopeEnv !== '' ? ' + '.$spec->scopeEnv : ''), 'api' => $spec->baseUrl];
+        }
+        $in->flag('json') ? $this->out->json($rows) : $this->out->table($rows, ['provider' => 'PROVIDER', 'configured' => 'CONFIGURED', 'token' => 'CREDENTIALS', 'api' => 'API']);
+
+        return self::OK;
+    }
+
+    private function accountKeys(Input $in, ?string $config): int
+    {
+        $keys = fn () => $this->providers->accountKeys($in->value('provider') ?? throw new ValidationException('--provider is required (see: workbench keys providers)'), $config);
+
+        return match ($in->optionalArg(1)) {
+            'list', null => $this->show($in, $keys()->list(), ['id' => 'ID', 'name' => 'NAME', 'fingerprint' => 'FINGERPRINT']),
+            'add' => $this->write($in, $keys()->add($in->value('name') ?? throw new ValidationException('--name is required'), $this->publicKey($in)),
+                fn (SshKey $k): int => $this->showOne($in, $k, 'key on the account')),
+            'rename' => $this->write($in, $keys()->rename($in->arg(2, 'key-id'), $in->value('name') ?? throw new ValidationException('--name is required')), fn (bool $ok): int => $this->done($in, $ok, 'key renamed')),
+            'remove', 'delete' => $this->write($in, $keys()->remove($in->arg(2, 'key-id')), fn (bool $ok): int => $this->done($in, $ok, 'key removed from the account (servers keep it)')),
+            default => $this->usage('keys'),
+        };
+    }
+
+    private function serverKeys(Input $in): int
+    {
+        $server = fn () => $this->providers->serverKeys($in->value('host') ?? throw new ValidationException('--host user@host is required'), $this->sshOptions($in));
+
+        return match ($in->optionalArg(1)) {
+            'list', null => $this->serverKeyList($in, $server()),
+            'add' => $this->write($in, $server()->add($this->publicKey($in)), fn (string $backup): int => $this->done($in, true, $backup === '' ? 'already there; nothing changed' : "key added (backup: ~/.ssh/{$backup}). Keep this session open and test a new login.")),
+            'remove' => $this->write($in, $server()->remove($in->arg(2, 'number|fingerprint|comment'), $in->flag('force')), fn (string $backup): int => $this->done($in, true, "key removed (backup: ~/.ssh/{$backup}); a fresh login was tested")),
+            'fix-perms', 'fix-permissions' => $this->write($in, $server()->fixPermissions(), fn (string $unused): int => $this->done($in, true, 'permissions fixed')),
+            default => $this->usage('keys'),
+        };
+    }
+
+    private function serverKeyList(Input $in, \Simtabi\VpsServerWorkbench\Keys\ServerKeys $server): int
+    {
+        $session = $server->sessionFingerprint();
+        $rows = [];
+        foreach ($server->entries() as $i => $entry) {
+            $rows[] = ['n' => $i + 1, 'type' => $entry['key']->type, 'comment' => $entry['key']->comment, 'fingerprint' => $entry['key']->fingerprint(),
+                'options' => $entry['key']->options, 'session' => $entry['key']->fingerprint() === $session];
+        }
+        if ($in->flag('json')) {
+            $this->out->json(['host' => $server->target(), 'sessionKey' => $session, 'keys' => $rows]);
+        } else {
+            $this->out->table($rows, ['n' => '#', 'type' => 'TYPE', 'comment' => 'COMMENT', 'fingerprint' => 'FINGERPRINT', 'session' => 'THIS SESSION']);
+            $this->out->line($session === null ? '(could not tell which key this session uses)' : "this session logged in with {$session}; it can't be removed");
+        }
+
+        return self::OK;
+    }
+
+    /** The interactive menu: same operations, same safety checks, prompts instead of flags. */
+    private function keysMenu(Input $in): int
+    {
+        $ask = function (string $question): string {
+            $answer = ($this->reader)($question);
+            if ($answer === null) {
+                throw new MenuClosed;
+            }
+
+            return trim($answer);
+        };
+        try {
+            while (true) {
+                $top = $ask("\nSSH keys\n  1) account keys (provider dashboards)\n  2) server keys (~/.ssh/authorized_keys)\n  q) quit\n> ");
+                if ($top === 'q' || $top === '') {
+                    return self::OK;
+                }
+                try {
+                    match ($top) {
+                        '1' => $this->accountMenu($in, $ask),
+                        '2' => $this->serverMenu($in, $ask),
+                        default => $this->out->line('pick 1, 2 or q'),
+                    };
+                } catch (ValidationException|ConfirmationRequiredException|ApiException|CredentialException $e) {
+                    $this->out->error('error: '.$e->getMessage());
+                }
+            }
+        } catch (MenuClosed) {
+            $this->out->line('');
+
+            return self::OK;
+        }
+    }
+
+    /**
+     * @param \Closure(string): string $ask
+     */
+    private function accountMenu(Input $in, \Closure $ask): void
+    {
+        $providers = $this->providers->keyProviders($in->value('config'));
+        $names = $providers->names();
+        $this->out->line('providers: '.implode(', ', $names).' (configured: '.implode(', ', $providers->available($this->providers->credentials())).')');
+        $provider = $ask('provider> ');
+        $keys = $this->providers->accountKeys($provider, $in->value('config'));
+        while (true) {
+            $choice = $ask("\n{$provider} account keys\n  1) list  2) add  3) rename  4) delete  b) back\n> ");
+            match ($choice) {
+                '1' => $this->out->table(array_map(self::row(...), $keys->list()), ['id' => 'ID', 'name' => 'NAME', 'fingerprint' => 'FINGERPRINT']),
+                '2' => $this->menuConfirm($in, $ask, $keys->add($ask('name> '), $this->keyFromAnswer($ask('public key file [~/.ssh/id_ed25519.pub] or paste the key> ')))),
+                '3' => $this->menuConfirm($in, $ask, $keys->rename($ask('key id> '), $ask('new name> '))),
+                '4' => (function () use ($in, $keys, $ask): void {
+                    $this->out->line('note: servers that already have this key keep it.');
+                    $this->menuConfirm($in, $ask, $keys->remove($ask('key id> ')));
+                })(),
+                'b', '' => null,
+                default => $this->out->line('pick 1-4 or b'),
+            };
+            if ($choice === 'b' || $choice === '') {
+                return;
+            }
+        }
+    }
+
+    /**
+     * @param \Closure(string): string $ask
+     */
+    private function serverMenu(Input $in, \Closure $ask): void
+    {
+        $server = $this->providers->serverKeys($ask('host (user@host or ssh alias)> '), $this->sshOptions($in));
+        $this->out->line('keep this terminal session open until you have tested a new login.');
+        while (true) {
+            $choice = $ask("\n{$server->target()} authorized_keys\n  1) list  2) add  3) remove  4) fix permissions  b) back\n> ");
+            match ($choice) {
+                '1' => $this->serverKeyList($in, $server),
+                '2' => $this->menuConfirm($in, $ask, $server->add($this->keyFromAnswer($ask('public key file [~/.ssh/id_ed25519.pub] or paste the key> ')))),
+                '3' => (function () use ($in, $server, $ask): void {
+                    $this->serverKeyList(Input::parse([]), $server);
+                    $selector = $ask('number to remove> ');
+                    try {
+                        $action = $server->remove($selector);
+                    } catch (ConfirmationRequiredException $e) {
+                        $this->out->error('warning: '.$e->getMessage());
+                        if ($ask('remove it anyway? type force: ') !== 'force') {
+                            $this->out->line('cancelled; nothing changed');
+
+                            return;
+                        }
+                        $action = $server->remove($selector, true);
+                    }
+                    $this->menuConfirm($in, $ask, $action);
+                })(),
+                '4' => $this->menuConfirm($in, $ask, $server->fixPermissions()),
+                'b', '' => null,
+                default => $this->out->line('pick 1-4 or b'),
+            };
+            if ($choice === 'b' || $choice === '') {
+                return;
+            }
+        }
+    }
+
+    /**
+     * @template T
+     *
+     * @param \Closure(string): string $ask
+     * @param PendingAction<T>         $action
+     */
+    private function menuConfirm(Input $in, \Closure $ask, PendingAction $action): void
+    {
+        if ($in->flag('dry-run')) {
+            $action->plan();
+            $this->out->line('DRY RUN — nothing sent. Would do: '.$action->describe());
+
+            return;
+        }
+        if (! $action->isNoop() && $ask($action->describe()."\nType yes to continue: ") !== 'yes') {
+            $this->out->line('cancelled; nothing changed');
+
+            return;
+        }
+        $action->confirm();
+        $this->out->line($action->isNoop() ? 'no change needed' : 'done: '.$action->describe());
+    }
+
+    private function keyFromAnswer(string $answer): string
+    {
+        if ($answer === '') {
+            $answer = '~/.ssh/id_ed25519.pub';
+        }
+
+        return PublicKey::isValid($answer) ? $answer : $this->readPublicKeyFile($answer);
+    }
+
+    /** --public-key "ssh-ed25519 AAAA...", else --key-file F, else ~/.ssh/id_ed25519.pub. */
+    private function publicKey(Input $in): string
+    {
+        $inline = $in->value('public-key');
+        if ($inline !== null) {
+            return PublicKey::parse($inline)->line();
+        }
+
+        return $this->readPublicKeyFile($in->value('key-file') ?? '~/.ssh/id_ed25519.pub');
+    }
+
+    /** Reads a PUBLIC key file. Refuses anything that looks like a private key, without echoing it. */
+    private function readPublicKeyFile(string $file): string
+    {
+        if (str_starts_with($file, '~/')) {
+            $file = (string) getenv('HOME').substr($file, 1);
+        }
+        if (! str_ends_with($file, '.pub')) {
+            throw new ValidationException(sprintf('"%s": pass the public half (a .pub file); private keys are never read', $file));
+        }
+        if (! is_file($file) || ! is_readable($file)) {
+            throw new ValidationException(sprintf('no readable public key at %s', $file));
+        }
+        $line = trim((string) file_get_contents($file, length: 16_384));
+        if (str_contains($line, 'PRIVATE KEY')) {
+            throw new ValidationException(sprintf('%s contains a private key; refusing to use it', $file));
+        }
+
+        return PublicKey::parse($line)->line();
+    }
+
+    /** @return list<string> */
+    private function sshOptions(Input $in): array
+    {
+        $raw = trim($in->value('ssh-opt') ?? '');
+
+        $parts = $raw === '' ? false : preg_split('/\s+/', $raw);
+
+        return $parts === false ? [] : $parts;
+    }
+
+    private function vpcCidr(Input $in): string
+    {
+        $vpc = $in->value('vpc') ?? throw new ValidationException('--vpc is required: a VPC id (looked up) or its CIDR, e.g. 10.0.0.0/20');
+
+        return str_contains($vpc, '/') ? FirewallPreset::cidr($vpc) : $this->providers->digitalOcean()->firewalls()->vpcCidr($vpc);
+    }
+
+    private function readFile(?string $file): ?string
+    {
+        if ($file === null) {
+            return null;
+        }
+        if (! is_file($file) || ! is_readable($file)) {
+            throw new ValidationException(sprintf('cannot read %s', $file));
+        }
+        if (filesize($file) > 65_536) {
+            throw new ValidationException(sprintf('%s is larger than 64 KiB', $file));
+        }
+
+        return (string) file_get_contents($file);
+    }
+
+    private function printScript(Input $in, string $script): int
+    {
+        $in->flag('json') ? $this->out->json(['deployScript' => $script]) : $this->out->line(rtrim($script));
+
+        return self::OK;
     }
 
     /** Which credentials are configured and where from. Never prints a value. */
@@ -308,6 +668,17 @@ final class Application
         }
 
         return $row;
+    }
+
+    private static function terminalReader(string $question): ?string
+    {
+        if (! stream_isatty(STDIN)) {
+            return null;
+        }
+        fwrite(STDERR, $question);
+        $answer = fgets(STDIN);
+
+        return is_string($answer) ? rtrim($answer, "\r\n") : null;
     }
 
     private static function terminalPrompt(string $description): bool

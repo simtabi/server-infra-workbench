@@ -4,6 +4,8 @@
 #   bin/workbench list                       every tool and where it lives
 #   bin/workbench <area> <tool> [args...]    run src/shell/<area>/<tool>.sh    e.g. bin/workbench db remote-run --help
 #   bin/workbench do|cf|ploi|gcp ...         platform APIs (PHP core)      e.g. bin/workbench do snapshot 123 --dry-run
+#   bin/workbench keys [...]                 SSH keys: provider accounts + servers (menu without args)
+#   bin/workbench health <url>...            check health endpoints (status, body, latency)
 #   bin/workbench credentials                which API credentials are set (never prints values)
 #   bin/workbench py <command> [args...]     the Python package CLI        e.g. bin/workbench py ping 10.0.0.5 6432
 #   bin/workbench plans [flags]              DO plans per region via Ploi  e.g. bin/workbench plans --regions nyc3
@@ -13,7 +15,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)"
 
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
 die() { echo "workbench: $*" >&2; exit "${CODE:-2}"; }
 
 list() {
@@ -22,8 +24,12 @@ list() {
     a="$(basename "$(dirname "$f")")"; t="$(basename "$f" .sh)"; printf '  %-8s %-28s src/shell/%s/%s.sh\n' "$a" "$t" "$a" "$t"
   done
   echo "platform APIs (PHP core, src/php):"
-  printf '  %-37s %s\n' "do droplets|snapshot|snapshots" "DigitalOcean" "cf zones|dns list|upsert|delete" "Cloudflare" \
-    "ploi servers|sites|deploy" "Ploi" "gcp instances|snapshots|firewalls" "Google Compute Engine" "credentials" "credential check"
+  printf '  %-45s %s\n' "do droplets|snapshot|snapshots" "DigitalOcean" "cf zones|dns list|upsert|delete" "Cloudflare" \
+    "do firewalls|firewall-apply|uptime|droplet-create" "DigitalOcean (writes are plan-then-confirm)" \
+    "ploi servers|sites|deploy" "Ploi" "ploi site-create|deploy-script|daemons" "Ploi" \
+    "gcp instances|snapshots|firewalls" "Google Compute Engine" \
+    "keys [providers|account|server|fingerprint]" "SSH keys (DO, Vultr, Hetzner, Linode, Scaleway; servers)" \
+    "health <url>..." "health endpoint check" "credentials" "credential check"
   echo "python (src/python):"
   printf '  %-37s %s\n' "py ping [host port] [--env FILE]" "TCP reachability probe" \
     "plans [--regions ..] [--env-file F]" "droplet plans per region available through Ploi"
@@ -40,7 +46,7 @@ case "${1:-}" in
   ""|-h|--help|help) if [ -n "${2:-}" ]; then php_core help "$2"; else usage; fi ;;
   list) list ;;
   --version|version) php_core version ;;
-  do|digitalocean|cf|cloudflare|ploi|gcp|gcloud|credentials|creds) php_core "$@" ;;
+  do|digitalocean|cf|cloudflare|ploi|gcp|gcloud|keys|health|credentials|creds) php_core "$@" ;;
   php) shift; php_core "$@" ;;
   plans) shift; command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"
        PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vps_server_workbench plans "$@" ;;
@@ -49,6 +55,7 @@ case "${1:-}" in
   *) area="$1"; tool="${2:-}"
      [[ "$area" =~ ^[a-z0-9-]+$ && "$tool" =~ ^[a-z0-9-]+$ ]] || die "usage: bin/workbench <area> <tool> [args] (see: bin/workbench list)"
      f="$ROOT/src/shell/$area/$tool.sh"
+     [ -f "$f" ] || f="$ROOT/src/shell/$area/$area-$tool.sh"   # e.g. server init -> server/server-init.sh
      [ -f "$f" ] || die "no tool src/shell/$area/$tool.sh (see: bin/workbench list)"
      shift 2; exec "$f" "$@" ;;
 esac

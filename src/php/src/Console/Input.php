@@ -9,9 +9,17 @@ use Simtabi\VpsServerWorkbench\Exception\ValidationException;
 /** argv split into positionals and known options. Unknown options are an error, never ignored. */
 final readonly class Input
 {
-    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose'];
+    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose', 'backups'];
 
-    public const array VALUES = ['name', 'type', 'ttl', 'zone', 'project', 'priority', 'comment', 'tag', 'timeout'];
+    public const array VALUES = ['name', 'type', 'ttl', 'zone', 'project', 'priority', 'comment', 'tag', 'timeout',
+        // do firewalls / droplets / uptime
+        'vpc', 'ssh-from', 'droplet', 'ports', 'region', 'size', 'image', 'ssh-keys', 'user-data', 'regions', 'email', 'threshold', 'period',
+        // health
+        'expect', 'contains', 'max-ms',
+        // ploi
+        'web-directory', 'project-type', 'user', 'file', 'command', 'processes', 'directory',
+        // keys
+        'provider', 'host', 'key-file', 'public-key', 'ssh-opt', 'config'];
 
     /**
      * @param list<string>          $args
@@ -101,6 +109,30 @@ final readonly class Input
     public function value(string $name): ?string
     {
         return $this->values[$name] ?? null;
+    }
+
+    /**
+     * A comma-separated option as a list (empty items dropped).
+     *
+     * @return list<string>
+     */
+    public function list(string $name): array
+    {
+        $value = $this->values[$name] ?? '';
+
+        return array_values(array_filter(array_map(trim(...), explode(',', $value)), static fn (string $v): bool => $v !== ''));
+    }
+
+    /** @return list<int> */
+    public function ints(string $name): array
+    {
+        return array_values(array_map(static function (string $v) use ($name): int {
+            if (preg_match('/^\d{1,12}$/', $v) !== 1) {
+                throw new ValidationException("--{$name} takes whole numbers separated by commas");
+            }
+
+            return (int) $v;
+        }, $this->list($name)));
     }
 
     public function int(string $name, int $default): int
