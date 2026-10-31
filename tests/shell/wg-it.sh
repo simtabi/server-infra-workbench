@@ -12,12 +12,14 @@
 # shellcheck disable=SC2015  # guard idiom
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# shellcheck source=tests/shell/it-lib.sh
+. tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "wg-it skipped (no docker)"; exit 0; }
-IMG=vsw-test/wg-it:1 NET=vsw_wgit SUB=172.30.98 P=wgit DB_SSH=22922 WEB_SSH=22923
+IMG=vsw-test/wg-it:1 NET=vsw_wgit SUB=172.30.94 P=vsw-wgit DB_SSH=22922 WEB_SSH=22923
 W="$(mktemp -d /tmp/vsw-wgit.XXXX)"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 cleanup() { rm -rf /tmp/vsw-wg-last; mkdir -p /tmp/vsw-wg-last; cp "$W"/*.out /tmp/vsw-wg-last/ 2>/dev/null || true
-  docker rm -f "$P-db" "$P-web" >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true; rm -rf "$W"; }
+  docker rm -f "$P-db" "$P-web" >/dev/null 2>&1 || true; it_rm_net "$NET"; rm -rf "$W"; }
 trap cleanup EXIT
 
 docker build -q -t "$IMG" tests/shell/wg >/dev/null || fail "build $IMG"

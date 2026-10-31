@@ -32,4 +32,6 @@ No test calls a real API or a real server.
 
 `make ci` is the gate: secrets, lint (pinned shellcheck), tests, client check, PHP, Python, links, documented
 commands and compose checks. `make ci-local` runs it exactly as CI does. `make it` runs the docker suites one
-after another (`tests/shell/run-suites.sh`).
+after another (`tests/shell/run-suites.sh`). Each suite sources [`shell/it-lib.sh`](shell/it-lib.sh) and
+ends with `it_purge <compose project>...`; the runner fails a suite that leaves `vsw*` containers, networks or
+volumes behind. Give a new suite its own `vsw`-prefixed project, ports and `172.30.x.0/24` subnet.

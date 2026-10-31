@@ -9,6 +9,8 @@
 # shellcheck disable=SC2015,SC2016
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# shellcheck source=tests/shell/it-lib.sh
+. tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "upgrade-it skipped (no docker)"; exit 0; }
 M="$PWD/src/shell/db/docker-db-server-manager.sh"
 W="$(mktemp -d /tmp/vsw-up.XXXX)"; D="$W/vswitdb"
@@ -25,11 +27,11 @@ pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&
 # outputs of a failed run are kept in /tmp/vsw-it-last (no secrets: passwords are never printed)
 cleanup() { rm -rf /tmp/vsw-it-last; mkdir -p /tmp/vsw-it-last; cp "$W"/*.out "$DBM_LOG" /tmp/vsw-it-last/ 2>/dev/null || true
   [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true
-  docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true; rm -rf "$W"; }
+  docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true; it_purge vswitdb; rm -rf "$W"; }
 trap cleanup EXIT
 export DB_DIR="$D" PRIVATE_IP=127.0.0.1 VPC_CIDR=127.0.0.0/8 DBM_CONFIG="$W/none.conf" \
   DBM_LOCK="$W/lock" DBM_LOG="$W/upgrade.log" BACKUP_DIR="$W/backups" MIN_FREE_MB=10 \
-  STATE_DIR="$W/state" ENV_SECRETS_DIR="$W/secrets" DOCKER_SUBNET=172.30.97.0/24 \
+  STATE_DIR="$W/state" ENV_SECRETS_DIR="$W/secrets" DOCKER_SUBNET=172.30.99.0/24 \
   ENABLE_MYSQL=0 ENABLE_ADMINER=0 PG_PORT=25432 PGBOUNCER_PORT=26432 MARIADB_PORT=23307 \
   PG_BASE_IMAGE=postgres:18 PG_IMAGE=vsw-test/postgres:18 PGVECTOR_PKG=postgresql-18-pgvector \
   PG_EXTENSIONS="vector pg_trgm citext" MARIADB_IMAGE=mariadb:11 PG_USER=app PG_DB=app PGBOUNCER_POOL_SIZE=20

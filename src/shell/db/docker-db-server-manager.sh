@@ -1113,6 +1113,18 @@ net_reset_if_changed() {
   docker ps -q --filter "network=$DOCKER_NETWORK" | xargs -r docker network disconnect -f "$DOCKER_NETWORK" 2>/dev/null || true
   docker network rm "$DOCKER_NETWORK" >/dev/null
 }
+up_wait() { # dc up --wait; on failure say why: state, OOM, the last health probes and a log tail per bad container
+  dc up -d --wait "$@" && return 0
+  local rc=$? c st
+  for c in $(dc ps -aq 2>/dev/null); do
+    st="$(docker inspect -f '{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)" || continue
+    case "$st" in *" running healthy "*|*" running  "*) continue ;; esac
+    warn "not healthy: ${st#/}"
+    docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}{{.Output}}{{end}}{{end}}' "$c" 2>/dev/null | grep . | tail -3 | sed 's/^/   probe: /' >&2 || true
+    docker logs --tail 20 "$c" 2>&1 | redact | sed 's/^/   log: /' >&2 || true
+  done
+  return "$rc"
+}
 start_stack() { # $1 = extra build flags. postgres first, then roles, then the rest
   log "Building and starting"
   net_reset_if_changed
@@ -1121,10 +1133,10 @@ start_stack() { # $1 = extra build flags. postgres first, then roles, then the r
   # shellcheck disable=SC2046  # service names never contain spaces
   dc pull --ignore-buildable 2>/dev/null || dc pull $(dc config --services | grep -vx postgres || true)
   if on "$ENABLE_POSTGRES"; then
-    dc up -d --wait --wait-timeout 300 --no-deps postgres
+    up_wait --wait-timeout 300 --no-deps postgres
     PG_SU=""; pg_converge
   fi
-  dc up -d --wait --wait-timeout 300 --remove-orphans
+  up_wait --wait-timeout 300 --remove-orphans
   my_converge mysql; my_converge mariadb; pgbouncer_reload
   retire_legacy_image
 }

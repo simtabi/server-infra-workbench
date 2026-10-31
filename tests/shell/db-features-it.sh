@@ -7,13 +7,16 @@
 # shellcheck disable=SC2015,SC2016
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# shellcheck source=tests/shell/it-lib.sh
+. tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "db-features-it skipped (no docker)"; exit 0; }
 M="$PWD/src/shell/db/docker-db-server-manager.sh"
 W="$(mktemp -d /tmp/vsw-dbf.XXXX)"; D="$W/vswdbf"; NEXT_BASE="${PGMU_NEXT_BASE:-postgres:19rc1}"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 cleanup() { rm -rf /tmp/vsw-dbf-last; mkdir -p /tmp/vsw-dbf-last; cp "$W"/*.out "$DBM_LOG" /tmp/vsw-dbf-last/ 2>/dev/null || true
   [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true
-  docker rm -f vsw-dbf-target >/dev/null 2>&1 || true; docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true; rm -rf "$W"; }
+  docker rm -f vsw-dbf-target >/dev/null 2>&1 || true; docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true
+  it_purge vswdbf; rm -rf "$W"; }
 trap cleanup EXIT
 [ "${IT_KEEP:-0}" = 1 ] && trap 'echo "kept: $W (W=$W D=$D)"' EXIT
 mkdir -p "$W/textfile"

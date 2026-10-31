@@ -10,6 +10,8 @@
 # shellcheck disable=SC2015,SC2016
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# shellcheck source=tests/shell/it-lib.sh
+. tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "pitr-s3-it skipped (no docker)"; exit 0; }
 M="$PWD/src/shell/db/docker-db-server-manager.sh"; A="$PWD/src/shell/addons/addon.sh"
 CADDY_IMAGE="$(sed -n 's/.*CADDY_IMAGE:-\([^}]*\)}.*/\1/p' stacks/caddy/docker-compose.yml | head -1)"
@@ -17,10 +19,8 @@ W="$(mktemp -d /tmp/vsw-pitrs3.XXXX)"; D="$W/vswpitrs3"; S3NET=vsw_pitrs3_s3; FR
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 cleanup() { rm -rf /tmp/vsw-pitrs3-last; mkdir -p /tmp/vsw-pitrs3-last; cp "$W"/*.out "$W/run.log" /tmp/vsw-pitrs3-last/ 2>/dev/null || true
   [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true
-  docker rm -f "$FRONT" >/dev/null 2>&1 || true
-  docker ps -aq --filter "label=com.docker.compose.project=vsw-garage" | xargs -r docker rm -f >/dev/null 2>&1 || true
-  docker network rm "$S3NET" >/dev/null 2>&1 || true
-  docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true; rm -rf "$W"; }
+  docker rm -f "$FRONT" >/dev/null 2>&1 || true; docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true
+  it_purge vswpitrs3 vsw-garage; it_rm_net "$S3NET"; rm -rf "$W"; }
 trap cleanup EXIT
 [ "${IT_KEEP:-0}" = 1 ] && trap 'echo "kept: $W"' EXIT
 
@@ -55,7 +55,7 @@ printf 'PG_BASE_IMAGE=postgres:18\nPG_IMAGE=vsw-test/postgres:18\n' > "$W/dbm.co
 export DB_DIR="$D" PRIVATE_IP=127.0.0.1 VPC_CIDR=127.0.0.0/8 DBM_CONFIG="$W/dbm.conf" \
   DBM_LOCK="$W/lock" DBM_LOG="$W/run.log" BACKUP_DIR="$W/backups" MIN_FREE_MB=10 \
   STATE_DIR="$W/state" ENV_SECRETS_DIR="$W/secrets" OFFSITE_CREDS_FILE="$W/offsite.env" \
-  DOCKER_SUBNET=172.30.97.0/24 DOCKER_NETWORK=vsw_pitrs3 \
+  DOCKER_SUBNET=172.30.95.0/24 DOCKER_NETWORK=vsw_pitrs3 \
   ENABLE_MYSQL=0 ENABLE_MARIADB=0 ENABLE_ADMINER=0 PG_PORT=25471 PGBOUNCER_PORT=26471 \
   PG_EXTENSIONS="pg_trgm" PG_USER=app PG_DB=app PITR=pgbackrest PITR_REPO_TYPE=s3 \
   OFFSITE_ENDPOINT="https://$HOSTNAME_S3:8443" OFFSITE_BUCKET=pitr OFFSITE_REGION="$REGION" \

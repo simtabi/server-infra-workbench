@@ -10,6 +10,8 @@
 # shellcheck disable=SC2015  # test one-liners
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# shellcheck source=tests/shell/it-lib.sh
+. tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "monitor-it skipped (no docker)"; exit 0; }
 unset NO_COLOR
 M="$PWD/src/shell/db/docker-db-server-manager.sh" MON="$PWD/src/shell/monitor/monitor.sh"
@@ -19,7 +21,7 @@ cleanup() { rm -rf /tmp/vsw-mon-last; mkdir -p /tmp/vsw-mon-last; cp "$W"/*.out 
   local u; for u in prometheus exporters kuma beszel-agent beszel; do for d in "$W/mon/$u" "$W"/mon/.removed-"$u"-*; do
     [ -f "$d/stack.env" ] && (cd "$d" && docker compose --env-file stack.env --env-file secrets.env down -v --remove-orphans >/dev/null 2>&1) || true; done; done
   [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true
-  docker network rm vsw_monitor >/dev/null 2>&1 || true
+  it_purge vsw-mon-beszel vsw-mon-beszel-agent vsw-mon-kuma vsw-mon-netdata vsw-mon-prometheus vsw-mon-exporters vswmon; it_rm_net vsw_monitor
   docker run --rm -v "$W:/w" alpine:3.22 rm -rf /w/mon >/dev/null 2>&1 || true; rm -rf "$W"; }
 trap cleanup EXIT
 docker network inspect vsw_monitor >/dev/null 2>&1 && { echo "monitor-it: a vsw_monitor network already exists here; refusing to touch it"; trap - EXIT; rm -rf "$W"; exit 1; }

@@ -6,13 +6,14 @@
 # shellcheck disable=SC2015
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# shellcheck source=tests/shell/it-lib.sh
+. tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "addons-it skipped (no docker)"; exit 0; }
 A="$PWD/src/shell/addons/addon.sh"
 W="$(mktemp -d /tmp/vsw-addons-it.XXXX)"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 cleanup() {
-  local p; for p in vsw-gotenberg vsw-garage vsw-seaweedfs vsw-rustfs; do
-    docker ps -aq --filter "label=com.docker.compose.project=$p" | xargs -r docker rm -f >/dev/null 2>&1 || true; done
+  it_purge vsw-gotenberg vsw-garage vsw-seaweedfs vsw-rustfs
   rm -rf /tmp/vsw-addons-it-last; mkdir -p /tmp/vsw-addons-it-last; cp "$W"/*.out /tmp/vsw-addons-it-last/ 2>/dev/null || true
   rm -rf "$W"
 }

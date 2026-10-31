@@ -33,6 +33,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The pgbouncer exporter gets a libpq `key=value` connection string built by `monitor.sh` into
   `secrets.env`; no URL with a password slot remains in a tracked file.
 - `make compose-check` generates its dummy secrets and no longer sets the unused `PG_EXPORTER_DSN` keys.
+- `make it` cleanup: `tests/shell/it-lib.sh` (`it_purge`, `it_rm_net`) removes each suite's containers, networks
+  and volumes by compose project, detaching foreign containers first; every suite has its own subnet; the
+  runner fails a suite that leaves `vsw*` containers, networks or volumes behind (and removes them).
+- The manager's `up -d --wait` failures print each unhealthy container's state, exit code, OOM flag, last
+  health probes and a redacted log tail, so a CI failure explains itself.
 
 ### Added (P2: manager 1.5.0, monitoring, progress)
 
