@@ -40,5 +40,11 @@ server; by default the rule is printed for Ploi's Network tab).
 
 `tests/shell/smoke-net.sh` (in `make test`) runs both sides locally against fake roots with stub `wg`, `ufw`,
 `systemctl`, `ip` and `curl`: plan without changes, confirmation, modes, no private key in output, configs or
-logs, key exchange, peer-only rules, Ploi handling, idempotent re-runs, validation and removal. A real
-two-container tunnel test needs the WireGuard kernel module and `NET_ADMIN`, so it isn't in `make it` yet.
+logs, key exchange, peer-only rules, Ploi handling, idempotent re-runs, validation and removal. 
+`tests/shell/wg-it.sh` (in `make it`) builds a real tunnel between two Ubuntu 24.04 containers: real ssh
+(a throwaway test key, never printed), kernel WireGuard with only `--cap-add NET_ADMIN` (no `--privileged`),
+real ufw. It checks the dry run, handshake and ping both ways, that no private key reaches output, configs or
+the audit log, 600 modes, peer-only ufw rules, that PgBouncer's port answers through the tunnel and not
+outside it, idempotent re-runs, `status` and `remove`. If the Docker kernel cannot create a `wireguard` link
+it prints SKIP and exits 0 (set `WG_IT_REQUIRE=1` to make that a failure, e.g. in CI). The containers have no
+systemd, so a small stub maps `systemctl ... wg-quick@wg0` to `wg-quick`.

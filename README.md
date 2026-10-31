@@ -99,7 +99,7 @@ New project end to end: **[Getting started](docs/getting-started.md)** (about 10
 | [`src/python`](src/python/README.md) | Standard-library helpers with tests: `ping` (TCP probe) and `plans` (which DO plans each region offers through Ploi) ([python.md](docs/tools/python.md)) |
 | [`stacks/caddy`](stacks/README.md) | Laravel (php-fpm, queue, scheduler) behind Caddy with automatic HTTPS, for a Ploi Docker web server; reverse-proxy and smoke-test variants |
 | [`config/`](config/README.md) | `.env.example`-style templates for every tool |
-| [`examples/`](examples/README.md) | Example configs per project (no secrets): a made-up generic Laravel app (real setups live in gitignored `local/`) |
+| [`examples/`](examples/README.md) | Catalog of made-up examples (no secrets, runnable offline with `examples/run.sh`): Laravel, multi-tenant, split web/DB, cross-region WireGuard, S3, Gotenberg, monitoring; more planned. Real setups live in gitignored `local/` |
 
 Full map and conventions: [docs/structure.md](docs/structure.md).
 

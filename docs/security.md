@@ -82,7 +82,7 @@ All were test fixtures or an env-reference DSN, never real credentials, so no ro
 history was not rewritten. The fixtures are now generated per run, the DSN is built by `monitor.sh`
 into `secrets.env`, and the old commits are listed in `.gitleaks.toml` so the history scan stays green.
 A follow-up GitGuardian "PostgreSQL Credentials" alert on `222b630` matched a DSN made only of variables
-(`scheme://$(user):$(pass)@host`). The shape alone trips scanners, so no tracked file may contain a URL with
+(a postgres URL whose user and password parts were both shell substitutions). The shape alone trips scanners, so no tracked file may contain a URL with
 a user and password before the host: the pgbouncer exporter now gets a libpq `key=value` string built into
 `secrets.env`, and docs use `postgres://USER@HOST/db` with the password in `PGPASSFILE` or a `<generated>`
 placeholder. The scanner flags the shape even when every part is a variable.

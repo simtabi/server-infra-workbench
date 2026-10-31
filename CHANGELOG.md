@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (P3: tests, examples, secret hygiene)
+
+- `tests/shell/wg-it.sh` in `make it`: a real WireGuard tunnel between two containers (ssh, kernel WireGuard
+  with `NET_ADMIN` only, ufw), skipped when the kernel lacks WireGuard ([networking](docs/tools/net.md)).
+- [Examples catalog](examples/README.md) with profile and add-on mapping, and runnable examples
+  (`examples/run.sh`, in `make test`): laravel-multitenant, split-web-db-vpc, cross-region-wireguard,
+  monitoring, s3-storage, gotenberg.
+- `make secrets-check` (in `make ci` and the pre-push hook): `tests/security/no-hardcoded-secrets.py` plus
+  gitleaks with `.gitleaks.toml` over the full history ([security](docs/security.md#secrets-in-the-repository-generated-never-written-down)).
+
+### Changed (P3)
+
+- Every test password, token and key is generated per run (shell `openssl rand`, PHP `random_bytes`).
+- The pgbouncer exporter gets a libpq `key=value` connection string built by `monitor.sh` into
+  `secrets.env`; no URL with a password slot remains in a tracked file.
+- `make compose-check` generates its dummy secrets and no longer sets the unused `PG_EXPORTER_DSN` keys.
+
 ### Added (P2: manager 1.5.0, monitoring, progress)
 
 - **Monitoring** ([monitor](docs/tools/monitor.md), [ADR 0012](docs/adr/0012-monitoring-stack.md)): `bin/workbench monitor`

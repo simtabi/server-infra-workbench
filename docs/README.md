@@ -24,6 +24,11 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | [Status](status.md) | what is done and what is still open |
 | [Releasing](release.md) | versioning and the release checklist |
 
+## Examples
+
+[Examples catalog](../examples/README.md): every example by category with its profile, add-ons and status
+(available or planned). Run one offline: `examples/run.sh <name>`.
+
 ## Tools (reference)
 
 | Page | Tool |

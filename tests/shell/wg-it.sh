@@ -86,8 +86,9 @@ docker exec "$P-web" nc -z -w 3 10.200.0.1 6432 && ok "web reaches db:6432 throu
 docker exec "$P-web" nc -z -w 3 "$SUB.10" 6432 && fail "db:6432 reachable outside the tunnel" || ok "db:6432 not reachable outside the tunnel (ufw)"
 
 h1="$(docker exec "$P-db" wg show wg0 public-key)"
+r1="$(docker exec "$P-db" ufw status | grep -c 'vsw wireguard' || true)"  # 51820/udp + 5432 + 6432 on wg0
 bash $WG setup --host wgdb --peer wgweb --yes > "$W/setup2.out" 2>&1 || { cat "$W/setup2.out"; fail "re-setup"; }
-[ "$(docker exec "$P-db" wg show wg0 public-key)" = "$h1" ] && [ "$(docker exec "$P-db" ufw status | grep -c 'vsw wireguard')" -le 2 ] \
+[ "$(docker exec "$P-db" wg show wg0 public-key)" = "$h1" ] && [ "$(docker exec "$P-db" ufw status | grep -c 'vsw wireguard' || true)" = "$r1" ] && [ "$r1" -eq 3 ] \
   && grep -q 'last handshake' "$W/setup2.out" && ok "re-run setup: same keys, no duplicate ufw rules, tunnel back up" || { cat "$W/setup2.out"; fail "idempotent"; }
 
 bash $WG status --host wgweb --ping 10.200.0.1 > "$W/status.out" 2>&1 && grep -q 'ping 10.200.0.1 through the tunnel' "$W/status.out" \
