@@ -76,7 +76,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added (docs and command audit)
 
-- `make docs-commands` checks DB manager commands (`M <cmd>`, the manager path, `remote-run.sh -- a, b`
+- `make docs-commands` checks DB manager commands (`M <cmd>`, the manager path, comma-separated `remote-run.sh --`
   lists) against its dispatch table and help, flags after `<placeholders>`, repeated PHP value options,
   destructive PHP commands without `--force`, and the reverse: every manager command, shell tool and PHP
   subcommand is documented somewhere.
