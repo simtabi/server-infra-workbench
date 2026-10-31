@@ -1,6 +1,6 @@
-# simtabi/vps-hosting-management
+# simtabi/vps-server-workbench
 
-[![CI](https://img.shields.io/github/actions/workflow/status/simtabi/vps-hosting-management/ci.yml?branch=main&label=ci)](https://github.com/simtabi/vps-hosting-management/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/simtabi/vps-server-workbench/ci.yml?branch=main&label=ci)](https://github.com/simtabi/vps-server-workbench/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > Scripts and runbooks for hosting PHP (Laravel or not) apps on DigitalOcean droplets managed

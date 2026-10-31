@@ -9,14 +9,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "upgrade-it skipped (no docker)"; exit 0; }
 M="$PWD/scripts/db/docker-db-server-manager.sh"
-W="$(mktemp -d /tmp/vhm-up.XXXX)"; D="$W/vhmitdb"
+W="$(mktemp -d /tmp/vsw-up.XXXX)"; D="$W/vswitdb"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 cleanup() { [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true; rm -rf "$W"; }
 trap cleanup EXIT
 export DB_DIR="$D" PRIVATE_IP=127.0.0.1 VPC_CIDR=127.0.0.0/8 DBM_CONFIG="$W/none.conf" \
   DBM_LOCK="$W/lock" DBM_LOG="$W/upgrade.log" BACKUP_DIR="$W/backups" MIN_FREE_MB=10 \
   ENABLE_MYSQL=0 ENABLE_ADMINER=0 PG_PORT=25432 PGBOUNCER_PORT=26432 MARIADB_PORT=23307 \
-  PG_BASE_IMAGE=postgres:18 PG_IMAGE=vhm-test/postgres:18 PGVECTOR_PKG=postgresql-18-pgvector \
+  PG_BASE_IMAGE=postgres:18 PG_IMAGE=vsw-test/postgres:18 PGVECTOR_PKG=postgresql-18-pgvector \
   PG_EXTENSIONS="vector pg_trgm citext" MARIADB_IMAGE=mariadb:11 PG_USER=app PG_DB=app PGBOUNCER_POOL_SIZE=20
 # run a manager command like main does, but without the root check (workstation test)
 run() { bash -c 'source <(sed "/^# ---- main/,\$d" "$1"); shift; need_root(){ :; }; check_engines; take_lock; "$@"' _ "$M" "$@"; }

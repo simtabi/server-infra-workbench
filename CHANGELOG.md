@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (project renamed: vps-server-workbench)
+
+- The project is now **`simtabi/vps-server-workbench`** (was `vps-hosting-management`): the repository folder,
+  README, badges, Makefile and docs use the new name. Entries below this one describe the project under its
+  old name and are left as written. Nothing changes on servers: the manager is still installed as
+  `/root/docker-db-server-manager.sh` and its config as `/etc/docker-db-server-manager.conf`.
+
 ### Added (manager 1.3.0, guided upgrade)
 
 - `upgrade` (alias `apply`): one guided, self-healing rollout on a live server. Preflight (config validation:

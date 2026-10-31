@@ -1,4 +1,4 @@
-# vps-hosting-management - dev front door. Run from the repo root:  make <target>
+# vps-server-workbench - dev front door. Run from the repo root:  make <target>
 #
 # Plain bash + docker compose. SCRIPTS is every shell script in the repo, found
 # by extension, so a new script is linted without editing this file.
@@ -30,7 +30,7 @@ compose-check: ## docker compose config + caddy validate for compose/caddy (need
 links: ## check relative links and #anchors in all Markdown
 	python3 tests/check-links.py .
 
-mermaid: ## render every Mermaid block to /tmp/vhm-mermaid (needs node; downloads mermaid-cli)
+mermaid: ## render every Mermaid block to /tmp/vsw-mermaid (needs node; downloads mermaid-cli)
 	bash tests/render-mermaid.sh
 
 test: ## offline smoke tests (no servers touched)

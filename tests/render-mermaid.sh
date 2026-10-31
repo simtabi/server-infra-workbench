@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Render every ```mermaid block in the Markdown docs with mermaid-cli, to prove they parse.
-# Output: ${OUT:-/tmp/vhm-mermaid}/<file>-<n>.svg. Needs node/npx (network on first run).
+# Output: ${OUT:-/tmp/vsw-mermaid}/<file>-<n>.svg. Needs node/npx (network on first run).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-OUT="${OUT:-/tmp/vhm-mermaid}"
+OUT="${OUT:-/tmp/vsw-mermaid}"
 rm -rf "$OUT"; mkdir -p "$OUT"
 python3 - "$OUT" <<'PY'
 import os, re, sys
