@@ -1,6 +1,6 @@
 # Plan: P1 and P2 implementation
 
-Status: approved, in progress (2026-10). Owner: workbench maintainers. Supersedes the "Proposed: not built yet"
+Status: approved, implemented (2026-10; WireGuard container test deferred). Owner: workbench maintainers. Supersedes the "Proposed: not built yet"
 rows of [status](../status.md#proposed-not-built-yet) that are listed below.
 
 This plan says **what** we build, **why**, **how** (design), what can go wrong (**risks**) and how we know it
@@ -116,6 +116,14 @@ runbook row that a human runs.
 
 PITR restore end to end (posix repo), MySQL 9.7 in `make it`, a two-host WireGuard tunnel between two privileged
 containers, monitoring stacks, `pg-major-upgrade`, `verify-full`, `migrate-managed`.
+
+- **Done:** `pitr-it` (posix repo, restore to a timestamp, prd guard), `db-features-it` (MySQL 9.7, 18 to 19
+  upgrade with grants kept, `verify-full` through PgBouncer, `migrate-managed`, `--cleanup`), `monitor-it`
+  (27 checks: exporters as `vsw_monitor`, rules, Grafana auth, Beszel self-registration, probes, remove).
+- **Deferred:** the two-host WireGuard test. It needs privileged containers and the `wireguard` kernel module,
+  which Docker Desktop and most CI runners lack ([status](../status.md#not-tested)).
+- **Found by the tests:** `cmd | grep -q` under `pipefail` turned matches into misses (Beszel never
+  self-registered); a zero `grep -o | wc` count ended `monitor doctor`; file_sd missed host-side renames.
 
 #### 2.7 `env init` merges add-on keys
 

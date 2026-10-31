@@ -82,9 +82,11 @@ documentation IP ranges.
 | Lesson | What happened | Rule now |
 |---|---|---|
 | BSD and GNU `sed` differ | `sed -n '...{...p}'` works on GNU and fails on macOS | write `p;}`; tests run on macOS and Linux |
-| `cmd \| grep -q` fails under `pipefail` | `grep -q` exits early, `cmd` gets SIGPIPE, the pipeline "fails" | tests write output to a file, then grep the file |
+| `cmd \| grep -q` fails under `pipefail` | `grep -q` exits early, `cmd` gets SIGPIPE, the pipeline "fails" | tests write output to a file, then grep the file; scripts send grep to `/dev/null` instead of `-q` (P2: Beszel self-registration was silently skipped) |
 | `set -e` hides the failing line | a smoke test exited silently | expected failures get `\|\| true`; each test prints its name first |
 | `/dev/stderr` truncates a redirected log in containers | messages disappeared in Docker | duplicate stderr to a dedicated fd once (`exec 4>&2`) |
+| `$(… \| grep -o … \| wc -l)` under `set -e` + `pipefail` | zero matches made grep exit 1 and `monitor doctor` stopped mid-report | count with `awk`, or end the substitution with `\|\| true` |
+| Prometheus `file_sd` on Docker Desktop | a renamed targets file on the host was not seen for 5 minutes | `refresh_interval: 30s` on every `file_sd_configs` |
 | Reading a TTY in a loop | a menu re-read the first line forever at EOF | open the TTY once on its own fd and stop on EOF |
 
 ## Process

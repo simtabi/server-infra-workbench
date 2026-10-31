@@ -32,6 +32,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Restore test waits for MySQL over TCP (the socket answered before the listener was up).
 - `status.sh` no longer aborts when a stamp file is missing.
+- Shell scripts no longer use `cmd | grep -q` (SIGPIPE + `pipefail` made a match look like a miss); this
+  silently skipped Beszel's self-registration on `monitor install`.
+- `monitor doctor` no longer exits mid-report when no target is down; Prometheus `file_sd` polls every 30s.
+- Tests: `pitr-it` (PITR restore end to end on a posix repo) added to `make it`.
 
 ### Added (cross-region)
 
