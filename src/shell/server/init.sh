@@ -27,7 +27,7 @@
 #    --role db|web|base  (required)   --timezone Area/City (default UTC)
 #    --swap 2G|4096M|0   (0 = never create swap)
 #    --only a,b  --skip a,b   --firewall (passed to harden; not on Ploi)
-#    --dry-run, -n  --yes, -y  --host H  -h, --help
+#    --dry-run, -n  --yes, -y  --host H  --quiet, -q (no progress lines)  -h, --help
 # =============================================================================
 set -euo pipefail
 TOOL=init
@@ -47,6 +47,7 @@ while [ $# -gt 0 ]; do
     --skip) SKIP="${2:?}"; shift 2 ;;
     --firewall) FIREWALL=1; shift ;;
     --dry-run|-n) DRY=1; shift ;;
+    --quiet|-q) export VSW_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -134,9 +135,10 @@ apply_item() {
       if [ "$ROLE" = db ]; then printf '# Managed by vps-server-workbench init.sh\nvm.swappiness = 10\n' | write_file "$F_SWAPPY" 644
         sysctl -p "$F_SWAPPY" >/dev/null 2>&1 || true; fi ;;
     packages)
-      DEBIAN_FRONTEND=noninteractive apt-get update -q >/dev/null
+      export DEBIAN_FRONTEND=noninteractive
+      progress_run "apt-get update" mute apt-get update -q
       # shellcheck disable=SC2086  # word list
-      DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends $BASE_PKGS >/dev/null ;;
+      progress_run "apt-get install base packages" mute apt-get install -y -q --no-install-recommends $BASE_PKGS ;;
     docker)
       if ! { have docker && docker compose version >/dev/null 2>&1; }; then
         mkdir -p "$(dirname "$F_DKEY")"; install -d -m 755 "$(dirname "$F_DKEY")"
@@ -144,8 +146,9 @@ apply_item() {
         chmod a+r "$F_DKEY"
         printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu %s stable\n' \
           "$(dpkg --print-architecture 2>/dev/null || echo amd64)" "$(codename)" | write_file "$F_DLIST" 644
-        DEBIAN_FRONTEND=noninteractive apt-get update -q >/dev/null
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null
+        export DEBIAN_FRONTEND=noninteractive
+        progress_run "apt-get update (Docker repo)" mute apt-get update -q
+        progress_run "install Docker Engine + compose" mute apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       fi
       if [ ! -f "$F_DAEMON" ]; then daemon_json | write_file "$F_DAEMON" 644; systemctl restart docker 2>/dev/null || true; fi
       systemctl enable --now docker >/dev/null 2>&1 || true ;;

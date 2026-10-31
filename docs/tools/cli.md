@@ -127,6 +127,31 @@ bin/workbench py ping 10.0.0.5 6432 --json
 
 See [python.md](python.md).
 
+## Progress output
+
+Long steps show what is running, for how long, and (where the total is known) a bar with an ETA:
+manager `upgrade` (numbered steps), `backup` per engine, `offsite` encrypt/upload, `restore-test`, the
+snapshot wait, `server update|init` apt runs, the DigitalOcean action waits (snapshot, resize, power) in the
+PHP core, the Python plan finder, and `make it` (one line per suite plus a summary table).
+
+| Setting | Effect |
+|---|---|
+| `VSW_PROGRESS=auto` (default) | spinner/bar on a terminal, one plain line per step otherwise (logs, cron, CI) |
+| `VSW_PROGRESS=tty` / `plain` / `off` | force a mode |
+| `--quiet` / `-q` or `VSW_QUIET=1` | no progress lines; errors and results still print |
+| `VSW_VERBOSE=1` | on a terminal, also show the output of wrapped commands (normally replayed only on failure) |
+| `NO_COLOR=1` | no colour (https://no-color.org) |
+
+Why it is built this way:
+
+- Progress goes to **stderr**, so `--json` and other stdout stays parseable.
+- Non-terminal output never contains `\r` or escape codes: cron mail and log files stay readable (tested).
+- A wrapped shell step runs as a background job and is waited on, so `set -e` still applies inside it
+  (`if cmd` or `cmd ||` would silently switch errexit off).
+- The DB manager is uploaded as one file, so it embeds a copy of `src/shell/lib/progress.sh` between
+  `# >>> progress.sh` markers; `tests/shell/smoke-progress.sh` fails when the copy drifts.
+- The PHP waits get progress through a decorated `Sleeper`, so no API client changed.
+
 ## Checks
 
 `make test` exercises the dispatcher offline: listing, shell routing, bad names, that no legacy `scripts/` or `tools/` path is back,

@@ -138,7 +138,7 @@ if [ "$CRON" = 1 ]; then
   [ "$(id -u)" -eq 0 ] || [ -n "$R" ] || die "run as root (sudo)"
   lock; confirm "install the daily inventory cron"
   install -d -m 755 "$lib/server" "$lib/lib"
-  install -m 755 "$0" "$lib/server/inventory.sh"; install -m 644 "$HERE/../lib/common.sh" "$lib/lib/common.sh"
+  install -m 755 "$0" "$lib/server/inventory.sh"; install -m 644 "$HERE/../lib/common.sh" "$lib/lib/common.sh"; install -m 644 "$HERE/../lib/progress.sh" "$lib/lib/progress.sh"
   printf '# Managed by vps-server-workbench inventory.sh\nSHELL=/bin/bash\n17 5 * * * root /usr/local/lib/vps-server-workbench/server/inventory.sh --out /var/lib/vps-server-workbench/inventory >/dev/null 2>&1\n' \
     | write_file "$cronf" 644
   audit applied "cron=/etc/cron.d/vsw-inventory"; ok "daily inventory cron installed"; exit 0

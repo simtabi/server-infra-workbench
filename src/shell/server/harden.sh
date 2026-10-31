@@ -38,7 +38,7 @@
 #    --root-login no      PermitRootLogin no (default: prohibit-password)
 #    --fix-docker-group   remove non-allowed users from the docker group
 #    --docker-allow a,b   users allowed in the docker group (same as DOCKER_GROUP_ALLOW)
-#    --dry-run, -n  --yes, -y  --check  --host H  -h, --help
+#    --dry-run, -n  --yes, -y  --check  --host H  --quiet, -q  -h, --help
 # =============================================================================
 set -euo pipefail
 TOOL=harden
@@ -61,6 +61,7 @@ while [ $# -gt 0 ]; do
     --root-login) ROOT_LOGIN="${2:?}"; shift 2 ;;
     --check) CHECK=1; DRY=1; shift ;;
     --dry-run|-n) DRY=1; shift ;;
+    --quiet|-q) export VSW_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;

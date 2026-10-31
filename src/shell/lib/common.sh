@@ -7,6 +7,10 @@
 #   VSW_LOG_DIR   audit log dir (default /var/log/vps-server-workbench)
 #   VSW_TTY       where typed confirmations are read from (default /dev/tty; tests use a file)
 #   VSW_LOCK_DIR  lock dir (default /run/lock)
+#   VSW_PROGRESS / VSW_QUIET / NO_COLOR  progress output (lib/progress.sh, loaded below)
+
+# shellcheck source=src/shell/lib/progress.sh
+. "$(dirname "${BASH_SOURCE[0]}")/progress.sh"
 
 R="${VSW_SYSROOT:-}"
 YES="${YES:-0}" DRY="${DRY:-0}"
@@ -20,6 +24,7 @@ bad()  { c_fail=$((c_fail + 1)); printf '  FAIL  %s\n' "$*"; }
 todo() { c_todo=$((c_todo + 1)); printf '  todo  %s\n' "$*"; }
 why()  { printf '        why: %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
+mute() { "$@" >/dev/null; }   # stdout off, errors still shown (progress_run "label" mute cmd)
 
 audit() { # audit <outcome> <details...>; never logs values, only what was done
   local d="${VSW_LOG_DIR:-$R/var/log/vps-server-workbench}"
@@ -65,7 +70,7 @@ write_file() { # write_file PATH MODE < content ; atomic, keeps a backup when th
   backup "$f"; mv "$tmp" "$f"
 }
 
-remote() { # remote HOST TOOL_PATH ARGS... : copy the tool + this file over ssh, run with sudo, clean up
+remote() { # remote HOST TOOL_PATH ARGS... : copy the tool + lib (common, progress) over ssh, run with sudo, clean up
   # (REMOTE_EXTRA=(files) are copied next to the tool, e.g. a tool it calls;
   #  REMOTE_NOTTY=1 runs without a tty and with sudo -n, so stdout can be captured)
   local host="$1" tool="$2"; shift 2
@@ -77,6 +82,7 @@ remote() { # remote HOST TOOL_PATH ARGS... : copy the tool + this file over ssh,
   ssh "$host" "mkdir -p '$rdir/tool' '$rdir/lib'" || die "ssh $host failed"
   scp -q "$tool" "$host:$rdir/tool/" || die "scp to $host failed"
   scp -q "$here" "$host:$rdir/lib/common.sh" || die "scp to $host failed"
+  scp -q "$(dirname "$here")/progress.sh" "$host:$rdir/lib/progress.sh" || die "scp to $host failed"
   for a in "${REMOTE_EXTRA[@]+"${REMOTE_EXTRA[@]}"}"; do scp -q "$a" "$host:$rdir/tool/" || die "scp to $host failed"; done
   local t=-t s=sudo; [ "${REMOTE_NOTTY:-0}" = 1 ] && { t=-T; s="sudo -n"; }
   # shellcheck disable=SC2029

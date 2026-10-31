@@ -12,6 +12,7 @@ final class Help
         Flags: --json  machine-readable output     --dry-run, -n  show the plan, send nothing
                --yes, -y  skip the prompt on writes --force  also required for destructive writes
                --verbose  log requests (redacted) to stderr
+               --quiet, -q  no progress on long waits (VSW_PROGRESS=auto|tty|plain|off, NO_COLOR)
         Credentials: env vars or ~/.config/vps-server-workbench/credentials (chmod 600). See: workbench credentials
         TXT;
 

@@ -9,7 +9,7 @@ use Simtabi\VpsServerWorkbench\Exception\ValidationException;
 /** argv split into positionals and known options. Unknown options are an error, never ignored. */
 final readonly class Input
 {
-    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose', 'backups', 'disk', 'below'];
+    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose', 'quiet', 'backups', 'disk', 'below'];
 
     public const array VALUES = ['name', 'type', 'ttl', 'zone', 'project', 'priority', 'comment', 'tag', 'timeout',
         // do firewalls / droplets / uptime
@@ -47,6 +47,8 @@ final readonly class Input
                 $token = '--dry-run';
             } elseif ($token === '-y') {
                 $token = '--yes';
+            } elseif ($token === '-q') {
+                $token = '--quiet';
             }
             if (! str_starts_with($token, '--') || strlen($token) === 2) {
                 $args[] = $token;

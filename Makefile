@@ -79,11 +79,10 @@ test: ## offline smoke tests (no servers touched)
 	bash tests/shell/smoke-addons.sh
 	bash tests/shell/smoke-server.sh
 	bash tests/shell/smoke-net.sh
+	bash tests/shell/smoke-progress.sh
 
 it: ## Docker integration tests: 1.3 -> 1.4 upgrade, privileges, envs, backups; add-ons; server tools on Ubuntu 24.04 (~9 min)
-	bash tests/shell/upgrade-it.sh
-	bash tests/shell/addons-it.sh
-	bash tests/shell/server-it.sh
+	bash tests/shell/run-suites.sh tests/shell/upgrade-it.sh tests/shell/addons-it.sh tests/shell/server-it.sh
 
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
 	tests/shell/client-check.sh

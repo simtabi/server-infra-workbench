@@ -22,7 +22,7 @@
 #    --allow-docker                upgrade Docker too (restarts containers)
 #    --backup-first                run /root/docker-db-server-manager.sh backup before upgrading
 #    --no-refresh                  skip apt-get update in the plan
-#    --dry-run, -n  --yes, -y  --host H  -h, --help
+#    --dry-run, -n  --yes, -y  --host H  --quiet, -q (no progress lines)  -h, --help
 # =============================================================================
 set -euo pipefail
 TOOL=update
@@ -43,6 +43,7 @@ while [ $# -gt 0 ]; do
     --backup-first) BACKUP_FIRST=1; shift ;;
     --no-refresh) REFRESH=0; shift ;;
     --dry-run|-n) DRY=1; shift ;;
+    --quiet|-q) export VSW_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -113,8 +114,8 @@ export DEBIAN_FRONTEND=noninteractive
 opts=(-y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 if [ "$n" -gt 0 ]; then
   if [ "$SECURITY" = 1 ]; then have unattended-upgrade || apt-get install "${opts[@]}" unattended-upgrades; unattended-upgrade -v
-  elif [ "$FULL" = 1 ]; then apt-get "${opts[@]}" dist-upgrade
-  else apt-get "${opts[@]}" upgrade; fi
+  elif [ "$FULL" = 1 ]; then progress_run "apt-get dist-upgrade ($n packages)" apt-get "${opts[@]}" dist-upgrade
+  else progress_run "apt-get upgrade ($n packages)" apt-get "${opts[@]}" upgrade; fi
   apt-get -y -q autoremove >/dev/null 2>&1 || true
   ok "upgrade done"; audit applied "upgrade packages=$n"
 fi

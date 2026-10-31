@@ -81,6 +81,7 @@ if [ -n "$HOST" ]; then # values go over as files, never as arguments
   ssh "$HOST" "mkdir -p '$rdir/env' '$rdir/lib'" || die "ssh $HOST failed"
   scp -q "$0" "$TEMPLATE" "$vals" "$HOST:$rdir/env/" || die "scp failed"
   scp -q "$HERE/../lib/common.sh" "$HOST:$rdir/lib/" || die "scp failed"
+  scp -q "$HERE/../lib/progress.sh" "$HOST:$rdir/lib/" || die "scp failed"
   q=""; for a in "${rest[@]+"${rest[@]}"}"; do q+=" $(printf '%q' "$a")"; done
   [ -n "$AGAINST" ] && echo "note: --against is local only; ignored with --host" >&2
   # shellcheck disable=SC2029

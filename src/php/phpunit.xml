@@ -22,6 +22,7 @@
     </source>
     <php>
         <env name="VSW_AUDIT_LOG" value="off" force="true"/>
+        <env name="VSW_PROGRESS" value="off" force="true"/>
         <env name="VSW_CREDENTIALS_FILE" value="/nonexistent/vsw-credentials" force="true"/>
     </php>
 </phpunit>

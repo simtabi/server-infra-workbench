@@ -354,6 +354,80 @@ set_env_key() { # key value [file]: replace or append one line, file stays 600
   grep -v "^$1=" "$f" > "$tmp" || true; printf '%s=%s\n' "$1" "$2" >> "$tmp"; mv "$tmp" "$f"
 }
 
+# ---- progress (spinner, bar, ETA on stderr; same code as src/shell/lib/progress.sh) ----
+# VSW_PROGRESS=auto|tty|plain|off, --quiet (VSW_QUIET=1), NO_COLOR. Cron runs get plain lines.
+# >>> progress.sh
+PROGRESS_T0="${PROGRESS_T0:-$(date +%s)}" PROGRESS_N=0 PROGRESS_BAR_T0="" PROGRESS_BAR_DEC=-1
+progress_mode() {
+  [ "${VSW_QUIET:-0}" = 1 ] && { echo off; return; }
+  case "${VSW_PROGRESS:-auto}" in
+    tty|plain|off) echo "$VSW_PROGRESS" ;;
+    *) if [ -t 2 ] && [ "${TERM:-dumb}" != dumb ]; then echo tty; else echo plain; fi ;;
+  esac
+}
+progress_fmt() { local s="$1"; if [ "$s" -ge 3600 ]; then printf '%d:%02d:%02d' $((s / 3600)) $((s % 3600 / 60)) $((s % 60)); else printf '%d:%02d' $((s / 60)) $((s % 60)); fi; }
+progress_col() { # progress_col 32 text: colour only on a terminal without NO_COLOR
+  if [ -z "${NO_COLOR:-}" ] && [ "$(progress_mode)" = tty ]; then printf '\033[%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi
+}
+progress_step() {
+  local m; m="$(progress_mode)"; [ "$m" = off ] && return 0
+  PROGRESS_N=$((PROGRESS_N + 1))
+  local n=""; [ -n "${PROGRESS_TOTAL:-}" ] && n="[$PROGRESS_N/$PROGRESS_TOTAL] "
+  printf '%s %s%s  (%s)\n' "$(progress_col 36 '==>')" "$n" "$1" "$(progress_fmt $(($(date +%s) - PROGRESS_T0)))" >&2
+}
+progress_run() {
+  local label="$1" m t0 pid rc=0 log="" i=0 f="|/-\\"; shift; m="$(progress_mode)"; t0="$(date +%s)"
+  if [ "$m" = tty ]; then
+    log="$(mktemp "${TMPDIR:-/tmp}/vsw-progress.XXXXXX")"
+    "$@" >"$log" 2>&1 </dev/null & pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+      printf '\r  %s %s  %s ' "${f:i++%4:1}" "$label" "$(progress_fmt $(($(date +%s) - t0)))" >&2; sleep 0.2
+    done
+    wait "$pid" || rc=$?; printf '\r\033[K' >&2
+  else
+    [ "$m" = plain ] && printf '  ..    %s\n' "$label" >&2
+    "$@" </dev/null & pid=$!; wait "$pid" || rc=$?
+  fi
+  local e; e="$(progress_fmt $(($(date +%s) - t0)))"
+  if [ "$rc" = 0 ]; then [ "$m" = off ] || printf '  %s  %s  (%s)\n' "$(progress_col 32 'done')" "$label" "$e" >&2
+  else [ "$m" = off ] || printf '  %s  %s  (%s, exit %s)\n' "$(progress_col 31 'FAIL')" "$label" "$e" "$rc" >&2; fi
+  if [ -n "$log" ]; then { [ "$rc" != 0 ] || [ "${VSW_VERBOSE:-0}" = 1 ]; } && sed 's/^/        /' "$log" | tail -n 40 >&2; rm -f "$log"; fi
+  return "$rc"
+}
+progress_bar() {
+  local i="$1" n="$2" label="${3:-}" m now el eta="" pct w=24 fill; m="$(progress_mode)"; [ "$m" = off ] && return 0
+  [ "$n" -gt 0 ] 2>/dev/null || return 0
+  now="$(date +%s)"; { [ -z "$PROGRESS_BAR_T0" ] || [ "$i" -eq 0 ]; } && { PROGRESS_BAR_T0="$now"; PROGRESS_BAR_DEC=-1; }
+  [ "$i" -gt "$n" ] && i="$n"
+  pct=$((i * 100 / n)) el=$((now - PROGRESS_BAR_T0))
+  [ "$i" -gt 0 ] && [ "$i" -lt "$n" ] && eta=" eta $(progress_fmt $((el * (n - i) / i)))"
+  if [ "$m" = tty ]; then
+    fill=$((i * w / n)); printf '\r  [%s%s] %3d%% %d/%d %s  %s%s\033[K' "$(printf '%*s' "$fill" '' | tr ' ' '#')" \
+      "$(printf '%*s' $((w - fill)) '' | tr ' ' '-')" "$pct" "$i" "$n" "$label" "$(progress_fmt "$el")" "$eta" >&2
+    [ "$i" -eq "$n" ] && printf '\n' >&2
+  elif [ $((pct / 10)) -ne "$PROGRESS_BAR_DEC" ]; then
+    PROGRESS_BAR_DEC=$((pct / 10)); printf '  %3d%% %d/%d %s  %s%s\n' "$pct" "$i" "$n" "$label" "$(progress_fmt "$el")" "$eta" >&2
+  fi
+  return 0
+}
+progress_wait() {
+  local label="$1" to="$2" iv="$3" m t0 i=0 f="|/-\\"; shift 3; m="$(progress_mode)"; t0="$(date +%s)"
+  [ "$m" = plain ] && printf '  ..    waiting: %s (up to %ss)\n' "$label" "$to" >&2
+  while ! "$@" >/dev/null 2>&1; do
+    if [ $(($(date +%s) - t0)) -ge "$to" ]; then
+      [ "$m" = tty ] && printf '\r\033[K' >&2
+      [ "$m" = off ] || printf '  %s  %s  (timed out after %s)\n' "$(progress_col 31 'FAIL')" "$label" "$(progress_fmt "$to")" >&2
+      return 1
+    fi
+    [ "$m" = tty ] && printf '\r  %s %s  %s / %s ' "${f:i++%4:1}" "$label" "$(progress_fmt $(($(date +%s) - t0)))" "$(progress_fmt "$to")" >&2
+    sleep "$iv"
+  done
+  [ "$m" = tty ] && printf '\r\033[K' >&2
+  [ "$m" = off ] || printf '  %s  %s  (%s)\n' "$(progress_col 32 'done')" "$label" "$(progress_fmt $(($(date +%s) - t0)))" >&2
+  return 0
+}
+# <<< progress.sh
+
 # ---- small utilities -----------------------------------------------------------
 cidr_mask() { # 24 -> 255.255.255.0
   local b="$1" m=$(( (0xFFFFFFFF << (32 - $1)) & 0xFFFFFFFF )); [ "$b" = 0 ] && m=0
@@ -1742,11 +1816,14 @@ cmd_upgrade() { # [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-t
   [ "$dry" = 1 ] || start_log upgrade
   banner upgrade
   [ "$dry" = 1 ] || snapshot_policy_check
+  PROGRESS_N=0 PROGRESS_TOTAL=9; [ "$dry" = 1 ] && PROGRESS_TOTAL=2
+  progress_step "preflight"
   preflight
   # a stack built with another image tag (old default or a custom one) gets the new tag; the old one is retired after success
   local prev_img; prev_img="$(sed -n 's/^PG_IMAGE=//p' "$DB_DIR/stack.env" 2>/dev/null)"
   [ -z "$prev_img" ] || [ "$prev_img" = "$PG_IMAGE" ] || in_list "$prev_img" "$PG_IMAGE_LEGACY" || PG_IMAGE_LEGACY="$PG_IMAGE_LEGACY $prev_img"
   local changes=0 cur; cur="$(installed_version)"
+  progress_step "plan"
   if plan; then changes=1; fi
   if [ "$changes" = 0 ] && [ "$cur" = "$VERSION" ]; then
     rm -rf "$PLAN_DIR"; echo "already up to date ($VERSION); nothing to do"; return 0
@@ -1755,16 +1832,17 @@ cmd_upgrade() { # [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-t
   if [ "$INTERACTIVE" = 1 ]; then ask_yn "Apply these changes ($cur -> $VERSION)?" n || { rm -rf "$PLAN_DIR"; die "aborted; nothing changed"; }
   elif [ "$FORCE" != 1 ]; then rm -rf "$PLAN_DIR"; die "non-interactive upgrade needs --yes to apply"; fi
   rm -rf "$PLAN_DIR"
-  snapshot_step
-  cmd_backup
+  progress_step "snapshot"; snapshot_step
+  progress_step "backup"; cmd_backup
   LAST_BACKUP="$(newest_backup)"
-  verify_backup "$LAST_BACKUP"
-  savepoint
+  progress_step "verify backup"; verify_backup "$LAST_BACKUP"
+  progress_step "savepoint"; savepoint
+  progress_step "apply"
   log "Apply"
   set +e
   ( set -e; ensure_env_keys; load_env; write_files; start_stack; firewall; [ "${DBM_TEST_FAIL_APPLY:-0}" != 1 ] || { echo "test hook: forced apply failure"; exit 1; } ); local rc=$?
-  if [ "$rc" = 0 ]; then ( set -e; load_env; PG_SU=""; cmd_verify; [ "${DBM_TEST_FAIL_VERIFY:-0}" != 1 ] || { echo "test hook: forced verify failure"; exit 1; } ); rc=$?; fi
-  if [ "$rc" = 0 ]; then ( set -e; load_env; PG_SU=""; DOCTOR_CONTEXT=upgrade cmd_doctor ); rc=$?; fi
+  if [ "$rc" = 0 ]; then progress_step "verify"; ( set -e; load_env; PG_SU=""; cmd_verify; [ "${DBM_TEST_FAIL_VERIFY:-0}" != 1 ] || { echo "test hook: forced verify failure"; exit 1; } ); rc=$?; fi
+  if [ "$rc" = 0 ]; then progress_step "doctor"; ( set -e; load_env; PG_SU=""; DOCTOR_CONTEXT=upgrade cmd_doctor ); rc=$?; fi
   set -e
   if [ "$rc" != 0 ]; then
     warn "apply/verify/doctor failed (exit $rc) - rolling back automatically"
@@ -1794,12 +1872,13 @@ take_snapshot() { # server-side, DigitalOcean API; waits for completion
     -d "{\"type\":\"snapshot\",\"name\":\"$name\"}" "https://api.digitalocean.com/v2/droplets/$id/actions" \
     | sed -n 's/.*"action":{"id":\([0-9]*\).*/\1/p')"
   [ -n "$act" ] || { warn "snapshot request failed"; return 1; }
-  for i in $(seq 1 240); do
+  snap_settled() { # sets st; true once the action is no longer in progress
     st="$(curl -fsS -H "Authorization: Bearer $tok" "https://api.digitalocean.com/v2/actions/$act" | sed -n 's/.*"status":"\([a-z-]*\)".*/\1/p')"
-    case "$st" in completed) echo "snapshot completed: $name"; return 0 ;; errored) warn "snapshot errored"; return 1 ;; esac
-    sleep 15
-  done
-  warn "snapshot still running after 60 min"; return 1
+    case "$st" in completed|errored) return 0 ;; esac; return 1
+  }
+  st=""; progress_wait "DigitalOcean snapshot $name" 3600 15 snap_settled || { warn "snapshot still running after 60 min"; return 1; }
+  [ "$st" = completed ] && { echo "snapshot completed: $name"; return 0; }
+  warn "snapshot errored"; return 1
 }
 SNAP_MODE=ask   # ask | yes | no | taken
 snapshot_policy_check() { # fail fast, before any work, if a non-interactive run can't decide
@@ -2056,6 +2135,10 @@ $(printf '%s\n' "$all" | head -1)"   # never delete the newest
   for old in $all; do printf '%s\n' "$keep" | grep -qx "$old" || { echo "pruning $old"; rm -rf "${BACKUP_DIR:?}/$old"; }; done
 }
 
+bk_pg() { dc exec -T postgres pg_dumpall -U "$(pg_su)" --clean --if-exists | gzip > "$1"; }
+bk_my() { # engine cli dump out
+  my_sh "$1" "DBS=\$($2 -uroot -NBe \"select schema_name from information_schema.schemata where schema_name not in ($MY_SYS_DBS)\"); [ -z \"\$DBS\" ] && exit 0; exec $3 -uroot --databases \$DBS --single-transaction --routines --events --triggers" | gzip > "$4"
+}
 cmd_backup() { # [--cron]
   need_root; need_stack; load_env
   local ts free dest tmp cron=0; [ "${1:-}" = --cron ] && cron=1
@@ -2068,7 +2151,7 @@ cmd_backup() { # [--cron]
   (umask 077; mkdir -p "$tmp")
   log "Backing up to $dest"
   if on "$ENABLE_POSTGRES"; then
-    dc exec -T postgres pg_dumpall -U "$(pg_su)" --clean --if-exists | gzip > "$tmp/postgres.sql.gz"
+    progress_run "postgres: pg_dumpall" bk_pg "$tmp/postgres.sql.gz"
   fi
   # MySQL/MariaDB: user databases only (system schemas are skipped so a restore never
   # overwrites root/users; .env passwords stay valid). Users + grants go to grants-*.sql.gz.
@@ -2076,7 +2159,7 @@ cmd_backup() { # [--cron]
   local e cli dump; for e in mysql mariadb; do
     on "$( [ "$e" = mysql ] && echo "$ENABLE_MYSQL" || echo "$ENABLE_MARIADB")" || continue
     cli=mysql dump=mysqldump; [ "$e" = mariadb ] && cli=mariadb dump=mariadb-dump
-    my_sh "$e" "DBS=\$($cli -uroot -NBe \"select schema_name from information_schema.schemata where schema_name not in ($MY_SYS_DBS)\"); [ -z \"\$DBS\" ] && exit 0; exec $dump -uroot --databases \$DBS --single-transaction --routines --events --triggers" | gzip > "$tmp/$e.sql.gz"
+    progress_run "$e: dump" bk_my "$e" "$cli" "$dump" "$tmp/$e.sql.gz"
     printf '%s;\n' "$users_sql" | my_q "$e" | while read -r u; do printf 'show create user %s;\nshow grants for %s;\n' "$u" "$u" | my_q "$e" | sed 's/$/;/'; done | gzip > "$tmp/grants-$e.sql.gz"
   done
   manifest > "$tmp/manifest.txt"
@@ -2133,6 +2216,7 @@ cmd_restore() { # <dir> [engine|all]
     # skip role DDL for the roles we manage (admin we are connected as; app/pgbouncer roles are
     # re-asserted by converge), so a pre-1.4 dump cannot make the app a superuser again
     local skip; skip="$PG_USER|$PG_ADMIN_USER|$PGBOUNCER_AUTH_USER|$PGBOUNCER_ADMIN_USER"
+    progress_step "restore test: loading postgres dump"
     gunzip -c "$src/postgres.sql.gz" | grep -vE "^(DROP|CREATE|ALTER) ROLE (IF EXISTS )?\"?($skip)\"?( |;)" \
       | dc exec -T postgres psql -X -q -v ON_ERROR_STOP=0 -U "$(pg_su)" -d postgres >/dev/null
     pg_converge
@@ -2148,6 +2232,7 @@ cmd_restore() { # <dir> [engine|all]
 # ---- restore test: load the newest backup into throwaway containers ------------
 # No network (--network none), random passwords, removed afterwards. Compares the
 # manifest (tables per database). Cron: RESTORE_TEST_CRON via cron-install.
+rt_load_my() { gunzip -c "$1" | docker exec -i -e MYSQL_PWD="$2" "$3" "$4" -uroot; } # dump pw container cli
 cmd_restore_test() { # [dir] [--cron]
   need_root; need_stack; load_env
   local src="" cron=0 a; for a in "$@"; do case "$a" in --cron) cron=1 ;; *) src="$a" ;; esac; done
@@ -2166,7 +2251,7 @@ cmd_restore_test() { # [dir] [--cron]
   rt_wait() { local i; for i in $(seq 1 "$((RESTORE_TEST_TIMEOUT / 2))"); do docker exec "$1" sh -c "$2" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
   if on "$ENABLE_POSTGRES" && [ -f "$src/postgres.sql.gz" ]; then
     docker run -d --name "$tag-postgres" --network none -e POSTGRES_PASSWORD="$pw" -e POSTGRES_USER="$PG_ADMIN_USER" -e POSTGRES_DB=postgres "$PG_IMAGE" >/dev/null
-    rt_wait "$tag-postgres" "pg_isready -U $PG_ADMIN_USER -h 127.0.0.1" || rt_die "restore test: postgres did not start"
+    progress_wait "restore test: postgres starting" "$RESTORE_TEST_TIMEOUT" 2 docker exec "$tag-postgres" pg_isready -U "$PG_ADMIN_USER" -h 127.0.0.1 || rt_die "restore test: postgres did not start"
     sleep 2
     gunzip -c "$src/postgres.sql.gz" | grep -vE "^(DROP|CREATE|ALTER) ROLE (IF EXISTS )?\"?$PG_ADMIN_USER\"?( |;)" | docker exec -i "$tag-postgres" psql -X -q -v ON_ERROR_STOP=0 -U "$PG_ADMIN_USER" -d postgres >/dev/null 2>&1 || true
     for d in $(docker exec "$tag-postgres" psql -X -U "$PG_ADMIN_USER" -d postgres -tAc "select datname from pg_database where datallowconn and not datistemplate order by 1"); do
@@ -2179,7 +2264,7 @@ cmd_restore_test() { # [dir] [--cron]
     img="$MYSQL_IMAGE"; local cli=mysql pv=MYSQL_ROOT_PASSWORD; [ "$e" = mariadb ] && img="$MARIADB_IMAGE" cli=mariadb pv=MARIADB_ROOT_PASSWORD
     docker run -d --name "$tag-$e" --network none -e "$pv=$pw" "$img" >/dev/null
     rt_wait "$tag-$e" "MYSQL_PWD='$pw' $cli -uroot -e 'select 1'" || rt_die "restore test: $e did not start"
-    gunzip -c "$src/$e.sql.gz" | docker exec -i -e MYSQL_PWD="$pw" "$tag-$e" $cli -uroot || { warn "$e load reported errors"; rc=1; }
+    progress_run "restore test: loading $e dump" rt_load_my "$src/$e.sql.gz" "$pw" "$tag-$e" "$cli" || { warn "$e load reported errors"; rc=1; }
     docker exec -e MYSQL_PWD="$pw" "$tag-$e" $cli -uroot -NBe "select s.schema_name, count(t.table_name) from information_schema.schemata s left join information_schema.tables t on t.table_schema=s.schema_name and t.table_type='BASE TABLE' where s.schema_name not in ($MY_SYS_DBS) group by s.schema_name order by 1" \
       | awk -v e="$e" '{print e, $1, $2}' >> "/tmp/$tag.got"
   done
@@ -2237,6 +2322,7 @@ remote_ls() {
     aws) aws s3 ls ${OFFSITE_ENDPOINT:+--endpoint-url "$OFFSITE_ENDPOINT"} "s3://$OFFSITE_BUCKET/$OFFSITE_PREFIX/" | awk '{print $4}' ;;
   esac
 }
+offsite_pack() { tar -C "$(dirname "$1")" -cz "$(basename "$1")" | offsite_encrypt > "$2"; } # dir out
 offsite_upload() { # backup dir
   [ "$OFFSITE" = s3 ] || die "OFFSITE is '$OFFSITE' (set OFFSITE=s3 + OFFSITE_BUCKET/ENDPOINT/CREDS_FILE)"
   command -v "$OFFSITE_TOOL" >/dev/null 2>&1 || die "$OFFSITE_TOOL is not installed (apt install rclone)"
@@ -2244,9 +2330,9 @@ offsite_upload() { # backup dir
   local n t; n="$(basename "$1").tar.gz.enc"; [ "$OFFSITE_ENCRYPTION" = age ] && n="$(basename "$1").tar.gz.age"
   install -d -m 700 "$BACKUP_DIR"; t="$(mktemp "$BACKUP_DIR/.offsite-XXXX")"; chmod 600 "$t"
   log "Off-site copy $n -> $OFFSITE_BUCKET/$OFFSITE_PREFIX ($OFFSITE_ENCRYPTION)"
-  tar -C "$(dirname "$1")" -cz "$(basename "$1")" | offsite_encrypt > "$t"
+  progress_run "encrypt $n" offsite_pack "$1" "$t" || { rm -f "$t"; return 1; }
   (cd "$(dirname "$t")" && { sha256sum "$(basename "$t")" 2>/dev/null || shasum -a 256 "$(basename "$t")"; }) | awk -v n="$n" '{print $1"  "n}' > "$t.sha256"
-  remote_put "$t" "$n" && remote_put "$t.sha256" "$n.sha256"; local rc=$?
+  local rc=0; progress_run "upload $n" remote_put "$t" "$n" && remote_put "$t.sha256" "$n.sha256" || rc=$?
   rm -f "$t" "$t.sha256"
   [ "$rc" = 0 ] || return 1
   if [ "$OFFSITE_TOOL" = rclone ]; then rclone delete --min-age "${OFFSITE_KEEP_DAYS}d" "vsw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/" >/dev/null 2>&1 || warn "off-site prune failed"; fi
@@ -2700,6 +2786,7 @@ for a in "$@"; do
     -y|--yes) FORCE=1 ;;
     --non-interactive) NONINTERACTIVE=1 ;;
     --config) skip_next=1 ;;
+    -q|--quiet) export VSW_QUIET=1 ;;
     --version) echo "$TOOL_NAME $VERSION"; exit 0 ;;
     *) ARGS+=("$a") ;;
   esac

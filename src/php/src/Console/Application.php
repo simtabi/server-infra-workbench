@@ -59,8 +59,9 @@ final class Application
     /**
      * @param (\Closure(string): bool)|null    $prompt Asks the user; default reads "yes" from a terminal.
      * @param (\Closure(string): ?string)|null $reader Reads one answer for the interactive keys menu (null = end of input).
+     * @param Progress|null                    $progress Long waits (resize, snapshot --wait); default: detected from stderr + env.
      */
-    public function __construct(?ProviderFactory $providers = null, ?Output $out = null, ?\Closure $prompt = null, ?\Closure $reader = null)
+    public function __construct(?ProviderFactory $providers = null, ?Output $out = null, ?\Closure $prompt = null, ?\Closure $reader = null, private readonly ?Progress $progress = null)
     {
         $this->reader = $reader ?? self::terminalReader(...);
         $this->out = $out ?? new Output;
@@ -76,6 +77,11 @@ final class Application
             $input = Input::parse(array_slice($argv, 1));
             if ($input->flag('verbose')) {
                 $this->providers = $this->providers->withOptions($this->providers->options()->withLogger(new StderrLogger($this->out)));
+            }
+            $progress = $this->progress ?? ($input->flag('quiet') || $input->flag('json') ? Progress::off() : Progress::detect());
+            if ($progress->mode() !== Progress::OFF) {
+                $options = $this->providers->options();
+                $this->providers = $this->providers->withOptions($options->withSleeper(new ProgressSleeper($options->sleeper(), $progress)));
             }
             if ($input->flag('help') && $area !== 'help') {
                 $this->out->line(Help::for($area));

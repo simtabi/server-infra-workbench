@@ -40,6 +40,8 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field
 
+from vps_server_workbench.progress import Progress
+
 
 class PlanFinderError(Exception):
     """Raised for configuration and API errors."""
@@ -175,16 +177,22 @@ class PloiDoPlanFinder:
         return self
 
     # ------------------------------------------------------------ fetching
-    def fetch(self) -> "PloiDoPlanFinder":
+    def fetch(self, progress: Progress | None = None) -> "PloiDoPlanFinder":
         if not self._ploi_token or not self._do_token:
             raise PlanFinderError("Both a Ploi and a DigitalOcean API token are required.")
+        progress = progress or Progress.off()
         ploi = ApiClient(self._ploi_url, self._ploi_token, self._timeout)
         do = ApiClient(self._do_url, self._do_token, self._timeout)
 
-        providers = self._ploi_providers(ploi)
+        with progress.task("Ploi server providers"):
+            providers = self._ploi_providers(ploi)
         if not providers:
             raise PlanFinderError(f"No Ploi provider matching '{self._provider}' found.")
-        return self.load(providers, self._do_sizes(do), self._do_regions(do))
+        with progress.task("DigitalOcean sizes"):
+            sizes = self._do_sizes(do)
+        with progress.task("DigitalOcean regions"):
+            regions = self._do_regions(do)
+        return self.load(providers, sizes, regions)
 
     def load(self, providers: list[dict], sizes: list[dict], regions: dict[str, dict]) -> "PloiDoPlanFinder":
         """Build results from raw API data (handy for tests or cached responses)."""
@@ -408,9 +416,12 @@ class Config:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    quiet = any(a in ("--quiet", "-q") for a in argv)
+    argv = [a for a in argv if a not in ("--quiet", "-q")]
     try:
         config = Config.from_sources(argv)
-        finder = config.build_finder().fetch()
+        finder = config.build_finder().fetch(Progress.off() if quiet else Progress.detect())
         if config["OUTPUT_FILE"]:
             finder.save(config["OUTPUT_FILE"], config["OUTPUT_FORMAT"])
             print(f"Wrote {len(finder.results())} configurations to {config['OUTPUT_FILE']}")
