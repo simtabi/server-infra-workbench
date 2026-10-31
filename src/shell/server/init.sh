@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  init.sh - first-boot setup for a fresh Ubuntu 24.04 droplet (db, web or base)
+#  init.sh - first-boot setup for a fresh Ubuntu LTS droplet, 24.04 or 26.04 (db, web or base)
 # =============================================================================
 #  One command after the droplet exists and your key works. Prints a plan,
 #  changes nothing until confirmed, locks, logs to the audit log, re-runnable.

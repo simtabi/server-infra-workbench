@@ -7,7 +7,7 @@ and `free -m` once real traffic arrives.
 
 | Component | RAM (MB, estimate) | Notes |
 |---|---|---|
-| OS + Docker | 512 | Ubuntu 24.04, dockerd, containerd, journald |
+| OS + Docker | 512 | Ubuntu 24.04 or 26.04 LTS, dockerd, containerd, journald |
 | PostgreSQL 18 | 1024 | `shared_buffers` ~25% of this; more for big indexes |
 | PgBouncer | 64 | |
 | MySQL 9.7 | 1024 | InnoDB buffer pool is the main cost |
