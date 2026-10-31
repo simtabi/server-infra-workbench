@@ -120,6 +120,38 @@ class ProfilesTest(unittest.TestCase):
         self.assertIn("EXPECTED_PRIVATE_IP=10.10.0.5", text)
         self.assertNotIn("STORAGE", text)
 
+    def test_monitoring_placement_and_validation(self):
+        r = P.resolve("dev-budget", {**BASE, "MONITOR_STACKS": "beszel,kuma"})
+        self.assertEqual(P.monitor_placed(r.values), {"db": "agent", "web": "both"})
+        self.assertEqual(P.monitor_placed(P.resolve("dev-budget", BASE).values), {})
+        self.assertTrue(any("unknown stack 'zabbix'" in m for m in errors("dev-budget", MONITOR_STACKS="beszel,zabbix")))
+        self.assertTrue(any("'none' cannot be combined" in m for m in errors("dev-budget", MONITOR_STACKS="none,kuma")))
+        # heavy hub next to the DB on 2 GB is refused, like monitor.sh's RAM gate
+        heavy = errors("dev-budget", MONITOR_STACKS="prometheus", MONITOR_HUB="db")
+        self.assertTrue(any("next to the database" in m for m in heavy))
+        self.assertFalse(any("next to the database" in m for m in errors("dev-budget", MONITOR_STACKS="prometheus")))
+        self.assertFalse(any("next to the database" in m for m in
+                             errors("dev-budget", MONITOR_STACKS="prometheus", MONITOR_HUB="db", MONITOR_ALLOW_TIGHT="1")))
+        self.assertTrue(any("netdata" in m for m in errors("dev-budget", MONITOR_STACKS="netdata")))
+        self.assertTrue(any("MONITOR_HUB=db" in m for m in errors("production-ha", ALERT_EMAIL="a@b.co", MONITOR_HUB="db")))
+        self.assertTrue(any("not an http(s) URL" in m for m in errors("dev-budget", MONITOR_STACKS="kuma", MONITOR_PROBE_URLS="ftp://x")))
+
+    def test_monitoring_ram_and_render(self):
+        r = P.resolve("dev-budget", {**BASE, "MONITOR_STACKS": "beszel,prometheus", "DB_PRIVATE_IP": "10.10.0.5"})
+        plan = P.ram_plan(r.values)
+        self.assertIn("beszel-agent", plan["db"][2])
+        self.assertIn("prometheus-agent", plan["db"][2])
+        self.assertIn("prometheus", plan["web"][2])
+        hub = P.render_monitor(r, "web", "now")
+        self.assertIn("MONITOR_ROLE=both", hub)
+        self.assertIn('MONITOR_TARGETS=db=10.10.0.5', hub)
+        self.assertIn("MONITOR_PG_TARGETS=db", hub)
+        agent = P.render_monitor(r, "db", "now")
+        self.assertIn("MONITOR_ROLE=agent", agent)
+        self.assertIn("MONITOR_AGENT_BIND=10.10.0.5", agent)
+        self.assertIn("MONITOR_BESZEL_KEY_FILE=", agent)
+        self.assertNotRegex(hub + agent, r"(?m)^[A-Z_]*(PASSWORD|SECRET|TOKEN)[A-Z_]*=")
+
     def test_reference_doc_table_is_current(self):
         doc = (P.repo_root() / "docs" / "reference" / "profiles.md").read_text()
         self.assertIn(P.markdown_table(), doc, "regenerate with: bin/workbench profile table")

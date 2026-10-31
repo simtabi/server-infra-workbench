@@ -105,6 +105,8 @@ def _plan_files(r: P.Resolved, out_dir: Path, stamp: str) -> dict[Path, str]:
         files[target] = P.render_db(r, existing, stamp)
     for role in dict.fromkeys(role for _, role in P.addons_placed(r.values)):
         files[out_dir / f"addons-{role}.conf"] = P.render_addons(r, role, stamp)
+    for role in P.monitor_placed(r.values):
+        files[out_dir / f"monitor-{role}.conf"] = P.render_monitor(r, role, stamp)
     return files
 
 
@@ -156,6 +158,19 @@ def next_commands(r: P.Resolved, out_dir: Path, turned_off: list[str] | None = N
             "-g root /tmp/addons.conf /etc/vsw-addons.conf && rm /tmp/addons.conf'",
         ]
         cmds += [f"ssh {host} 'sudo /tmp/vsw-addons-src/addon.sh plan {n}'" for n in names]
+    placed = P.monitor_placed(v)
+    for role in sorted(placed, key=lambda rl: placed[rl] != "both"):  # hub first: agents need its key
+        host = {"db": "DB_HOST", "web": "WEB_HOST"}.get(role, "MONITOR_HOST")
+        cmds += [
+            f"# monitoring on the {role} node ({placed[role]}): {','.join(P.monitor_stacks(v))}",
+            f"rsync -a src/shell/monitor/monitor.sh src/shell/lib/progress.sh {host}:/tmp/vsw-monitor-src/ "
+            f"&& rsync -a stacks/monitor/ {host}:/tmp/vsw-monitor-src/stacks/",
+            f"scp {rel}/monitor-{role}.conf {host}:/tmp/monitor.conf && ssh {host} 'sudo install -m 600 -o root "
+            "-g root /tmp/monitor.conf /etc/vsw-monitor.conf && rm /tmp/monitor.conf'",
+        ]
+        if role == "db" and v["DB_MODE"] != "managed" and "prometheus" in P.monitor_stacks(v):
+            cmds.append("ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh monitor-user'   # exporter login (password stays on the node)")
+        cmds.append(f"ssh -t {host} 'sudo /tmp/vsw-monitor-src/monitor.sh plan'")
     if v["STORAGE"] == "spaces" or v["OFFSITE"] == "s3":
         cmds.append("# DO control panel: create the Spaces bucket(s) and a key limited to them (docs/tools/addons.md)")
     if v["DO_ALERTS"] == "1" or v["UPTIME_CHECKS"] == "1":

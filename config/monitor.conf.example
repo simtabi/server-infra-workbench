@@ -1,0 +1,51 @@
+# /etc/vsw-monitor.conf - settings for src/shell/monitor/monitor.sh on ONE node (chmod 600, owned by root).
+# Everything is optional. Image pins and ports live in stacks/monitor/<unit>/monitor.env.example and
+# can be overridden here (e.g. GRAFANA_IMAGE=grafana/grafana:13.3.0). `bin/workbench configure` writes a
+# filled-in copy per node to local/<client>/monitor-<role>.conf. No secrets here: monitor.sh generates them
+# into /opt/vsw-monitor/<unit>/secrets.env (600) and reads webhook/SMTP secrets from the *_FILE paths below.
+# Guide: docs/tools/monitor.md (WHY each default), ADR docs/decisions/0012-monitoring-stack.md.
+
+# ---- what runs here --------------------------------------------------------------------
+# MONITOR_STACKS=beszel,kuma            # any of beszel,kuma,netdata,prometheus  (or none)
+#                                       #   beszel      light host + container metrics (hub ~64 MB, agent ~32 MB)
+#                                       #   kuma        uptime/HTTP/TLS checks + status page (~192 MB)
+#                                       #   netdata     per-second deep host metrics (~256 MB, privileged: heavy)
+#                                       #   prometheus  Prometheus + Alertmanager + Grafana + exporters (~600 MB hub: heavy)
+# MONITOR_ROLE=both                     # hub (UIs, storage) | agent (exporters/agents only) | both (single node)
+# MONITOR_DIR=/opt/vsw-monitor          # rendered stacks, data, secrets, a copy of monitor.sh + templates
+# MONITOR_NODE_NAME=                    # default: short hostname (labels in Grafana/Beszel)
+# AUDIT_LOG=/var/log/vsw-monitor.log
+
+# ---- network ---------------------------------------------------------------------------
+# MONITOR_BIND=127.0.0.1                # UIs: loopback only (reach them with `monitor tunnel` or the Caddy front)
+# MONITOR_AGENT_BIND=                   # agents/exporters: default the eth1/wg0 private IP; must be private or loopback
+# MONITOR_AGENT_NETWORK=host            # host (agents see real interfaces) | bridge (tests, single node w/o private IP)
+# MONITOR_DB_NETWORK=vsw_db             # the DB manager's docker network (DB exporters join it)
+# MONITOR_PUBLIC=0                      # 1 = allow `monitor caddy` (public HTTPS front with basic auth); refused on Ploi nodes
+
+# ---- hub: what to scrape / probe -----------------------------------------------------------
+# MONITOR_TARGETS="db=10.10.0.5 web=10.10.0.6"   # name=private-IP of nodes running the agent role
+# MONITOR_PG_TARGETS="db"               # which of those run the DB exporters (postgres + pgbouncer)
+# MONITOR_PROBE_URLS="https://app.example.com/up https://api.example.com/health"
+# MONITOR_BESZEL_KEY_FILE=              # agent side: the hub public key (from `monitor beszel-key` on the hub)
+
+# ---- agent: database exporters -----------------------------------------------------------
+# MONITOR_PG=auto                       # auto = on when the password file exists (DB manager `monitor-user`)
+# MONITOR_PG_PASSWORD_FILE=/etc/vsw-monitor/pg-monitor.pass
+# MONITOR_TEXTFILE_DIR=/var/lib/vsw-monitor/textfile   # node-exporter reads the manager's backup/TLS metrics here
+# MONITOR_DB_NODE=auto                  # auto = the DB manager runs here (drives the RAM gate)
+
+# ---- RAM gate ------------------------------------------------------------------------------
+# heavy stacks (netdata, prometheus) are refused next to a database on nodes with <= 2 GB RAM
+# MONITOR_ALLOW_TIGHT=0                 # 1 = allow anyway (you accept the OOM risk)
+
+# ---- alerts (Prometheus stack) ----------------------------------------------------------
+# MONITOR_ALERT_WEBHOOK_FILE=/etc/vsw-monitor/alert-webhook.url   # 600; Slack/Discord/ntfy-compatible URL
+# MONITOR_ALERT_EMAIL=ops@example.com
+# MONITOR_SMTP_SMARTHOST=smtp.example.com:587
+# MONITOR_SMTP_FROM=alerts@example.com
+# MONITOR_SMTP_USER=alerts@example.com
+# MONITOR_SMTP_PASSWORD_FILE=/etc/vsw-monitor/smtp.pass           # 600
+
+# ---- misc ----------------------------------------------------------------------------------
+# WAIT_TIMEOUT=240                      # seconds for `docker compose up --wait`

@@ -11,6 +11,8 @@
 #   bin/workbench py <command> [args...]     the Python package CLI        e.g. bin/workbench py ping 10.0.0.5 6432
 #   bin/workbench plans [flags]              DO plans per region via Ploi  e.g. bin/workbench plans --regions nyc3
 #   bin/workbench addon <cmd> [name]         add-ons on this node (run on the server) e.g. bin/workbench addon plan garage
+#   bin/workbench monitor <cmd>              monitoring stacks (Beszel, Uptime Kuma, Netdata, Prometheus+Grafana) e.g. monitor plan
+#   bin/workbench status [--host H] [--json] one-screen node health (load, RAM, disk, containers, backups); read-only
 #   bin/workbench env init|check --env E     Laravel .env per environment (APP_KEY generated, values never shown)
 #   bin/workbench configure [--profile P]    wizard: profile + overrides -> local/<client>/ (no secrets)
 #   bin/workbench profile list|show|diff     the setup profiles in config/profiles
@@ -20,7 +22,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)"
 
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; }
 die() { echo "workbench: $*" >&2; exit "${CODE:-2}"; }
 
 list() {
@@ -58,6 +60,8 @@ case "${1:-}" in
   php) shift; php_core "$@" ;;
   env) shift; exec "$ROOT/src/shell/env/env.sh" "$@" ;;
   addon|addons) shift; [ "${1:-}" = addon ] && shift; exec "$ROOT/src/shell/addons/addon.sh" "$@" ;;
+  monitor) shift; exec "$ROOT/src/shell/monitor/monitor.sh" "$@" ;;
+  status) shift; exec "$ROOT/src/shell/server/status.sh" "$@" ;;
   configure|profile) command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"
        VSW_ROOT="$ROOT" PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vps_server_workbench "$@" ;;
   plans) shift; command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"

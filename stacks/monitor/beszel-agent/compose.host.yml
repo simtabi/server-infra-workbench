@@ -1,0 +1,6 @@
+# host networking (default): the agent sees the host's interfaces and binds MONITOR_AGENT_BIND itself.
+services:
+  beszel-agent:
+    network_mode: host
+    ports: !reset []
+    networks: !reset {}

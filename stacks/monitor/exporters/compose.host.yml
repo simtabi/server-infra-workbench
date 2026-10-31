@@ -1,0 +1,6 @@
+# host networking (default) for node-exporter: real interface stats; it binds MONITOR_AGENT_BIND itself.
+services:
+  node-exporter:
+    network_mode: host
+    ports: !reset []
+    networks: !reset {}

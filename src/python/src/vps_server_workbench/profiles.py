@@ -26,11 +26,13 @@ DB_KEYS = (
 BOOL_KEYS = (
     "ENABLE_POSTGRES", "ENABLE_PGBOUNCER", "ENABLE_MYSQL", "ENABLE_MARIADB", "ENABLE_ADMINER", "PG_APP_CREATEDB",
     "ENV_MIGRATOR", "LOAD_BALANCER", "WIREGUARD", "STRICT", "HARDEN", "DO_ALERTS", "UPTIME_CHECKS", "GOTENBERG",
+    "MONITOR_ALLOW_TIGHT",
 )
 INT_KEYS = ("DB_DROPLET_MB", "WEB_DROPLET_MB", "DEDICATED_DROPLET_MB", "WEB_NODES", "MIN_DB_MB")
 ENUMS = {
     "DB_MODE": ("self", "managed", "replica"),
-    "TLS_MODE": ("off", "require"),
+    "TLS_MODE": ("off", "require", "verify-full"),
+    "MONITOR_HUB": ("web", "db", "dedicated"),
     "PRD_LOCATION": ("local", "droplet", "managed"),
     "PITR": ("off", "pgbackrest"),
     "OFFSITE": ("none", "s3"),
@@ -52,6 +54,11 @@ RAM_ENGINE = {"ENABLE_POSTGRES": 1024, "ENABLE_PGBOUNCER": 64, "ENABLE_MYSQL": 1
 RAM_PITR = 128
 RAM_WEB_APP = 1024  # nginx + PHP-FPM + queue worker + scheduler on a small Ploi node
 RAM_ADDON = {"gotenberg": 1024, "garage": 256, "seaweedfs": 512, "rustfs": 512}
+# monitoring units (mirror stacks/monitor/*/monitor.env.example MON_RAM_MB)
+MONITOR_STACKS = ("beszel", "kuma", "netdata", "prometheus")
+RAM_MONITOR_HUB = {"beszel": 64, "kuma": 192, "netdata": 256, "prometheus": 600}
+RAM_MONITOR_AGENT = {"beszel": 32, "netdata": 256, "prometheus": 120}
+MONITOR_HEAVY = ("netdata", "prometheus")
 SIZES = ((1024, "s-1vcpu-1gb"), (2048, "s-1vcpu-2gb"), (4096, "s-2vcpu-4gb"), (8192, "s-4vcpu-8gb"),
          (16384, "s-8vcpu-16gb"))
 SELF_HOSTED_STORAGE = ("garage", "seaweedfs", "rustfs")
@@ -148,7 +155,36 @@ def ram_plan(v: dict[str, str]) -> dict[str, tuple[int, int, list[str]]]:
             nodes[role] = (RAM_OS, int(v["DEDICATED_DROPLET_MB"]), ["os"])
         need, mb, items = nodes[role]
         nodes[role] = (need + RAM_ADDON[addon], mb, [*items, addon])
+    for role, mode in monitor_placed(v).items():
+        if role not in nodes:
+            nodes[role] = (RAM_OS, int(v["DEDICATED_DROPLET_MB"]), ["os"])
+        need, mb, items = nodes[role]
+        for st in monitor_stacks(v):
+            add = RAM_MONITOR_AGENT.get(st, 0)
+            if mode == "both":
+                add = RAM_MONITOR_HUB.get(st, 0) + (RAM_MONITOR_AGENT.get(st, 0) if st != "netdata" else 0)
+            if add:
+                need += add
+                items = [*items, f"{st}{'' if mode == 'both' else '-agent'}"]
+        nodes[role] = (need, mb, items)
     return nodes
+
+
+def monitor_stacks(v: dict[str, str]) -> list[str]:
+    raw = v.get("MONITOR_STACKS", "none").replace(",", " ").split()
+    return [] if raw in ([], ["none"]) else raw
+
+
+def monitor_placed(v: dict[str, str]) -> dict[str, str]:
+    """Node role -> monitor.sh MONITOR_ROLE: the hub node runs 'both', every other node 'agent'."""
+    if not monitor_stacks(v):
+        return {}
+    roles = (["db"] if v["DB_MODE"] != "managed" else []) + ["web"]
+    roles += [rl for _, rl in addons_placed(v) if rl == "dedicated"]
+    hub = v.get("MONITOR_HUB", "web")
+    if hub not in roles:
+        roles.append(hub)
+    return {rl: ("both" if rl == hub else "agent") for rl in dict.fromkeys(roles)}
 
 
 def addons_placed(v: dict[str, str]) -> list[tuple[str, str]]:
@@ -303,6 +339,27 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
     if v["STORAGE"] in SELF_HOSTED_STORAGE:
         info(f"{v['STORAGE']} holds data on a droplet: plan an off-node copy (stacks/addons/README.md#backups)")
 
+    # monitoring
+    stacks = monitor_stacks(v)
+    for st in stacks:
+        if st not in MONITOR_STACKS:
+            err(f"MONITOR_STACKS: unknown stack '{st}' (any of {','.join(MONITOR_STACKS)} or none)")
+    if "none" in stacks:
+        err("MONITOR_STACKS: 'none' cannot be combined with stacks")
+    if stacks and v.get("MONITOR_HUB") == "db" and v["DB_MODE"] == "managed":
+        err("MONITOR_HUB=db, but DB_MODE=managed has no DB droplet; use web or dedicated")
+    if v["DB_MODE"] != "managed" and int(v["DB_DROPLET_MB"]) <= 2048 and v.get("MONITOR_ALLOW_TIGHT") != "1":
+        on_db = monitor_placed(v).get("db")
+        heavy = [st for st in stacks if st in MONITOR_HEAVY and (st == "netdata" or on_db == "both")]
+        if heavy and on_db:
+            err(f"{','.join(heavy)} next to the database on a {v['DB_DROPLET_MB']} MB node: monitor.sh refuses it "
+                "(MONITOR_HUB=web/dedicated, drop netdata, or MONITOR_ALLOW_TIGHT=1)")
+    for u in v.get("MONITOR_PROBE_URLS", "").split():
+        if not re.match(r"^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/\S*)?$", u):
+            err(f"MONITOR_PROBE_URLS: '{u}' is not an http(s) URL")
+    if not stacks and v["STRICT"] == "1":
+        advise("no monitoring on a production profile: set MONITOR_STACKS (beszel,kuma is light)")
+
     # RAM per node
     for role, (need, have, items) in ram_plan(v).items():
         what = ", ".join(items)
@@ -392,6 +449,37 @@ def render_addons(r: Resolved, role: str, stamp: str) -> str:
             lines.append(f"ADDON_DATA_DIR={v['STORAGE_DATA_DIR']}")
     if role == "db" and v.get("DB_PRIVATE_IP"):
         lines.append(f"ADDON_BIND={v['DB_PRIVATE_IP']}")
+    return "\n".join(lines) + "\n"
+
+
+def render_monitor(r: Resolved, role: str, stamp: str) -> str:
+    v = r.values
+    mode = monitor_placed(v)[role]
+    stacks = monitor_stacks(v)
+    lines = [
+        f"# /etc/vsw-monitor.conf for the {role} node - written by `bin/workbench configure` ({r.profile} v{r.version}, {stamp})",
+        f"# install: monitor.sh plan && monitor.sh install   (no secrets here; monitor.sh generates them on the node)",
+        f"MONITOR_STACKS={','.join(stacks)}",
+        f"MONITOR_ROLE={mode}",
+        f"MONITOR_NODE_NAME={role}",
+    ]
+    if v.get("MONITOR_ALLOW_TIGHT") == "1":
+        lines.append("MONITOR_ALLOW_TIGHT=1")
+    if mode == "both":
+        ips = {"db": v.get("DB_PRIVATE_IP", ""), "web": v.get("WEB_PRIVATE_IP", "")}
+        targets = [f"{rl}={ips.get(rl) or rl.upper() + '_PRIVATE_IP'}" for rl in monitor_placed(v) if rl != role]
+        if targets:
+            lines.append(f"MONITOR_TARGETS={_q(' '.join(targets))}   # fill in any *_PRIVATE_IP placeholder")
+        if "prometheus" in stacks and "db" in monitor_placed(v) and role != "db":
+            lines.append("MONITOR_PG_TARGETS=db")
+        if v.get("MONITOR_PROBE_URLS"):
+            lines.append(f"MONITOR_PROBE_URLS={_q(v['MONITOR_PROBE_URLS'])}")
+    elif role == "db" or (role == "web" and v.get("WEB_PRIVATE_IP")):
+        ip = v.get("DB_PRIVATE_IP") if role == "db" else v.get("WEB_PRIVATE_IP")
+        if ip:
+            lines.append(f"MONITOR_AGENT_BIND={ip}")
+    if "beszel" in stacks and mode == "agent":
+        lines.append("MONITOR_BESZEL_KEY_FILE=/etc/vsw-monitor/beszel-hub.pub   # from `monitor beszel-key` on the hub")
     return "\n".join(lines) + "\n"
 
 

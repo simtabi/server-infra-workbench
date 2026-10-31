@@ -1,0 +1,33 @@
+# Beszel agent. Rendered and started by src/shell/monitor/monitor.sh; do not edit on the server.
+# Listens on MONITOR_AGENT_BIND (the private/WireGuard IP) only and accepts the hub's key only (hub.pub,
+# a PUBLIC key fetched from the hub API). compose.host.yml (the default) switches to host networking so
+# the agent sees the host's interfaces; bridge mode is for tests and hosts without a private IP.
+# The Docker socket is read-only mounted (container stats); see docs/tools/monitor.md#trade-offs.
+name: vsw-mon-beszel-agent
+services:
+  beszel-agent:
+    image: ${BESZEL_AGENT_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    environment:
+      LISTEN: ${BESZEL_AGENT_LISTEN:?set by monitor.sh}
+      KEY_FILE: /etc/beszel/hub.pub
+      DATA_DIR: /var/lib/beszel-agent
+      DOCKER_IMAGE_CHECK: "false"
+      SKIP_GPU: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./hub.pub:/etc/beszel/hub.pub:ro
+      - ./data:/var/lib/beszel-agent
+    ports: ["${MONITOR_AGENT_BIND:?}:${BESZEL_AGENT_PORT:-45876}:45876"]
+    networks: [vsw_monitor]
+    mem_limit: 128m
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, /agent, health]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+networks:
+  vsw_monitor: {external: true, name: vsw_monitor}

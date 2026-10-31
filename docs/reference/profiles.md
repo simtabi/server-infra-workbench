@@ -58,12 +58,15 @@ bin/workbench profile table                        # regenerates the table below
 | `OFFSITE` | none | **s3** | **s3** | **s3** | · | **s3** | **s3** | **s3** |
 | `OFFSITE_ENDPOINT` | (empty) | derived | derived | derived | · | derived | derived | derived |
 | `STORAGE` | none | **spaces** | **spaces** | **spaces** | **spaces** | **spaces** | **spaces** | **spaces** |
+| `MONITOR_STACKS` | none | · | **beszel** | **beszel,kuma** | **beszel,kuma** | · | · | · |
+| `MONITOR_HUB` | web | · | · | · | **dedicated** | · | · | · |
 
 ## Settings
 
 Where a setting ends up: **plan** = only `local/<client>/workbench.conf` (used by the checks and the next
 commands), **db** = also `db-server.conf` (the manager's `/etc/docker-db-server-manager.conf`),
-**addons** = also `addons-<role>.conf` (`/etc/vsw-addons.conf` on that node).
+**addons** = also `addons-<role>.conf` (`/etc/vsw-addons.conf` on that node), **monitor** = also
+`monitor-<role>.conf` (`/etc/vsw-monitor.conf` on that node).
 
 | Setting | Goes to | Values | Meaning |
 |---|---|---|---|
@@ -85,7 +88,7 @@ commands), **db** = also `db-server.conf` (the manager's `/etc/docker-db-server-
 | `APP` `PG_USER` `PG_DB` | db | `a-z 0-9 _` | app name (databases `<app>_<env>`), default role and database |
 | `ENABLE_POSTGRES` `ENABLE_PGBOUNCER` `ENABLE_MYSQL` `ENABLE_MARIADB` `ENABLE_ADMINER` | db | 0/1 | engines (PgBouncer needs Postgres) |
 | `PG_APP_CREATEDB` | db | 0/1 | the app role may create (tenant) databases |
-| `TLS_MODE` | db | `off` `require` | TLS between web and DB |
+| `TLS_MODE` | db | `off` `require` `verify-full` | TLS between web and DB; `verify-full` also checks the CA and host (`tls-ca`) |
 | `ENVS` `TENANT_ENVS` `PROTECTED_ENVS` | db | `tst dev trn stg prd` | environments, which have tenants, which need typed confirmations |
 | `PRD_LOCATION` | db | `local` `droplet` `managed` | where prd lives |
 | `ENV_MIGRATOR` | db | 0/1 | separate migrator role for DDL |
@@ -96,12 +99,17 @@ commands), **db** = also `db-server.conf` (the manager's `/etc/docker-db-server-
 | `GOTENBERG` `GOTENBERG_ROLE` | addons | 0/1; `web` `db` `dedicated` | the PDF service and its node |
 | `STORAGE` `STORAGE_ROLE` | addons | `none` `spaces` `garage` `seaweedfs` `rustfs`; role | object storage; `spaces` is managed (nothing to install) |
 | `STORAGE_BUCKET` `STORAGE_DATA_DIR` | addons | | bucket name; data folder (a DO volume) |
+| `MONITOR_STACKS` | monitor | `none` or any of `beszel` `kuma` `netdata` `prometheus` | monitoring stacks ([monitor guide](../tools/monitor.md)) |
+| `MONITOR_HUB` | monitor | `web` `db` `dedicated` | node with the UIs and storage; every other node runs the agents |
+| `MONITOR_PROBE_URLS` | monitor | http(s) URLs | endpoints the hub probes (blackbox exporter, Uptime Kuma) |
+| `MONITOR_ALLOW_TIGHT` | monitor | 0/1 | allow heavy stacks (netdata, prometheus) next to a DB on 2 GB or less |
 
 ## RAM estimates used by the checks
 
 Planning estimates in MB, not measurements: OS 512; Postgres 1024; PgBouncer 64; MySQL 1024; MariaDB 768;
 Adminer 64; pgBackRest 128; web app (nginx, PHP-FPM, queue worker, scheduler) 1024; Gotenberg 1024; Garage 256;
-SeaweedFS 512; RustFS 512. The engine numbers match `doctor` in the DB manager. Over 100% of the droplet is an
+SeaweedFS 512; RustFS 512. Monitoring hub: Beszel 64, Uptime Kuma 192, Netdata 256, Prometheus + Grafana +
+Alertmanager 600; agents: Beszel 32, Netdata 256, exporters 120 (the `MON_RAM_MB` values in `stacks/monitor`). The engine numbers match `doctor` in the DB manager. Over 100% of the droplet is an
 error (with the DO size to use), over 85% a warning.
 
 ## Adding or changing a profile

@@ -1,0 +1,30 @@
+# Netdata. Rendered and started by src/shell/monitor/monitor.sh; do not edit on the server.
+# netdata.conf (written by monitor.sh) binds the UI to loopback; compose.host.yml (default) uses host
+# networking so every interface is seen. pid:host + SYS_PTRACE/SYS_ADMIN follow Netdata's own guidance.
+name: vsw-mon-netdata
+services:
+  netdata:
+    image: ${NETDATA_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    hostname: ${NETDATA_HOSTNAME:-vsw-node}
+    pid: host
+    cap_add: [SYS_PTRACE, SYS_ADMIN]
+    security_opt: [apparmor:unconfined]
+    environment:
+      DISABLE_TELEMETRY: "1"
+      DO_NOT_TRACK: "1"
+    volumes:
+      - ./netdata.conf:/etc/netdata/netdata.conf:ro
+      - ./lib:/var/lib/netdata
+      - ./cache:/var/cache/netdata
+      - /:/host/root:ro,rslave
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/log:/host/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports: ["${MONITOR_BIND:?}:${NETDATA_PORT:-19999}:19999"]
+    mem_limit: 512m
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
