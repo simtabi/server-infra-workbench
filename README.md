@@ -129,14 +129,17 @@ Start at the [docs index](docs/README.md) (diagrams and command reference includ
 
 ```sh
 make help           # targets
-make lint           # shellcheck + bash -n on every script
-make test           # offline smoke tests (shell tools, dispatcher, CLI safety)
+make secrets-check  # no hardcoded secrets: repo scanner + gitleaks over the full history
+make lint           # pinned shellcheck + bash -n on every script
+make test           # offline smoke tests (shell tools, dispatcher, CLI safety) and the runnable examples
 make php            # pint --test, phpstan (level max), phpunit
 make python         # py_compile (+ ruff when installed), unittest
 make links          # check relative links and #anchors in all Markdown
+make docs-commands  # every documented command and flag exists in --help; Markdown tables are well formed
+make client-check   # no client names (.client-denylist) in tracked files or commit messages
 make compose-check  # docker compose config + caddy validate
-make ci             # all of the above (what CI runs)
-make it             # Docker integration test of the guided DB upgrade (~3 min)
+make ci             # all of the above (what CI runs); make ci-local runs it with CI's pinned tools
+make it             # nine Docker integration suites, one after another, with a leak guard (~13 min)
 make fmt-check      # shfmt diff (advisory)
 ```
 
