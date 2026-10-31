@@ -130,7 +130,7 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `init [file]` | no (writes a config file) | no | starter config for this host: detects the private IP and VPC range; no root needed |
 | `upgrade [--dry-run] [--snapshot\|--snapshot-taken\|--no-snapshot]` (alias `apply`) | no (backs up first) | snapshot, apply (or `--yes`) | guided upgrade of a running server: preflight, diff, snapshot offer, verified backup, savepoint, apply, verify + doctor, auto-rollback; see [Upgrade](#upgrade) |
 | `install` | no (keeps `.env` and volumes) | no | Docker, files, build, `up --wait`, ufw, `verify`, summary |
-| `reset` | **destroys** all DB data | `Type RESET` (or `--yes`) | new passwords, rebuild from scratch |
+| `reset [--force-prod]` | **destroys** all DB data | `Type RESET` (or `--yes`); protected envs: `--force-prod` + env name | new passwords, rebuild from scratch |
 | `status` | no | no | `docker compose ps` |
 | `verify` | no | no | health, extensions, logins for each enabled engine |
 | `doctor [--alert]` | no | no | host, exposure, roles and isolation, MySQL hardening, TLS, environments, backups, off-site, restore test, PITR, RAM; `--alert` notifies on problems |
@@ -160,7 +160,7 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `pg-major-upgrade --to N [--dry-run] \| --cleanup OLD` | rebuilds Postgres (backs up first) | `Type UPGRADE` / `CLEANUP` | dump/reload into the new major, inventory compare, auto-rollback; old data kept until `--cleanup` ([recipe](../recipes/pg-major-upgrade.md)) |
 | `cron-install` / `cron-remove` | cron file only | no | `backup`, `doctor --alert`, `restore-test`, PITR, `binlog-ship`, `purge-trash` jobs ([table](../backups-and-recovery.md#set-up)) |
 | `logs [service]` | no | no | follow the last 200 lines |
-| `uninstall [--purge]` | `--purge` deletes everything | `Type PURGE` | stop and remove |
+| `uninstall [--purge] [--force-prod]` | `--purge` deletes everything | `Type PURGE`; protected envs: `--force-prod` + env name | stop and remove |
 | `help` | no | no | detailed help |
 
 Options (anywhere on the line): `--yes`/`-y` (or `FORCE=1`), `--non-interactive` (never prompt; fail safe), `--config FILE`
@@ -186,7 +186,11 @@ This installs or enables Docker, keeps an existing `.env` (or creates one with n
 ```sh
 ./docker-db-server-manager.sh reset           # prompts: Type RESET
 ./docker-db-server-manager.sh reset --yes     # or FORCE=1
+sudo WORKBENCH_CONFIRM=prd ./docker-db-server-manager.sh reset --force-prod   # APP set with a protected env
 ```
+With `APP` set and a protected env on the server (`PROTECTED_ENVS`), `reset` also needs `--force-prod`, the env
+name typed (or `WORKBENCH_CONFIRM=<env>`) and a fresh backup, like `drop-db`. Earlier builds did not parse the
+flag (only `RESET_FORCE_PROD=1` worked, still accepted) although the refusal told you to add `--force-prod`.
 In order, it:
 1. Runs `docker compose down -v --remove-orphans`.
 2. Removes the `db_*` volumes and the built image.
@@ -369,9 +373,9 @@ Writes `/etc/cron.d/docker-db-server-backup`, which runs `backup` at `CRON_TIME`
 ### `logs [service]`
 `./docker-db-server-manager.sh logs pgbouncer` shows the last 200 lines and keeps following the log.
 
-### `uninstall [--purge]`
+### `uninstall [--purge] [--force-prod]`
 - Without `--purge`, it stops and removes the containers and keeps the volumes and `/opt/db`. Run `install` to bring everything back.
-- With `--purge` (type `PURGE`), it also removes the volumes, the image, the cron job and all of `/opt/db`, **backups included**.
+- With `--purge` (type `PURGE`), it also removes the volumes, the image, the cron job and all of `/opt/db`, **backups included**. With a protected env on the server it also needs `--force-prod` and the env name.
 
 The ufw rules are left in place. Remove them with `ufw status numbered` and `ufw delete N`.
 

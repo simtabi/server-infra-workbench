@@ -56,6 +56,12 @@ L my_grant_sql app my_app owner | grep -qF '`my\_app`.*' && ok "create-db grants
 # --- guard rails --------------------------------------------------------------------
 if APP=shop ENVS="dev prd" L guard_destructive shop_prd prd 0 2>"$T/e"; then fail "prd without --force-prod"; fi
 grep -q 'add --force-prod' "$T/e" && ok "protected env needs --force-prod" || fail "force-prod"
+G() { bash -c 'm="$1"; shift; fn=("$@"); set --; DBM_SOURCE_ONLY=1 source "$m"; PRIVATE_IP=10.0.0.5; need_root(){ :; }; ensure_docker(){ exit 42; }; "${fn[@]}"' _ "$M" "$@"; }
+for c in cmd_reset cmd_uninstall; do a=(); [ "$c" = cmd_uninstall ] && a=(--purge)
+  APP=shop ENVS="dev prd" G "$c" "${a[@]}" </dev/null >/dev/null 2>"$T/e" || true; grep -q 'add --force-prod' "$T/e" || fail "$c without --force-prod"
+  APP=shop ENVS="dev prd" G "$c" "${a[@]}" --force-prod </dev/null >/dev/null 2>"$T/e" || true; grep -q "type the environment name" "$T/e" || fail "$c --force-prod not accepted"
+  if G "$c" --bogus </dev/null >/dev/null 2>&1; then fail "$c accepted an unknown option"; fi
+done; ok "reset / uninstall --purge: protected env needs --force-prod (flag or *_FORCE_PROD=1), unknown options refused"
 if APP=shop ENVS="dev prd" L guard_destructive shop_prd prd 1 </dev/null 2>"$T/e"; then fail "prd without typed name"; fi
 grep -q 'WORKBENCH_CONFIRM=prd' "$T/e" && ok "protected env needs the typed env name" || fail "typed"
 [ "$(APP=shop ENVS="dev prd" L env_of_db shop_prd_t_42)" = prd ] && [ "$(APP=shop ENVS="dev prd" L env_of_db shop_dev)" = dev ] && [ -z "$(APP=shop L env_of_db other)" ] \

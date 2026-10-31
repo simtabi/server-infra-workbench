@@ -145,7 +145,7 @@ balancer when the web tier matters -> D only if C is too limiting.
 | Guard | Applies to | Behaviour |
 |---|---|---|
 | Typed confirmation | all envs | `drop-db`, `drop-user` and `restore` ask you to type a word; `--yes` skips it on non-protected envs |
-| Protected envs (`PROTECTED_ENVS`, default `stg prd`) | drop, restore, purge | refused without `--force-prod`; then type the env name (or `WORKBENCH_CONFIRM=<env>` without a terminal) |
+| Protected envs (`PROTECTED_ENVS`, default `stg prd`) | drop, restore, reset, uninstall --purge | refused without `--force-prod`; then type the env name (or `WORKBENCH_CONFIRM=<env>` without a terminal) |
 | Fresh backup | protected envs | a verified backup younger than `FRESH_BACKUP_MIN` (15) minutes, taken automatically if missing |
 | Soft drop | protected envs | Postgres: rename to `<db>__trash_<ts>` with connections off, purge after `TRASH_DAYS` (7). MySQL/MariaDB: a verified dump kept `DROPPED_DUMP_DAYS` (30), then drop |
 | Least privilege | all envs | no superuser app logins, no `root@'%'`, the app can't drop its central database |

@@ -39,6 +39,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The manager's `up -d --wait` failures print each unhealthy container's state, exit code, OOM flag, last
   health probes and a redacted log tail, so a CI failure explains itself.
 
+### Fixed (P3)
+
+- `reset` and `uninstall --purge` accept `--force-prod`. On a server with a protected env they told you to add
+  the flag but never parsed it (only `RESET_FORCE_PROD=1` / `PURGE_FORCE_PROD=1` worked); unknown options are
+  now refused instead of ignored.
+
 ### Added (P2: manager 1.5.0, monitoring, progress)
 
 - **Monitoring** ([monitor](docs/tools/monitor.md), [ADR 0012](docs/adr/0012-monitoring-stack.md)): `bin/workbench monitor`

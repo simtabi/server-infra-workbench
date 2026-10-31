@@ -241,7 +241,7 @@ Setup and updates
                               preflight -> diff -> confirm -> snapshot -> verified backup -> savepoint
                               -> apply (incl. role split, root@'%' removal) -> verify + doctor -> auto-rollback
   install                     first-time setup (keeps an existing .env and data)
-  reset                       DESTRUCTIVE: new passwords, empty databases (type RESET)
+  reset [--force-prod]        DESTRUCTIVE: new passwords, empty databases (type RESET; --force-prod with a protected env)
   engine enable|disable <postgres|pgbouncer|mysql|mariadb|adminer> [--delete-volume] [--dry-run]
   role-split [--rollback]     the 1.4.0 Postgres role split by hand (upgrade does it for you)
 
@@ -278,7 +278,7 @@ Monitoring, TLS and migrations (docs/tools/monitor.md, docs/recipes/)
   migrate-managed --target-env F [--db a,b] [--check]   copy databases to a managed PostgreSQL, row counts compared
 
 Other
-  uninstall [--purge]         --purge is DESTRUCTIVE (type PURGE)
+  uninstall [--purge] [--force-prod]   --purge is DESTRUCTIVE (type PURGE; --force-prod with a protected env)
   help | --version
 
 Engines: ENABLE_POSTGRES=$ENABLE_POSTGRES ENABLE_PGBOUNCER=$ENABLE_PGBOUNCER ENABLE_MYSQL=$ENABLE_MYSQL ENABLE_MARIADB=$ENABLE_MARIADB ENABLE_ADMINER=$ENABLE_ADMINER
@@ -3046,11 +3046,13 @@ cmd_install() {
   load_env; write_files; start_stack; firewall; cmd_verify; summary
 }
 
-cmd_reset() {
+cmd_reset() { # [--force-prod] (or RESET_FORCE_PROD=1): needed when APP has a protected env
+  local fp="${RESET_FORCE_PROD:-0}" a
+  for a in "$@"; do case "$a" in --force-prod) fp=1 ;; *) die "reset: unknown option $a" ;; esac; done
   need_root; banner reset
   echo "This will DELETE all PostgreSQL, MySQL and MariaDB data in $DB_DIR"
   echo "(containers, volumes, image $PG_IMAGE) and create NEW passwords. Backups in $BACKUP_DIR are kept."
-  if [ -n "$APP" ]; then local e; for e in $(local_envs); do env_protected "$e" && guard_destructive server "$e" "${RESET_FORCE_PROD:-0}" && break; done; fi
+  if [ -n "$APP" ]; then local e; for e in $(local_envs); do env_protected "$e" && guard_destructive server "$e" "$fp" && break; done; fi
   confirm RESET
   ensure_docker
   log "Tearing down old stack"
@@ -3072,11 +3074,12 @@ cmd_reset() {
 
 cmd_uninstall() {
   need_root
-  local purge=0; [ "${1:-}" = "--purge" ] && purge=1
+  local purge=0 fp="${PURGE_FORCE_PROD:-0}" a # [--purge] [--force-prod] (or PURGE_FORCE_PROD=1)
+  for a in "$@"; do case "$a" in --purge) purge=1 ;; --force-prod) fp=1 ;; *) die "uninstall: unknown option $a" ;; esac; done
   banner "uninstall$([ $purge = 1 ] && echo ' --purge')"
   if [ "$purge" = 1 ]; then
     echo "This DELETES all data, backups in $BACKUP_DIR, the image and $DB_DIR."
-    if [ -n "$APP" ]; then local e; for e in $(local_envs); do env_protected "$e" && guard_destructive server "$e" "${PURGE_FORCE_PROD:-0}" && break; done; fi
+    if [ -n "$APP" ]; then local e; for e in $(local_envs); do env_protected "$e" && guard_destructive server "$e" "$fp" && break; done; fi
     confirm PURGE
   fi
   if [ -f "$DB_DIR/docker-compose.yml" ]; then
@@ -3121,7 +3124,7 @@ esac
 case "$CMD" in
   upgrade|apply) cmd_upgrade "$@" ;;
   install)      cmd_install ;;
-  reset)        cmd_reset ;;
+  reset)        cmd_reset "$@" ;;
   status)       cmd_status ;;
   verify)       cmd_verify ;;
   env)          cmd_env "$@" ;;
