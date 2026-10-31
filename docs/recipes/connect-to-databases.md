@@ -56,7 +56,7 @@ Confirm the live ports on the server with `sudo docker ps --format '{{.Names}}\t
 Credentials: Postgres user, database and password come from `sudo ./docker-db-server-manager.sh env`.
 MySQL and MariaDB root passwords live in `/opt/db/.env` (`sudo grep ROOT_PASSWORD /opt/db/.env`); better,
 create a per-app or read-only user (`create-db`, `create-user ... --readonly`, see
-[db-server.md](../reference/db-server.md#create-db-name-engine)) and use that.
+[db-server.md](../tools/db-server-manager.md#create-db-name-engine)) and use that.
 
 ### TablePlus (built-in SSH)
 

@@ -1,5 +1,5 @@
 # Caddy in front of a Laravel app (php-fpm) on a Ploi *Docker* server.
-# Full guide: docs/guides/web-server-caddy.md
+# Full guide: docs/tools/caddy-stack.md
 #
 #   conf/Caddyfile            active config (mounted as the /etc/caddy folder,
 #                             not as a single file, so `caddy reload` sees edits)

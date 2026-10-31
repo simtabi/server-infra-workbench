@@ -89,13 +89,13 @@ this script), the first install counts as done.
 The first deploy may stop, on purpose:
 
 1. **Empty `.env` keys.** Fill the `DB_*` values with
-   [`update-env-db.sh`](web-server-ploi.md#update-db_-settings) and the rest in
+   [`update-env-db.sh`](../recipes/configure-a-ploi-web-server.md#update-db_-settings) and the rest in
    Ploi's environment editor, then deploy again.
 2. **Install inputs** (only with `INSTALL_ENV_KEYS`). Fill
    `/home/ploi/<site>-shared/install.env` (`KEY=value` lines, `chmod 600`) and
    deploy again.
 
-The queue worker and scheduler run as Ploi daemons ([daemons.md](daemons.md));
+The queue worker and scheduler run as Ploi daemons ([daemons.md](../recipes/run-daemons.md));
 `queue:restart` makes them load the new release. Don't also enable a
 `schedule:run` cron. `make test` runs the script end to end against a scratch
 repository ([`tests/shell/deploy-sandbox.sh`](../../tests/shell/deploy-sandbox.sh)).

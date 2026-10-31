@@ -18,7 +18,7 @@
 11. [Troubleshooting](#11-troubleshooting) ·
 12. [Uninstall](#12-uninstall)
 
-Moving an existing server to this version: [upgrading.md](../guides/upgrading.md).
+Moving an existing server to this version: [upgrading.md](../recipes/upgrade-a-legacy-db-server.md).
 
 ## 0. Runbook (from your workstation)
 
@@ -54,7 +54,7 @@ ssh -t <db-alias> 'ip -4 addr | grep -q "inet <private-ip>/" || { echo "ABORT: $
   sudo /root/docker-db-server-manager.sh env'
 ```
 
-6. Put the printed `DB_*` lines on the web server: [web-server-ploi.md](../guides/web-server-ploi.md#update-db_-settings).
+6. Put the printed `DB_*` lines on the web server: [web-server-ploi.md](../recipes/configure-a-ploi-web-server.md#update-db_-settings).
 
 ## 1. Overview
 
@@ -196,7 +196,7 @@ Runs these checks:
 It ends with `ALL CHECKS PASSED`, and any failure stops it with a line like `!! ERROR: line N`.
 
 ### `env`
-Prints the `DB_*` lines for `WEB_ENV` (the shared Laravel `.env`; see [web-server-ploi.md](../guides/web-server-ploi.md)). This output **contains the Postgres password**.
+Prints the `DB_*` lines for `WEB_ENV` (the shared Laravel `.env`; see [web-server-ploi.md](../recipes/configure-a-ploi-web-server.md)). This output **contains the Postgres password**.
 
 ### `init`
 ```sh
@@ -274,8 +274,8 @@ It writes three gzip dumps to `$BACKUP_DIR/<ts>/` (chmod 600) and runs `gzip -t`
   an offsite copy (rclone, `aws s3`, `restic`...). A hook failure fails the backup run.
 - `cron-install` also writes `/etc/logrotate.d/docker-db-server-backup` (weekly, 8 kept).
 - Nightly dumps mean up to 24 h of data loss, and backups aren't restore-tested
-  automatically; see [point-in-time recovery](status.md#point-in-time-recovery) and
-  [restore test](status.md#restore-test).
+  automatically; see [point-in-time recovery](../status.md#point-in-time-recovery) and
+  [restore test](../status.md#restore-test).
 - **Postgres** uses `pg_dumpall --clean --if-exists`, which covers every database (including ones the app creates itself) and every role.
 - **MySQL and MariaDB** dump only user databases. The `mysql`, `sys` and `*_schema` system schemas are left out on purpose, so a restore never overwrites root or the passwords in `.env`. Database users you create yourself in MySQL or MariaDB are therefore **not** backed up, so recreate them after a restore.
 
@@ -343,8 +343,8 @@ Then **redeploy in Ploi**, because the config is cached at deploy time. For MySQ
 
 ## 9. Security
 
-Firewall, Docker vs ufw, updates and secrets on disk: [security.md](security.md). Web-to-DB
-traffic is unencrypted on the VPC ([roadmap](status.md#private-network-encryption)).
+Firewall, Docker vs ufw, updates and secrets on disk: [security.md](../security.md). Web-to-DB
+traffic is unencrypted on the VPC ([roadmap](../status.md#private-network-encryption)).
 - Ports are bound to the private IP only, and ufw allows only `VPC_CIDR` on 5432, 6432, 3306 and 3307. Existing ufw rules are detected, so no duplicates get added. If ufw isn't installed, the rules are skipped with a warning.
 - `.env`, the `.env` backups and the dump files are all chmod 600, root only.
 - The MySQL and MariaDB root passwords are never printed. To read them, run `grep ROOT /opt/db/.env`.
@@ -374,7 +374,7 @@ recovered); every run is logged, with secrets redacted, to `/var/log/docker-db-s
 Prompts need a terminal; without one, use `--yes` plus a snapshot flag.
 
 
-Major Postgres versions need a dump and restore; see [status.md](status.md#postgres-major-upgrade).
+Major Postgres versions need a dump and restore; see [status.md](../status.md#postgres-major-upgrade).
 - **Minor versions** (same major tag): run `upgrade`. The build uses `--pull`, so you get the newest image for each tag, and `up -d --wait` recreates any container whose image changed. MariaDB's `MARIADB_AUTO_UPGRADE=1` upgrades its system tables.
 - **Postgres major version** (e.g. to 19): data folders aren't compatible between majors. Run `backup`, change the version in the script (the Dockerfile `FROM`, `postgresql-NN-pgvector` and the image tag), run `reset`, then `restore <dir> postgres`.
 - **MySQL 9.x innovation releases** only support upgrading forward. Back up first.
@@ -391,7 +391,7 @@ Major Postgres versions need a dump and restore; see [status.md](status.md#postg
 | Web server can't connect | Check `nc -zv <PRIVATE_IP> 5432` from the web server, `ufw status`, and that both droplets are in the same VPC. |
 | Ploi says ".env file not found" | Run `ln -sfn /home/ploi/<site>-shared/.env /home/ploi/<site>/.env` on the web server. |
 
-More real-world failures and fixes: [troubleshooting.md](../guides/troubleshooting.md).
+More real-world failures and fixes: [troubleshooting.md](../troubleshooting.md).
 
 ## 12. Uninstall
 ```sh

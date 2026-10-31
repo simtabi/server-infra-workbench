@@ -4,7 +4,7 @@ How to run a Laravel app behind [Caddy](https://caddyserver.com) on a Ploi
 **Docker** server, using the files in [`stacks/caddy/`](../../stacks/caddy).
 Caddy terminates TLS and gets and renews Let's Encrypt certificates by itself.
 For a native Ploi site (nginx + PHP-FPM, no Docker) use
-[web-server-ploi.md](web-server-ploi.md) instead.
+[web-server-ploi.md](../recipes/configure-a-ploi-web-server.md) instead.
 
 ## Contents
 
@@ -110,7 +110,7 @@ Pick one:
 
 Then the app code: clone it into `APP_PATH` (default `./app` inside that
 folder) and create its `.env` with the database values from
-[update-env-db.sh](web-server-ploi.md#update-db_-settings) (`--env
+[update-env-db.sh](../recipes/configure-a-ploi-web-server.md#update-db_-settings) (`--env
 /home/ploi/containers/myapp/app/.env`).
 
 ```sh

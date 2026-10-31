@@ -267,7 +267,7 @@ Commands:
       This text.
 
 Engines: ENABLE_POSTGRES=$ENABLE_POSTGRES ENABLE_PGBOUNCER=$ENABLE_PGBOUNCER ENABLE_MYSQL=$ENABLE_MYSQL ENABLE_MARIADB=$ENABLE_MARIADB
-Admin UI: ENABLE_ADMINER=$ENABLE_ADMINER ($ADMINER_IMAGE on 127.0.0.1:$ADMINER_PORT only; open via SSH tunnel, see docs/guides/connections.md)
+Admin UI: ENABLE_ADMINER=$ENABLE_ADMINER ($ADMINER_IMAGE on 127.0.0.1:$ADMINER_PORT only; open via SSH tunnel, see docs/recipes/connect-to-databases.md)
 Options: --yes|-y (skip confirmation), --config FILE, --version
 Environment: PRIVATE_IP, EXPECTED_PRIVATE_IP, VPC_CIDR, DB_DIR, BACKUP_DIR, KEEP, FORCE=1,
              PG_USER, PG_DB, *_IMAGE, *_PORT, CRON_TIME, WEB_ENV (see config/db-server.env.example)
@@ -826,7 +826,7 @@ cmd_rotate_password() { # <user> [engine] [--out FILE]
   parse_user_args "$@"; local u="${U_POS[0]:-}"
   [ -n "$u" ] || die "usage: rotate-password <user> [engine] [--out FILE]"
   valid_ident "$u" user
-  [ "$U_ENGINE" = postgres ] && [ "$u" = "$PG_USER" ] && die "$PG_USER's password is shared with PgBouncer; rotate it with reset, or by hand (docs/reference/db-server.md)"
+  [ "$U_ENGINE" = postgres ] && [ "$u" = "$PG_USER" ] && die "$PG_USER's password is shared with PgBouncer; rotate it with reset, or by hand (docs/tools/db-server-manager.md)"
   protected_user "$u" && die "refusing to rotate $u here"
   need_root; need_stack; load_env
   local pw db; pw="$(new_password)"
@@ -1131,7 +1131,7 @@ cmd_upgrade() { # [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-t
     die "UPGRADE FAILED and was rolled back. Log: $DBM_LOG  Savepoint: $SAVE  Backup: $LAST_BACKUP"
   fi
   log "UPGRADE OK: $cur -> $VERSION"
-  echo "backup: $LAST_BACKUP"; echo "savepoint: $SAVE (manual rollback: see docs/reference/db-server.md#upgrade)"; echo "log: $DBM_LOG"
+  echo "backup: $LAST_BACKUP"; echo "savepoint: $SAVE (manual rollback: see docs/tools/db-server-manager.md#upgrade)"; echo "log: $DBM_LOG"
 }
 
 listen_addrs() { # $1 port -> space-separated listening addr:port, "" if none, "?" if no tool

@@ -44,13 +44,13 @@ flowchart LR
 ```
 
 - **Web server**: a Ploi server, either native (nginx + PHP-FPM, deployed with
-  [`ploi-deploy.sh`](../guides/deploy.md)) or Ploi's Docker server type with Caddy in
-  front ([web-server-caddy.md](../guides/web-server-caddy.md)).
+  [`ploi-deploy.sh`](tools/deploy-script.md)) or Ploi's Docker server type with Caddy in
+  front ([web-server-caddy.md](tools/caddy-stack.md)).
 - **DB server**: a droplet provisioned through Ploi (so it has the `ploi`
-  user) running the Docker stack from [`docker-db-server-manager.sh`](db-server.md).
+  user) running the Docker stack from [`docker-db-server-manager.sh`](tools/db-server-manager.md).
   Every DB port is bound to the **private** IP only, and ufw allows only the VPC range.
 - **Access**: one ed25519 key per host managed by sshmgr, user `ploi`, `sudo`
-  with the password from Ploi's provisioning email ([ssh-access.md](../guides/ssh-access.md)).
+  with the password from Ploi's provisioning email ([ssh-access.md](recipes/set-up-ssh-access.md)).
 
 ## Request flow
 

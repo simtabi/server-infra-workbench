@@ -6,6 +6,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (platform APIs, CLI, Python)
+
+- **PHP platform API library** (`php/`, `simtabi/vps-server-workbench`, PHP 8.4+): typed, fluent clients for
+  DigitalOcean (droplets, snapshots, actions with `wait()`), Cloudflare (zones, DNS list/upsert/delete, token
+  verify), Ploi (servers, sites, deploy) and Google Compute Engine (instances, snapshots, firewalls with a
+  world-open check, operations). One PSR-18/17 transport (Guzzle by default) with timeouts, retries with
+  exponential backoff and jitter (429 always, 5xx and network errors only for idempotent methods),
+  `Retry-After`, pagination, refused redirects, path validation and a redacting PSR-3 logger. Typed DTOs,
+  enums and exceptions. GCP auth via service-account JWT or `gcloud`, read-only scope for reads.
+- **Safety model**: every write returns a `PendingAction` (`plan()` dry run, `confirm()` once); deletes are
+  destructive; every dry run and write goes to a 600 JSONL audit log (`VSW_AUDIT_LOG`).
+- **Credentials** from explicit value, env, or `~/.config/vps-server-workbench/credentials` (refused unless
+  600, owned by you and outside any git tree); `Secret` type and redaction keep tokens out of output.
+- **`bin/workbench`** (was `bin/vsw`): `do`, `cf`, `ploi`, `gcp`, `credentials`, `version` on the PHP core
+  with `--dry-run`, `--yes`, `--force` (destructive), `--json`, `--verbose` and exit codes 0-4; `py` for the
+  Python package; `<area> <tool>` for shell tools.
+- **Python package** (`python/`, standard library only): `ping` TCP probe with an env-file reader and tests.
+- `make php` (Pint, PHPStan level max with strict rules, PHPUnit), `make python`, advisory `make fmt-check`;
+  CI installs PHP 8.4 and Python 3.14. Smoke tests cover the dispatcher, shims and CLI safety exits.
+- Docs: installation, configuration, release checklist, CLI, platform API and Python references, ADRs
+  0001-0005.
+
+### Changed (docs layout)
+
+- Docs follow the other Simtabi packages: guides at the top of `docs/`, tool references in `docs/tools/`,
+  recipes in `docs/recipes/`, decisions in `docs/adr/`. Old to new paths are listed in `docs/structure.md`.
+- The rollout recipe and the myapp example run `doctl auth init` on its own line (it prompts for the
+  token, so a pasted block would feed it the next line) and show the `bin/workbench do snapshot` alternative.
+
 ### Changed (project renamed: vps-server-workbench)
 
 - The project is now **`simtabi/vps-server-workbench`** (was `vps-hosting-management`): the repository folder,

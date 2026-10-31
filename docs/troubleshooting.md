@@ -15,7 +15,7 @@ Check, on the web server, as `ploi`:
 | Still in maintenance mode? | `ls <app>/storage/framework/down` | `php artisan up` |
 | What did Laravel log? | `tail -n 100 <app>/storage/logs/laravel.log` | Fix the error shown (DB auth, missing extension, cache path) |
 | Can the app reach the DB? | `shell/web/check-db-reach.sh --env <shared>/.env` | See the DB server's `doctor` |
-| Are the daemons running? | `pgrep -af 'queue:work\|schedule:work'` | Add them in Ploi ([daemons.md](daemons.md)). Without them jobs and schedules never run, though pages still render |
+| Are the daemons running? | `pgrep -af 'queue:work\|schedule:work'` | Add them in Ploi ([daemons.md](recipes/run-daemons.md)). Without them jobs and schedules never run, though pages still render |
 | PHP-FPM / nginx up? | `systemctl status php*-fpm nginx`, `/var/log/nginx/error.log` | Restart from Ploi |
 
 `<shared>` is `/home/ploi/<site>-shared`. `<app>` is the release (zero-downtime) or
@@ -27,17 +27,17 @@ Real problems hit while building the reference deployment, and the fix for each.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Ploi deploy fails with `main: unbound variable` | Ploi replaces `{BRANCH}`-style placeholders in the script text before bash runs, so `${BRANCH}` became `$main` | Never name variables after Ploi placeholders; use `DEPLOY_BRANCH` etc. ([deploy.md](deploy.md#ploi-placeholder-caveat)) |
+| Ploi deploy fails with `main: unbound variable` | Ploi replaces `{BRANCH}`-style placeholders in the script text before bash runs, so `${BRANCH}` became `$main` | Never name variables after Ploi placeholders; use `DEPLOY_BRANCH` etc. ([deploy.md](tools/deploy-script.md#ploi-placeholder-caveat)) |
 | PgBouncer logs a login every 5 seconds | The container healthcheck (`pg_isready ... -d pgbouncer`) | Expected; not an attack. Ignore or filter |
 | A MySQL/MariaDB restore brought back old users / root passwords stopped matching `.env` | Full dumps included the `mysql` system schema | `backup` dumps user databases only, so restores never touch root/users. Recreate app users after a restore |
 | Postgres restore hangs or fails on `DROP DATABASE` | PgBouncer held pooled connections to the database | `restore` stops PgBouncer first and starts it after; it also skips the bootstrap role's DROP/CREATE ROLE lines |
 | Image build fails with apt `500 Internal Server Error` or `Could not connect to apt.postgresql.org:80` | Flaky mirror; plain-HTTP pgdg | The Dockerfile uses HTTPS for pgdg and `Acquire::Retries=5`; rerun |
 | `verify` times out at `-- pgbouncer (via <ip>:6432)` (`verify exit=2`) | The check ran inside a container against the host's own private IP; ufw drops that hairpin traffic (source is a Docker bridge IP, not the VPC) | Fixed: `verify` reaches PgBouncer at `pgbouncer:5432` on the Docker network. Real clients on the VPC were never affected (test from the web server: `nc -zv <ip> 6432`) |
 | A chain `reset && cron-install && env` stopped after verify | The `&&` chain stops at the first failing command (the verify timeout above) | Rerun the remaining commands after `verify` passes |
-| Termius: `Authentication failed (publickey)` | Termius offered the right key but it is not in the server's `authorized_keys` for that user | Add the `.pub` key in Ploi for `ploi` ([ssh-access.md](ssh-access.md)) |
+| Termius: `Authentication failed (publickey)` | Termius offered the right key but it is not in the server's `authorized_keys` for that user | Add the `.pub` key in Ploi for `ploi` ([ssh-access.md](recipes/set-up-ssh-access.md)) |
 | `scp: stat local "/home/ploi/Downloads/..."`, `Could not resolve hostname <alias>`, or `ploi@<host>: Permission denied (publickey)` right after a login banner | Workstation commands run while logged into the server | Exit to the workstation, or use `shell/db/remote-run.sh` from there |
 | `sudo` rejects the password | Wrong password (DB/Ploi-login password, or stray whitespace from copy-paste) | Use the sudo password from Ploi's provisioning email, type it, or `passwd ploi` from the DO web console |
-| Login banner: `*** System restart required ***` | Kernel/security updates pending | Full upgrade and reboot ([security.md](../reference/security.md#updates-and-reboots)) before running the setup |
+| Login banner: `*** System restart required ***` | Kernel/security updates pending | Full upgrade and reboot ([security.md](security.md#updates-and-reboots)) before running the setup |
 | apt: `N not upgraded` / `no longer required` | Held-back updates and unused dependencies | `sudo apt-get update && sudo apt-get full-upgrade -y && sudo apt-get autoremove --purge -y && sudo apt-get autoclean` |
 | A `10.10.x.x` address in the banner instead of the VPC IP | DO's anchor IP on `eth0` | Normal. The VPC IP is on `eth1` |
-| Caddy: certificate not issued, 502, `File not found.` | DNS/ports, container network, or `php_fastcgi` root | See [web-server-caddy.md](web-server-caddy.md#troubleshooting) |
+| Caddy: certificate not issued, 502, `File not found.` | DNS/ports, container network, or `php_fastcgi` root | See [web-server-caddy.md](tools/caddy-stack.md#troubleshooting) |

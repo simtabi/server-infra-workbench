@@ -99,7 +99,7 @@ if [ "$UPG" = 1 ] && [ "$DRY" = 0 ] && ! grep -qE -- '--(dry-run|no-snapshot|sna
       esac
     else echo "!! could not read the droplet id; the server will handle the snapshot question" >&2; fi
   else
-    echo "note: doctl not configured here (brew install doctl && doctl auth init) - the server will ask about a snapshot"
+    echo "note: doctl not configured here (brew install doctl; then run doctl auth init on its own line) - the server will ask about a snapshot"
   fi
 fi
 IFS=',' read -r -a parts <<< "$CMDS"; remote_cmds=""

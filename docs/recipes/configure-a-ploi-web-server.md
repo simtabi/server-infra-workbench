@@ -1,7 +1,7 @@
 # Web server (Ploi)
 
 This page covers a **native** Ploi site (nginx + PHP-FPM). For a Ploi **Docker**
-server with Caddy in front, see [web-server-caddy.md](web-server-caddy.md).
+server with Caddy in front, see [web-server-caddy.md](../tools/caddy-stack.md).
 
 ## Contents
 
@@ -68,8 +68,8 @@ Then **redeploy** in Ploi: config is cached at deploy time (`config:cache`).
   managed by Ploi would fight over containers, ports and volumes. Use a plain
   droplet for the DB server and run the manager over SSH.
 - A Docker web server needs something in front of the app container for
-  HTTP/TLS: Caddy, set up in [web-server-caddy.md](web-server-caddy.md).
+  HTTP/TLS: Caddy, set up in [web-server-caddy.md](../tools/caddy-stack.md).
 
 ## Daemons
 
-Queue worker and scheduler: see [daemons.md](daemons.md).
+Queue worker and scheduler: see [daemons.md](run-daemons.md).
