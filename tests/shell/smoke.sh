@@ -6,6 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+gen() { openssl rand -hex "${1:-12}"; }  # repo rule: test secrets are generated per run, never hardcoded
 pass=0
 ok()   { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
@@ -49,13 +50,14 @@ PG_EXTENSIONS="vector pg_trgm" PRIVATE_IP=10.0.0.5 DB_DIR="$T/x" bash -c 'mkdir 
 if PRIVATE_IP=10.0.0.5 "$M" create-db 'bad;name' 2>/dev/null; then fail "create-db name"; else ok "create-db rejects unsafe names"; fi
 
 # --- update-env-db ----------------------------------------------------------
-printf 'APP_NAME=x\nDB_HOST=old\nDB_SSLMODE=prefer\nDB_PASSWORD=old\n' > "$T/app.env"
-printf '# from env\nDB_HOST=10.0.0.5\nDB_PASSWORD=s3cret\n' > "$T/v.env"
+OLDPW="$(gen)"; NEWPW="$(gen)"
+printf 'APP_NAME=x\nDB_HOST=old\nDB_SSLMODE=prefer\nDB_PASSWORD=%s\n' "$OLDPW" > "$T/app.env"
+printf '# from env\nDB_HOST=10.0.0.5\nDB_PASSWORD=%s\n' "$NEWPW" > "$T/v.env"
 "$W" --env "$T/app.env" --from "$T/v.env" --set DB_PORT=5432 > "$T/out"
 "$W" --env "$T/app.env" --from "$T/v.env" --set DB_PORT=5432 --no-backup > /dev/null
 [ "$(grep -c '^DB_HOST=' "$T/app.env")" = 1 ] && ok "update-env-db is idempotent" || fail "update-env-db is idempotent"
 grep -q '^DB_SSLMODE=prefer$' "$T/app.env" && grep -q '^APP_NAME=x$' "$T/app.env" && ok "other keys kept" || fail "other keys kept"
-grep -q 'DB_PASSWORD=\*\*\*' "$T/out" && ! grep -q s3cret "$T/out" && ok "password masked in output" || fail "password masked in output"
+grep -q 'DB_PASSWORD=\*\*\*' "$T/out" && ! grep -q "$NEWPW" "$T/out" && ok "password masked in output" || fail "password masked in output"
 ls "$T"/app.env.bak.* >/dev/null && ok "backup written" || fail "backup written"
 if "$W" --env "$T/app.env" --set APP_KEY=x 2>/dev/null; then fail "non-DB key"; else ok "non-DB_* keys refused"; fi
 for i in 1 2 3 4 5 6 7; do touch "$T/app.env.bak.2026010100000$i"; done
@@ -163,9 +165,9 @@ if command -v python3 >/dev/null 2>&1; then
   set +e; bin/workbench py ping 127.0.0.1 notaport >/dev/null 2>&1; rc=$?; set -e; [ "$rc" -eq 2 ] && ok "workbench py validates input" || fail "workbench py validation"
 fi
 if command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' && [ -f src/php/vendor/autoload.php ]; then
-  out="$(DIGITALOCEAN_TOKEN=smoke-not-a-token VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 --name pre-upgrade --dry-run)"
+  out="$(DIGITALOCEAN_TOKEN="$(gen)" VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 --name pre-upgrade --dry-run)"
   grep -q 'DRY RUN — nothing sent.*POST /v2/droplets/42/actions' <<<"$out" && ok "workbench do snapshot --dry-run sends nothing" || fail "do snapshot dry-run: $out"
-  set +e; DIGITALOCEAN_TOKEN=smoke-not-a-token VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 </dev/null 2>/dev/null; rc=$?; set -e
+  set +e; DIGITALOCEAN_TOKEN="$(gen)" VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 </dev/null 2>/dev/null; rc=$?; set -e
   [ "$rc" -eq 3 ] && ok "workbench writes refuse without --yes" || fail "write without --yes exit $rc"
   set +e; env -u DIGITALOCEAN_TOKEN VSW_CREDENTIALS_FILE=/nonexistent bin/workbench digitalocean droplets 2>"$T/cred"; rc=$?; set -e
   [ "$rc" -eq 4 ] && grep -q 'DIGITALOCEAN_TOKEN is not set' "$T/cred" && ok "workbench reports missing credentials" || fail "missing credentials exit $rc"

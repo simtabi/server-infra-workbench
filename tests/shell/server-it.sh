@@ -47,9 +47,10 @@ bash $S/server/inventory.sh --install-cron --yes >/dev/null && [ -f /etc/cron.d/
 bash $S/server/update.sh --dry-run > /tmp/o 2>&1 && grep -qE 'upgradable|up to date' /tmp/o && ok "update --dry-run: real apt plan" || { cat /tmp/o; fail "update plan"; }
 
 # env init / check
-mkdir -p /srv/app; printf 'DB_HOST=10.0.0.5\nDB_PASSWORD=it pass $x#1\nDB_USERNAME=app_stg\n' > /tmp/db.env
+PW="it pass \$x#$(openssl rand -hex 3)"  # quoting probe around a generated part, never hardcoded
+mkdir -p /srv/app; printf 'DB_HOST=10.0.0.5\nDB_PASSWORD=%s\nDB_USERNAME=app_stg\n' "$PW" > /tmp/db.env
 bash $S/env/env.sh init --env stg --path /srv/app/.env --from /tmp/db.env --url https://stg.example.test --yes > /tmp/o 2>&1 || { cat /tmp/o; fail "env init"; }
-[ "$(stat -c %a /srv/app/.env)" = 600 ] && grep -q "^DB_PASSWORD='it pass \$x#1'$" /srv/app/.env && ! grep -q 'it pass' /tmp/o && ok "env init: real openssl APP_KEY, 600, quoted, values not shown" || fail "env init result"
+[ "$(stat -c %a /srv/app/.env)" = 600 ] && grep -qxF "DB_PASSWORD='$PW'" /srv/app/.env && ! grep -q 'it pass' /tmp/o && ok "env init: real openssl APP_KEY, 600, quoted, values not shown" || fail "env init result"
 bash $S/env/env.sh check --env stg --path /srv/app/.env >/dev/null && ok "env check: clean" || fail "env check"
 
 # fixkeys as root: real chown, real ssh-keygen, real sshd -T (incl. a custom AuthorizedKeysFile)

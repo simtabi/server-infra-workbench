@@ -24,7 +24,7 @@ URL = re.compile(r"""[a-z][a-z0-9+.-]*://(?P<key>[^\s/:@"'$]+):(?P<val>[^\s@/"']
 MYSQL_P = re.compile(r"""(?<![\w-])-p(?P<val>'[^'\n]+'|"[^"\n]+"|[A-Za-z0-9!#%^*+=_]{4,})(?=\s|$)""")
 
 SAFE_VALUE = re.compile(r"""^(?:
-      |\$.*|`.*|<.*|new|new\s.*|str|int|bool|float|bytes|string|\?string|Secret|Optional\[.*|\*+.*|\.\.\.|…|%[a-z0-9]*s.*|\{\{.*|\{%.*|\*+|x{3,}|X{3,}
+      |\$.*|`.*|<.*|new|new\s.*|\{\$.*|\..*|[A-Za-z_][A-Za-z0-9_]*=.*|str|int|bool|float|bytes|string|\?string|Secret|Optional\[.*|\*+.*|\.\.\.|…|%[a-z0-9]*s.*|\{\{.*|\{%.*|\*+|x{3,}|X{3,}
     |true|false|null|none|None|yes|no|on|off|0|1|required|optional|auto|generated|redacted|<redacted>|\[redacted\]|REDACTED
     |[A-Za-z_][A-Za-z0-9_.]*\(.*|[A-Za-z_][A-Za-z0-9_]*\[.*|self\..*|this->.*|os\.environ.*|getenv.*|env\(.*|process\.env.*
     |/.*|\./.*|~/.*|[A-Za-z0-9_.-]+\.(?:txt|key|pem|crt|env|conf|json|yml|yaml|sh|pass|secret|cnf)
@@ -64,6 +64,8 @@ def scan_text(path, text):
             if KEY_SKIP.search(m.group("key")):
                 continue
             rest = line[m.end():]
+            if m.group("val")[:1] in "'\"" and re.match(r"\s*[.+]\s*\S", rest):
+                continue  # 'prefix_'.random_bytes(...) / "a" + gen(): a literal prefix joined to generated data
             if m.group("op") == ":" and m.group("val")[:1] not in "'\"" and re.match(r"\s+[a-z(]", rest):
                 continue  # prose: "token: file or env", "password: the one ..."
             if literal(m.group("val")):

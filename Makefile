@@ -8,11 +8,20 @@ SCRIPTS := $(shell find . -name '*.sh' -not -path './.git/*' -not -path '*/vendo
 PHP_OK   = command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'
 PY_OK    = command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))'
 
-.PHONY: help lint syntax shellcheck fmt-check compose-check links mermaid test it ci \
+.PHONY: help lint syntax shellcheck fmt-check compose-check links mermaid test it ci secrets-check \
         php-install php-lint php-test php py-lint py-test python
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
+
+GITLEAKS_IMAGE := zricethezav/gitleaks:v8.30.1
+
+secrets-check: ## no hardcoded secrets: repo scanner (tracked files) + gitleaks (full history, .gitleaks.toml)
+	python3 tests/security/no-hardcoded-secrets.py --self-test
+	python3 tests/security/no-hardcoded-secrets.py
+	@if command -v gitleaks >/dev/null 2>&1; then gitleaks git --no-banner --redact --config .gitleaks.toml --log-opts=--all .; \
+	  elif command -v docker >/dev/null 2>&1; then docker run --rm -v "$$PWD:/repo" -w /repo $(GITLEAKS_IMAGE) git --no-banner --redact --config .gitleaks.toml --log-opts=--all /repo; \
+	  else echo "gitleaks not installed and no docker - skipping the history scan"; fi
 
 syntax: ## bash -n on every script
 	@for f in $(SCRIPTS); do bash -n "$$f" || exit 1; echo "bash -n ok  $$f"; done
@@ -56,13 +65,13 @@ compose-check: ## docker compose config for stacks/caddy, stacks/addons, stacks/
 	@command -v docker >/dev/null 2>&1 || { echo "docker not installed - skipping"; exit 0; }
 	cd stacks/caddy && SITE_DOMAIN=example.com docker compose config -q && echo "compose ok  stacks/caddy"
 	@for d in stacks/addons/*/; do n=$$(basename $$d); \
-	  { cat $$d/addon.env.example; printf 'ADDON_BIND=127.0.0.1\nADDON_DATA_DIR=/tmp/vsw-cc\nRUSTFS_ACCESS_KEY=x\nRUSTFS_SECRET_KEY=y\nSEAWEED_ADMIN_PASSWORD=z\n'; } \
+	  { cat $$d/addon.env.example; printf 'ADDON_BIND=127.0.0.1\nADDON_DATA_DIR=/tmp/vsw-cc\nRUSTFS_ACCESS_KEY=x\nRUSTFS_SECRET_KEY=%s\nSEAWEED_ADMIN_PASSWORD=%s\n' $$(openssl rand -hex 12) $$(openssl rand -hex 12); } \
 	    | sed 's/[[:space:]]*#.*//' > /tmp/vsw-cc-$$n.env; \
 	  (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env config -q) && echo "compose ok  stacks/addons/$$n" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; \
 	  if [ -f $$d/compose.bridge.yml ]; then (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env -f docker-compose.yml -f compose.bridge.yml config -q) \
 	    && echo "compose ok  stacks/addons/$$n (bridge)" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; fi; rm -f /tmp/vsw-cc-$$n.env; done
 	@for d in stacks/monitor/*/; do n=$$(basename $$d); \
-	  { cat $$d/monitor.env.example; printf 'MONITOR_BIND=127.0.0.1\nMONITOR_AGENT_BIND=10.0.0.2\nMONITOR_TEXTFILE_DIR=/tmp/vsw-cc\nBESZEL_AGENT_LISTEN=10.0.0.2:45876\nNODE_EXPORTER_LISTEN=10.0.0.2:9100\nBESZEL_ADMIN_EMAIL=a@example.com\nBESZEL_ADMIN_PASSWORD=x\nGRAFANA_ADMIN_PASSWORD=y\nBESZEL_KEY=k\nPG_EXPORTER_DSN=x\nPGBOUNCER_EXPORTER_DSN=x\n'; } \
+	  { cat $$d/monitor.env.example; printf 'MONITOR_BIND=127.0.0.1\nMONITOR_AGENT_BIND=10.0.0.2\nMONITOR_TEXTFILE_DIR=/tmp/vsw-cc\nBESZEL_AGENT_LISTEN=10.0.0.2:45876\nNODE_EXPORTER_LISTEN=10.0.0.2:9100\nBESZEL_ADMIN_EMAIL=a@example.com\nBESZEL_ADMIN_PASSWORD=%s\nGRAFANA_ADMIN_PASSWORD=%s\nBESZEL_KEY=k\n' $$(openssl rand -hex 12) $$(openssl rand -hex 12); } \
 	    | sed 's/[[:space:]]*#.*//' > /tmp/vsw-cc-m-$$n.env; \
 	  (cd $$d && docker compose --env-file /tmp/vsw-cc-m-$$n.env config -q) && echo "compose ok  stacks/monitor/$$n" || { rm -f /tmp/vsw-cc-m-$$n.env; exit 1; }; \
 	  if [ -f $$d/compose.host.yml ]; then (cd $$d && docker compose --env-file /tmp/vsw-cc-m-$$n.env -f docker-compose.yml -f compose.host.yml config -q) \
@@ -98,4 +107,4 @@ it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (ve
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
 	tests/shell/client-check.sh
 
-ci: lint test client-check php python links compose-check ## the gate CI runs
+ci: secrets-check lint test client-check php python links compose-check ## the gate CI runs

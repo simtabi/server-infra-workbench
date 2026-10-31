@@ -61,7 +61,9 @@ services:
     image: ${PGBOUNCER_EXPORTER_IMAGE:?pin an image tag}
     restart: unless-stopped
     environment:
-      PGBOUNCER_EXPORTER_CONNECTION_STRING: "postgres://${MONITOR_PG_USER:-vsw_monitor}:${MONITOR_PG_PASSWORD:-}@${MONITOR_PGBOUNCER_HOST:-pgbouncer}:5432/pgbouncer?sslmode=${MONITOR_PGBOUNCER_SSLMODE:-disable}"
+      # built by monitor.sh into secrets.env (600): no DSN with a password slot in a tracked file.
+      # Empty only when the postgres profile is off (compose interpolates every service).
+      PGBOUNCER_EXPORTER_CONNECTION_STRING: ${PGBOUNCER_EXPORTER_CONNECTION_STRING:-}
     ports: ["${MONITOR_AGENT_BIND:?}:${PGBOUNCER_EXPORTER_PORT:-9127}:9127"]
     networks: [vsw_monitor, db]
     mem_limit: 32m

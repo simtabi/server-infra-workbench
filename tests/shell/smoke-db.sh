@@ -5,6 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+gen() { openssl rand -hex "${1:-12}"; }  # repo rule: test secrets are generated per run, never hardcoded
 pass=0; ok() { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }; fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
 M="$PWD/src/shell/db/docker-db-server-manager.sh"
 export PRIVATE_IP=10.0.0.5 VPC_CIDR=10.0.0.0/20 DBM_CONFIG="$T/none.conf" STATE_DIR="$T/state" ENV_SECRETS_DIR="$T/secrets" BACKUP_DIR="$T/backups"
@@ -61,8 +62,9 @@ grep -q 'WORKBENCH_CONFIRM=prd' "$T/e" && ok "protected env needs the typed env 
   && ok "databases map to their environment (tenants too)" || fail "env_of_db"
 
 # --- notify + redaction -------------------------------------------------------------
-ALERT_COMMAND="printf '%s|%s|%s\n' >> $T/alerts" L notify backup fail "PGPASSWORD=hunter2 token abcdef0123456789abcdef0123456789ab failed"
-grep -q '^backup|fail|' "$T/alerts" && ! grep -q hunter2 "$T/alerts" && ! grep -q abcdef0123456789abcdef0123456789ab "$T/alerts" && ok "notify: hook called, secrets redacted" || { cat "$T/alerts"; fail "notify"; }
+NPW="$(gen 6)"; NTOK="$(gen 17)"
+ALERT_COMMAND="printf '%s|%s|%s\n' >> $T/alerts" L notify backup fail "PGPASSWORD=$NPW token $NTOK failed"
+grep -q '^backup|fail|' "$T/alerts" && ! grep -q "$NPW" "$T/alerts" && ! grep -q "$NTOK" "$T/alerts" && ok "notify: hook called, secrets redacted" || { cat "$T/alerts"; fail "notify"; }
 
 # --- off-site copy with a stub rclone (local dir as the bucket) -----------------------
 mkdir -p "$T/bin" "$T/bucket" "$T/b/20261031-031500" "$T/etc"
@@ -78,7 +80,7 @@ case "$1" in
 esac
 EOF
 chmod +x "$T/bin/rclone"
-printf 'OFFSITE_ACCESS_KEY=AKFAKE\nOFFSITE_SECRET_KEY=fake-secret-key\n' > "$T/etc/offsite.env"; chmod 600 "$T/etc/offsite.env"
+printf 'OFFSITE_ACCESS_KEY=%s\nOFFSITE_SECRET_KEY=%s\n' "$(gen 10)" "$(gen)" > "$T/etc/offsite.env"; chmod 600 "$T/etc/offsite.env"
 echo "-- dump complete" | gzip > "$T/b/20261031-031500/postgres.sql.gz"
 export PATH="$T/bin:$PATH" STUB_BUCKET="$T/bucket" OFFSITE=s3 OFFSITE_BUCKET=bk OFFSITE_PREFIX=db/h OFFSITE_CREDS_FILE="$T/etc/offsite.env" OFFSITE_KEY_FILE="$T/etc/backup.key" ENABLE_MYSQL=0 ENABLE_MARIADB=0
 L offsite_upload "$T/b/20261031-031500" > "$T/off.out" 2>&1 || { cat "$T/off.out"; fail "offsite upload"; }
@@ -139,7 +141,8 @@ METRICS_TEXTFILE_DIR="$T/missing" L write_metrics && [ ! -e "$T/missing" ] && ok
 [ "$(L pg_swap_major postgis/postgis:18-3.6 18 19)" = postgis/postgis:19-3.6 ] && [ "$(L pg_swap_major postgresql-18-pgvector 18 19)" = postgresql-19-pgvector ] \
   && [ "$(L pg_swap_major local/pg:18 18 19)" = local/pg:19 ] && [ "$(L pg_swap_major postgres:180 18 19)" = postgres:180 ] && [ "$(L pg_major postgres:17-alpine)" = 17 ] \
   && ok "pg_swap_major / pg_major: tags and package names, no partial-number matches" || fail "pg_swap_major"
-printf 'TARGET_HOST=db-x.example.com\nTARGET_USER=doadmin\nTARGET_PASSWORD="p$(touch %s/pwned)w"\nEVIL=$(touch %s/pwned2)\n' "$T" "$T" > "$T/tgt.env"; chmod 644 "$T/tgt.env"
+INJ='p$(touch '"$T"'/pwned)w'  # a command-injection probe, not a credential
+printf 'TARGET_HOST=db-x.example.com\nTARGET_USER=doadmin\nTARGET_PASSWORD="%s"\nEVIL=$(touch %s/pwned2)\n' "$INJ" "$T" > "$T/tgt.env"; chmod 644 "$T/tgt.env"
 L mm_load_target "$T/tgt.env" 2>"$T/e" && fail "644 target file accepted" || grep -q 'chmod 600' "$T/e" || fail "mm perms"
 chmod 600 "$T/tgt.env"; out="$(TGT="$T/tgt.env" L eval 'mm_load_target "$TGT"; echo "$TARGET_HOST $TARGET_PORT $TARGET_SSLMODE ${TARGET_PASSWORD:0:4}"' 2>&1 || true)"
 [ "$out" = 'db-x.example.com 25060 require p$(t' ] && [ ! -e "$T/pwned" ] && [ ! -e "$T/pwned2" ] \

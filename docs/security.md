@@ -58,6 +58,30 @@ fail2ban (Ploi installs it) protects SSH: `sudo fail2ban-client status sshd`.
 
 Find stray copies: `find /home/ploi -maxdepth 3 -name '.env*' -printf '%m %p\n'`.
 
+## Secrets in the repository: generated, never written down
+
+**Rule:** a password, token or key is generated when it is needed (`openssl rand -hex 24`,
+`random_bytes()`, `secrets.token_urlsafe()`) or read from a 600 file or `${VAR:?}`. It is never a
+literal, not even a test value. Docs show `<generated>` or `$(openssl rand -base64 24)`.
+
+**Why:** scanners (GitGuardian, gitleaks) cannot tell a test password from a real one, and neither can a
+reviewer at a glance. Every literal is an incident someone has to triage, and a "test" value has a way of
+being reused on a real box. Generated values also make tests prove the code handles *any* value, not one.
+
+| Check | Where |
+|---|---|
+| `tests/security/no-hardcoded-secrets.py` | tracked files: `KEY=literal`, `--password x`, `user:pass@` URLs, `mysql -p...`; never prints values |
+| `gitleaks` with [`.gitleaks.toml`](../.gitleaks.toml) | default rules + a generic-password rule, whole history (`--log-opts=--all`) |
+| `make secrets-check` | both of the above; part of `make ci` and the pre-push hook in `.pre-commit-config.yaml` |
+
+A public vendor default that the code *refuses* (for example `minioadmin`) may stay in a test with an
+inline `vsw-secrets: ignore` and a reason. Nothing else qualifies.
+
+Lesson (2026-10): GitGuardian flagged four "Generic Password" findings in commits `962d644` and `6f7b1d5`.
+All were test fixtures or an env-reference DSN, never real credentials, so no rotation was needed and
+history was not rewritten. The fixtures are now generated per run, the DSN is built by `monitor.sh`
+into `secrets.env`, and the old commits are listed in `.gitleaks.toml` so the history scan stays green.
+
 ## Logs
 
 | What | Where |

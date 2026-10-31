@@ -31,7 +31,7 @@ refuses "bad role" "--role must be" "$A" plan garage --role cache --bind 10.10.0
 refuses "rustfs needs --accept-experimental" "EXPERIMENTAL" "$A" plan rustfs --bind 10.10.0.5
 refuses "rustfs refused on prd" "protected env" env ADDON_ENV=prd "$A" plan rustfs --bind 10.10.0.5 --accept-experimental
 refuses "rustfs refuses rustfsadmin" "default credentials" env RUSTFS_ACCESS_KEY=rustfsadmin "$A" plan rustfs --bind 10.10.0.5 --accept-experimental
-refuses "rustfs refuses minioadmin" "default credentials" env RUSTFS_SECRET_KEY=minioadmin "$A" plan rustfs --bind 10.10.0.5 --accept-experimental
+refuses "rustfs refuses minioadmin" "default credentials" env RUSTFS_SECRET_KEY=minioadmin "$A" plan rustfs --bind 10.10.0.5 --accept-experimental  # vsw-secrets: ignore (public vendor default; proves it is refused)
 check "rustfs plan ok with the gate passed" "$A" plan rustfs --bind 10.10.0.5 --accept-experimental
 mkdir -p "$W/root/garage" && echo "ADDON_NAME=garage" > "$W/root/garage/stack.env"
 refuses "one object store per node" "already installed" "$A" plan seaweedfs --bind 10.10.0.5

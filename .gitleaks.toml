@@ -1,0 +1,52 @@
+# gitleaks config for vps-server-workbench. Run: make secrets-check
+# Repo rule: passwords and secrets are generated at runtime (openssl rand, random_bytes,
+# secrets.token_urlsafe) or are placeholders such as <generated>. Never a literal, not even in tests.
+# The built-in gitleaks rules stay on; the rule below adds the generic "password = literal" shape
+# GitGuardian reports as "Generic Password".
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "vsw-generic-password-literal"
+description = "Hardcoded password/secret literal (generate it at runtime or use a placeholder)"
+regex = '''(?i)\b[a-z0-9_]*(?:password|passwd|passphrase|secret|_token|api_key|secret_key|access_key)["']?[ \t]*(?:=|:|=>)[ \t]*["']?([A-Za-z0-9@#%^&*!+/_.~-]{8,})'''
+secretGroup = 1
+entropy = 2.5
+keywords = ["password", "passwd", "passphrase", "secret", "token", "api_key", "access_key"]
+
+  [[rules.allowlists]]
+  description = "placeholders, env references, generated values, masks"
+  regexTarget = "secret"
+  regexes = [
+    '''^(?:changeme|change-me|example|placeholder|redacted|generated|xxxx+)''',
+    '''^\*+$''',
+    '''(?i)^(?:hex|b64|base64|alnum)[0-9]*$''',
+  ]
+
+  [[rules.allowlists]]
+  description = "lines that reference a variable, a file, or generate the value"
+  regexTarget = "line"
+  regexes = [
+    '''\$\{?[A-Za-z_]''',
+    '''openssl rand|random_bytes|token_urlsafe|token_hex|secrets\.''',
+    '''vsw-secrets: ignore''',
+    '''/etc/passwd''',
+    '''=>\s*'[A-Z][A-Za-z]*(?: [A-Za-z/()]+){2,}''',
+  ]
+
+[allowlist]
+description = "the scanner's own patterns, vendored code, lock files; pre-refactor test fixtures in history"
+# History is never rewritten (no force push). These commits hold the old hardcoded TEST fixtures
+# (smoke-test tokens, fake provider tokens) that were replaced by generated values on branch p3-audit.
+# They were never real credentials. New commits get no such exemption.
+commits = [
+  "8a6fb608b3459bc26343f31a0691a916c3f9ed4c",
+  "a3c1e6a834dfa62a11caf599e2fe4c014ac51a03",
+]
+paths = [
+  '''^tests/security/no-hardcoded-secrets\.py$''',
+  '''^\.gitleaks\.toml$''',
+  '''(^|/)vendor/''',
+  '''composer\.lock$''',
+]

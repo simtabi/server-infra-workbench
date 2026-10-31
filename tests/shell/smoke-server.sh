@@ -5,6 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+gen() { openssl rand -hex "${1:-12}"; }  # repo rule: test secrets are generated per run, never hardcoded
 pass=0
 ok()   { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
@@ -69,7 +70,7 @@ if bash "$U" >/dev/null 2>&1; then fail "update without yes"; else ok "update: n
 
 # --- web diagnose -----------------------------------------------------------------------
 fresh; A="$T/root/home/ploi/app.example.com"; mkdir -p "$A/storage/logs" "$A/storage/app/public" "$A/bootstrap/cache" "$A/public"; touch "$A/artisan"
-printf 'APP_ENV=production\nAPP_DEBUG=true\nAPP_KEY=base64:test\nAPP_URL=https://app.example.com\nDB_CONNECTION=pgsql\nDB_HOST=203.0.113.9\nDB_PORT=6432\nDB_USERNAME=app\nDB_PASSWORD=not-a-real-password\n' > "$A/.env"; chmod 644 "$A/.env"
+printf 'APP_ENV=production\nAPP_DEBUG=true\nAPP_KEY=base64:test\nAPP_URL=https://app.example.com\nDB_CONNECTION=pgsql\nDB_HOST=203.0.113.9\nDB_PORT=6432\nDB_USERNAME=app\nDB_PASSWORD=%s\n' "$(gen)" > "$A/.env"; chmod 644 "$A/.env"
 if bash "$W" --site app.example.com >"$T/o" 2>&1; then fail "diagnose should fail"; fi
 grep -q 'FAIL  APP_DEBUG=true on prd' "$T/o" && grep -q 'not reachable' "$T/o" && grep -q 'not a private address' "$T/o" && grep -q 'fixable with --fix: env_mode debug_off storage_link' "$T/o" \
   && ok "diagnose: finds debug on prd, unreachable/public DB, fixables" || { cat "$T/o"; fail "diagnose findings"; }
@@ -87,7 +88,8 @@ bash "$W" --site 'bad site' >/dev/null 2>&1 && fail "bad site" || ok "diagnose: 
 # --- env init / check ------------------------------------------------------------------------
 E=src/shell/env/env.sh
 fresh; mkdir -p "$T/root/home/ploi/shop.example.com"; EF="$T/root/home/ploi/shop.example.com/.env"
-printf 'DB_CONNECTION=pgsql\nDB_HOST=10.0.0.5\nDB_PORT=6432\nDB_DATABASE=shop_prd\nDB_USERNAME=shop_prd\nDB_PASSWORD=p@ss w$rd#1\n' > "$T/db.env"
+PW="p@ss w\$rd#$(gen 3)"  # quoting probe: space, \$ and # around a generated part
+printf 'DB_CONNECTION=pgsql\nDB_HOST=10.0.0.5\nDB_PORT=6432\nDB_DATABASE=shop_prd\nDB_USERNAME=shop_prd\nDB_PASSWORD=%s\n' "$PW" > "$T/db.env"
 bash "$E" init --env prd --site shop.example.com --from "$T/db.env" --url https://shop.example.com --dry-run >"$T/o"
 [ ! -f "$EF" ] && grep -q 'generated: APP_KEY (value not shown)' "$T/o" && ok "env init --dry-run: plan, nothing written" || fail "env dry-run"
 if bash "$E" init --env prd --site shop.example.com --from "$T/db.env" >"$T/o" 2>&1; then fail "prd without https"; fi
@@ -95,7 +97,7 @@ grep -q 'APP_URL must be https' "$T/o" && [ ! -f "$EF" ] && ok "env init: refuse
 : > "$T/tty"; bash "$E" init --env prd --site shop.example.com --from "$T/db.env" --url https://shop.example.com --yes >/dev/null 2>&1 && fail "prd --yes"
 echo shop.example.com > "$T/tty"; bash "$E" init --env prd --site shop.example.com --from "$T/db.env" --url https://shop.example.com >"$T/o" 2>&1
 [ "$(stat -c %a "$EF" 2>/dev/null || stat -f %Lp "$EF")" = 600 ] && grep -q '^APP_DEBUG=false$' "$EF" && grep -q '^APP_ENV=production$' "$EF" \
-  && grep -qE '^APP_KEY=base64:.{44}$' "$EF" && grep -q "^DB_PASSWORD='p@ss w\$rd#1'$" "$EF" && ok "env init prd: typed confirm, 600, defaults, APP_KEY, quoting" || { cat "$T/o"; fail "env init write"; }
+  && grep -qE '^APP_KEY=base64:.{44}$' "$EF" && grep -qxF "DB_PASSWORD='$PW'" "$EF" && ok "env init prd: typed confirm, 600, defaults, APP_KEY, quoting" || { cat "$T/o"; fail "env init write"; }
 ! grep -q 'p@ss' "$T/o" && ! grep -q "$(sed -n 's/^APP_KEY=//p' "$EF")" "$T/o" && ok "env init: values never printed" || fail "env leaked"
 key="$(grep '^APP_KEY=' "$EF")"
 bash "$E" init --env prd --site shop.example.com --set APP_KEY=base64:other --set MAIL_MAILER=smtp >"$T/o" 2>&1
@@ -108,16 +110,16 @@ grep -q 'missing: REDIS_PORT' "$T/o" && grep -q 'extra (not in the reference): E
   && ok "env check: missing, extra and superuser user reported" || { cat "$T/o"; fail "env check findings"; }
 bash "$E" init --env prd --site shop.example.com --set 'bad-key=1' >/dev/null 2>&1 && fail "bad key" || ok "env init: rejects bad keys"
 # env init --addons: merges /opt/vsw-addons/*/laravel.env (600 only), --set wins, empty never clears, values hidden
-sed -i.x 's/^DB_USERNAME=.*/DB_USERNAME=shop_prd/; /^AWS_ACCESS_KEY_ID=/d' "$EF"; echo 'AWS_ACCESS_KEY_ID=keep-mine' >> "$EF"
+sed -i.x 's/^DB_USERNAME=.*/DB_USERNAME=shop_prd/; /^AWS_ACCESS_KEY_ID=/d' "$EF"; KEEP="$(gen)"; GOT="$(gen)"; GAR="$(gen)"; echo "AWS_ACCESS_KEY_ID=$KEEP" >> "$EF"
 AD="$T/root/opt/vsw-addons"; mkdir -p "$AD/gotenberg" "$AD/garage" "$AD/seaweedfs"
-(umask 077; printf 'GOTENBERG_URL=http://127.0.0.1:3000\nGOTENBERG_PASSWORD=GotSecret42\n' > "$AD/gotenberg/laravel.env"
- printf '# garage\nFILESYSTEM_DISK=s3\nAWS_ACCESS_KEY_ID=\nAWS_SECRET_ACCESS_KEY=GarSecret99\nAWS_BUCKET=app\n' > "$AD/garage/laravel.env")
+(umask 077; printf 'GOTENBERG_URL=http://127.0.0.1:3000\nGOTENBERG_PASSWORD=%s\n' "$GOT" > "$AD/gotenberg/laravel.env"
+ printf '# garage\nFILESYSTEM_DISK=s3\nAWS_ACCESS_KEY_ID=\nAWS_SECRET_ACCESS_KEY=%s\nAWS_BUCKET=app\n' "$GAR" > "$AD/garage/laravel.env")
 printf 'AWS_REGION=leaky\n' > "$AD/seaweedfs/laravel.env"; chmod 644 "$AD/seaweedfs/laravel.env"
 echo shop.example.com > "$T/tty"; bash "$E" init --env prd --site shop.example.com --addons --set AWS_BUCKET=override >"$T/o" 2>&1 || true
-grep -q '^GOTENBERG_PASSWORD=GotSecret42$' "$EF" && grep -q '^AWS_SECRET_ACCESS_KEY=GarSecret99$' "$EF" && grep -q '^AWS_ACCESS_KEY_ID=keep-mine$' "$EF" \
+grep -qx "GOTENBERG_PASSWORD=$GOT" "$EF" && grep -qx "AWS_SECRET_ACCESS_KEY=$GAR" "$EF" && grep -qx "AWS_ACCESS_KEY_ID=$KEEP" "$EF" \
   && grep -q '^AWS_BUCKET=override$' "$EF" && ! grep -q 'leaky' "$EF" && grep -q 'add-ons: garage gotenberg' "$T/o" && grep -q 'seaweedfs/laravel.env is mode 644' "$T/o" \
   && [ "$(stat -c %a "$EF" 2>/dev/null || stat -f %Lp "$EF")" = 600 ] && ok "env init --addons: merged (600 files only), --set wins, empty keeps yours, 600" || { cat "$T/o"; fail "env addons"; }
-! grep -qE 'GotSecret42|GarSecret99' "$T/o" && ok "env init --addons: add-on values never printed" || fail "env addons leaked"
+! grep -qE "$GOT|$GAR" "$T/o" && ok "env init --addons: add-on values never printed" || fail "env addons leaked"
 
 # --- server init ------------------------------------------------------------------------------
 I=src/shell/server/init.sh
@@ -155,7 +157,7 @@ bash "$I" --role db --swap 3X >/dev/null 2>&1 && fail "bad swap" || ok "init: va
 # --- server inventory -------------------------------------------------------------------------
 V=src/shell/server/inventory.sh
 initroot; mkdir -p "$T/root/home/ploi/shop.example.com"; touch "$T/root/home/ploi/shop.example.com/artisan"
-printf 'APP_KEY=base64:secretvalue\nDB_PASSWORD=not-a-real-password\n' > "$T/root/home/ploi/shop.example.com/.env"
+printf 'APP_KEY=base64:%s\nDB_PASSWORD=%s\n' "$(gen)" "$(gen)" > "$T/root/home/ploi/shop.example.com/.env"
 stub docker 'case "$1" in ps) echo "pg|postgres:18|Up 3 days (healthy)";; --version) echo "Docker version 28.5.1, build x";; compose) echo "Docker Compose version v2.40.0";; esac'
 stub ss "printf 'LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 200 10.0.0.5:5432 0.0.0.0:*\n'"
 bash "$V" --json >"$T/o"

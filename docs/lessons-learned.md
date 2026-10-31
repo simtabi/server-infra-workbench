@@ -98,4 +98,5 @@ documentation IP ranges.
 | Client data doesn't belong in a shared repo | client notes live in gitignored `local/<client>/`; `make client-check` and a secret scan run before every push |
 | Monitoring can take the database down | Prometheus + Grafana need about 700 MB; on a 2 GB DB droplet that is the OOM killer's next target | `monitor plan` gates RAM (exit 3) and the profiles default to Beszel + Kuma ([ADR 0012](adr/0012-monitoring-stack.md)) |
 | Integration suites that share Docker interfere | two suites running at once made a healthy Postgres look unhealthy | `make it` runs suites one after another; each suite uses its own ports, subnet and project name |
+| Test passwords are still passwords to a scanner | GitGuardian raised 4 incidents for test fixtures | every secret is generated at runtime; `make secrets-check` (scanner + gitleaks) runs in `make ci` and pre-push |
 | Pin versions, upgrade on purpose | images and packages are pinned; `upgrade --dry-run` shows the diff first |
