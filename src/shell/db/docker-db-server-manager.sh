@@ -268,6 +268,7 @@ Backups and recovery (docs/backups-and-recovery.md)
   pitr setup | backup [full|diff|incr] | status | restore --target 'YYYY-MM-DD HH:MM:SS+00'
   binlog-ship                 copy closed MySQL/MariaDB binlogs (and off-site, encrypted)
   cron-install | cron-remove  backup, doctor --alert, restore-test, PITR, binlog-ship, purge-trash jobs
+  gfs-keep "daily=7 weekly=4"  read backup names (YYYYmmdd-HHMMSS) on stdin, print the ones RETENTION keeps (read-only)
 
 Checks
   status | verify | doctor [--alert] | logs [service] | env [engine]
@@ -281,7 +282,7 @@ Monitoring, TLS and migrations (docs/tools/monitor.md, docs/recipes/)
 
 Other
   uninstall [--purge] [--force-prod]   --purge is DESTRUCTIVE (type PURGE; --force-prod with a protected env)
-  help | --version
+  help | --version            global: --yes/-y, --non-interactive, --config FILE, --quiet/-q (no progress output)
 
 Engines: ENABLE_POSTGRES=$ENABLE_POSTGRES ENABLE_PGBOUNCER=$ENABLE_PGBOUNCER ENABLE_MYSQL=$ENABLE_MYSQL ENABLE_MARIADB=$ENABLE_MARIADB ENABLE_ADMINER=$ENABLE_ADMINER
 Ports (private IP only): $PG_PORT Postgres, $PGBOUNCER_PORT PgBouncer, $MYSQL_PORT MySQL, $MARIADB_PORT MariaDB

@@ -161,6 +161,8 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `ALERT_WEBHOOK` | (empty) | https URL, JSON POST {event,status,host,message} |
 | `HEALTHCHECK_URL` | (empty) | check-in URL (healthchecks.io style: /fail on failure) |
 | `ALERT_COMMAND` | (empty) | local hook: <cmd> <event> <ok\|fail> <message> |
+| `ALERT_ON_OK` | `0` | 1 = also send successes to ALERT_EMAIL/ALERT_WEBHOOK (failures always go) |
+| `DO_TOKEN_FILE` | `/root/.config/digitalocean-token` | chmod 600; lets `upgrade` take a droplet snapshot (or DIGITALOCEAN_TOKEN) |
 | `BACKUP_MAX_AGE_H` | `26` |  |
 | `RESTORE_TEST_MAX_AGE_D` | `8` |  |
 | `DOCTOR_DISK_WARN_PCT` | `80` | doctor warns at this disk use on DB_DIR |

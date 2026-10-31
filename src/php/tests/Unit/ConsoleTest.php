@@ -119,7 +119,7 @@ final class ConsoleTest extends TestCase
 
     public function test_bad_input_is_usage_error_before_any_request(): void
     {
-        foreach ([['do', 'droplet', 'abc'], ['do', 'droplets', '--bogus'], ['cf', 'dns', 'list'], ['nope'], ['gcp', 'snapshot', 'Bad_Zone', 'disk'], ['do', 'snapshot', '1', '--name']] as $argv) {
+        foreach ([['do', 'droplet', 'abc'], ['do', 'droplets', '--bogus'], ['cf', 'dns', 'list'], ['nope'], ['gcp', 'snapshot', 'Bad_Zone', 'disk'], ['do', 'snapshot', '1', '--name'], ['do', 'alerts', 'standard', '--email', 'a@example.com', '--droplet', '1', '--droplet', '2', '--dry-run']] as $argv) {
             self::assertSame(Application::USAGE, $this->app()->run($argv), implode(' ', $argv));
         }
         self::assertSame([], $this->http->requests);

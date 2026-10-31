@@ -34,14 +34,19 @@ list() {
   echo "platform APIs (PHP core, src/php):"
   printf '  %-45s %s\n' "do droplets|snapshot|snapshots" "DigitalOcean" "cf zones|dns list|upsert|delete" "Cloudflare" \
     "do firewalls|firewall-apply|uptime|droplet-create" "DigitalOcean (writes are plan-then-confirm)" \
+    "do resize|alerts" "DigitalOcean resize, monitoring alert policies" \
     "ploi servers|sites|deploy" "Ploi" "ploi site-create|deploy-script|daemons" "Ploi" \
     "gcp instances|snapshots|firewalls" "Google Compute Engine" \
     "keys [providers|account|server|fingerprint]" "SSH keys (DO, Vultr, Hetzner, Linode, Scaleway; servers)" \
     "health <url>..." "health endpoint check" "credentials" "credential check"
+  echo "shortcuts (shell, src/shell):"
+  printf '  %-37s %s\n' "env init|check --env E --site S" "Laravel .env: create/check per env (src/shell/env)" \
+    "addon list|plan|install|doctor <name>" "add-ons on this node (src/shell/addons)" \
+    "monitor list|plan|install|doctor" "monitoring stacks on this node (src/shell/monitor)" \
+    "status [--host H] [--json]" "one-screen node health (src/shell/server/status.sh)"
   echo "python (src/python):"
   printf '  %-37s %s\n' "py ping [host port] [--env FILE]" "TCP reachability probe" \
     "plans [--regions ..] [--env-file F]" "droplet plans per region available through Ploi" \
-    "env init|check --env E --site S" "Laravel .env: create/check per env (src/shell/env)" \
     "configure [--profile P --client C]" "setup wizard -> local/<client>/" \
     "profile list|show|diff" "setup profiles (config/profiles)"
 }

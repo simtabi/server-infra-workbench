@@ -21,7 +21,7 @@
 #    --expect-ip IP      private IP that must be on the host (required; "skip" to disable)
 #    --config FILE       local config to install as /etc/docker-db-server-manager.conf
 #    --script FILE       manager to upload (default: next to this script)
-#    --no-upload         use the copy already in /root
+#    --no-upload         use the manager already in /root (--config is still uploaded)
 #    --dry-run           print the remote commands, connect to nothing
 #
 #    --snapshot-with W   auto (default) | doctl | workbench | server | none
@@ -50,7 +50,7 @@ WORKBENCH="${WORKBENCH:-$HERE/../../../bin/workbench}"
 die() { printf '!! %s\n' "$*" >&2; exit 1; }
 # usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
 # title box, so --help printed one line; awk counts the rules instead.
-usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); print}' "$0"; }
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,""); print}' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -79,10 +79,26 @@ fi
 
 M=/root/docker-db-server-manager.sh
 C=/etc/docker-db-server-manager.conf
-case ",$CMDS," in *upgrade*|*apply*) UPG=1 ;; *) UPG=0 ;; esac
-if [ "$UPLOAD" = 1 ] && [ "$DRY" = 0 ]; then
-  [ -f "$SCRIPT" ] || die "manager not found: $SCRIPT"
-  scp -q "$SCRIPT" "$HOST:docker-db-server-manager.sh"
+# Only a command whose FIRST word is upgrade/apply gets the snapshot offer and flag: a substring match
+# also hit env-apply and pg-major-upgrade (which rejects --snapshot-taken), and sed tagged only the first.
+is_upgrade() { local w; read -r w _ <<<"$1"; [ "$w" = upgrade ] || [ "$w" = apply ]; }
+UPG=0; IFS=',' read -r -a parts <<< "$CMDS"   # UPG=1: an upgrade/apply that has no snapshot decision yet
+for c in "${parts[@]}"; do
+  is_upgrade "$c" && ! grep -qE -- '--(dry-run|no-snapshot|snapshot-taken|snapshot)( |$)' <<<"$c" && UPG=1
+done
+add_flag() { # add_flag FLAG: append FLAG to every upgrade/apply command
+  local out="" c sep=""
+  for c in "${parts[@]}"; do c="$(echo "$c" | xargs)"; is_upgrade "$c" && c+=" $1"; out+="$sep$c"; sep=", "; done
+  CMDS="$out"; IFS=',' read -r -a parts <<< "$CMDS"
+}
+[ -z "$CONFIG" ] || [ -f "$CONFIG" ] || die "config not found: $CONFIG"
+if [ "$DRY" = 0 ]; then
+  if [ "$UPLOAD" = 1 ]; then
+    [ -f "$SCRIPT" ] || die "manager not found: $SCRIPT"
+    scp -q "$SCRIPT" "$HOST:docker-db-server-manager.sh"
+  fi
+  # the config goes up whenever it is given, also with --no-upload: installing the remote copy without
+  # uploading it would silently install whatever stale file an earlier run left in the home directory
   [ -z "$CONFIG" ] || scp -q "$CONFIG" "$HOST:docker-db-server-manager.conf"
 fi
 
@@ -93,10 +109,11 @@ fi
 echo \"OK: running on \$(hostname)\""
 [ "$UPLOAD" = 0 ] || remote+="
 if sudo test -f $M; then sudo cp -p $M $M.prev; fi
-if sudo test -f $C; then sudo cp -p $C $C.prev; fi
 sudo install -m 755 ~/docker-db-server-manager.sh $M"
 [ -z "$CONFIG" ] || remote+="
-sudo install -m 600 ~/docker-db-server-manager.conf /etc/docker-db-server-manager.conf"
+if sudo test -f $C; then sudo cp -p $C $C.prev; fi
+sudo install -m 600 ~/docker-db-server-manager.conf $C
+rm -f ~/docker-db-server-manager.conf"
 # optional snapshot from the workstation, before anything changes (fallback chain: see --help)
 have_doctl()     { command -v doctl >/dev/null 2>&1 && doctl account get >/dev/null 2>&1; }
 have_workbench() { [ -x "$WORKBENCH" ] && "$WORKBENCH" digitalocean account --json >/dev/null 2>&1; }
@@ -109,7 +126,7 @@ pick_snapshot_tool() {
     auto) if have_doctl; then echo doctl; elif have_workbench; then echo workbench; else echo server; fi ;;
   esac
 }
-if [ "$UPG" = 1 ] && [ "$DRY" = 0 ] && ! grep -qE -- '--(dry-run|no-snapshot|snapshot-taken|snapshot)' <<<"$CMDS"; then
+if [ "$UPG" = 1 ] && [ "$DRY" = 0 ]; then
   tool="$(pick_snapshot_tool)"
   case "$tool" in
     doctl|workbench)
@@ -124,7 +141,7 @@ if [ "$UPG" = 1 ] && [ "$DRY" = 0 ] && ! grep -qE -- '--(dry-run|no-snapshot|sna
                    "$WORKBENCH" digitalocean snapshot "$did" --name "$name" --wait --yes || die "snapshot failed; nothing changed"
                  fi
                  echo "snapshot taken with $tool: $name"
-                 CMDS="$(sed -E 's/(upgrade|apply)/\1 --snapshot-taken/' <<<"$CMDS")" ;;
+                 add_flag --snapshot-taken ;;
           n|no) echo "no snapshot from here; the server will ask" ;;
           *) die "answer y or n" ;;
         esac
@@ -135,10 +152,10 @@ if [ "$UPG" = 1 ] && [ "$DRY" = 0 ] && ! grep -qE -- '--(dry-run|no-snapshot|sna
     none)
       ans=""; [ -t 0 ] && read -r -p "Upgrade WITHOUT a snapshot (rollback = saved files + verified backup)? Type 'skip': " ans
       [ "$ans" = skip ] || die "not confirmed; nothing changed (an unattended run needs an explicit --no-snapshot in the command)"
-      CMDS="$(sed -E 's/(upgrade|apply)/\1 --no-snapshot/' <<<"$CMDS")" ;;
+      add_flag --no-snapshot ;;
   esac
 fi
-IFS=',' read -r -a parts <<< "$CMDS"; remote_cmds=""
+remote_cmds=""
 for c in "${parts[@]}"; do
   c="$(echo "$c" | xargs)"; [ -n "$c" ] || continue
   remote_cmds+="

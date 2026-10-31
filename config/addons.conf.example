@@ -30,3 +30,6 @@
 
 # RustFS is experimental: also needs --accept-experimental (or ACCEPT_EXPERIMENTAL=1) and a non-protected env
 # ACCEPT_EXPERIMENTAL=0
+
+# WAIT_TIMEOUT=180                      # seconds for `docker compose up --wait`
+# ADDON_STACKS=                         # templates dir (default: stacks/addons in the repo)

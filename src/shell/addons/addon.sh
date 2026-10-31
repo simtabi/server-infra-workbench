@@ -4,7 +4,7 @@
 #
 #   addon.sh list                                    add-ons, kind, default role, pinned image, installed?
 #   addon.sh plan    <name> [--role R] [--bind IP]   what install would do (writes nothing, shows no secrets)
-#   addon.sh install <name> [--role R] [--bind IP] [--data-dir D] [--yes]
+#   addon.sh install <name> [--role R] [--bind IP] [--data-dir D] [--accept-experimental] [--yes]
 #                                                    plan, confirm, creds (600), start, bucket + app key, health
 #   addon.sh status  [name]                          containers and health
 #   addon.sh doctor  [name]                          binding, pin, perms, health, auth, RAM, disk (exit 1 on a problem)
@@ -12,6 +12,7 @@
 #   addon.sh remove  <name> [--delete-data] [--yes]  stop and remove; data kept unless --delete-data (typed name)
 #   addon.sh garage-node-id                          this node's Garage id@addr, for GARAGE_PEERS on the next node (not a secret)
 #
+# Flags: --force (skip the RAM/disk gate), --accept-experimental (RustFS; never on a protected env).
 # Roles: web = same node as PHP, binds 127.0.0.1 | db, dedicated = binds the private (VPC) IP.
 # Config: /etc/vsw-addons.conf (or ADDON_CONF=FILE); keys in config/addons.conf.example.
 # Every change is appended to the audit log (/var/log/vsw-addons.log). Secrets never reach stdout or the log.
@@ -478,7 +479,7 @@ doctor_one() {
       local gid nodes; gid="$(g node id -q 2>/dev/null | head -1 | cut -c1-16)"
       g layout show 2>/dev/null | sed '/STAGED ROLE CHANGES/,$d' | grep "^${gid:-none} " >/dev/null && ok "layout applied (this node has a role)" || bad "layout not applied for this node (re-run install; with replication > 1 it applies when the last node joins)"
       nodes="$(g status 2>/dev/null | sed -n '/HEALTHY NODES/,/^$/p' | grep -cE '^[0-9a-f]{16} ' || true)"
-      [ "${nodes:-0}" -ge "${GARAGE_REPLICATION:-1}" ] && ok "healthy nodes: $nodes (replication ${GARAGE_REPLICATION:-1})" || bad "healthy nodes: ${nodes:-0}, replication ${GARAGE_REPLICATION:-1} needs at least that many" 
+      [ "${nodes:-0}" -ge "${GARAGE_REPLICATION:-1}" ] && ok "healthy nodes: $nodes (replication ${GARAGE_REPLICATION:-1})" || bad "healthy nodes: ${nodes:-0}, replication ${GARAGE_REPLICATION:-1} needs at least that many"
       if g bucket info "$STORAGE_BUCKET" 2>/dev/null | grep "vsw-app-$STORAGE_BUCKET" >/dev/null; then ok "bucket $STORAGE_BUCKET has key vsw-app-$STORAGE_BUCKET"
       else bad "bucket $STORAGE_BUCKET or its app key is missing (re-run install)"; fi ;;
     seaweedfs|rustfs)

@@ -97,6 +97,7 @@ compose-check: ## docker compose config for stacks/caddy, stacks/addons, stacks/
 links: ## check relative links and #anchors in all Markdown
 	python3 tests/docs/check-links.py .
 	python3 tests/docs/gen-config-keys.py --check
+	python3 tests/docs/check-config-examples.py .
 
 docs-commands: php-install ## every documented command/subcommand/--flag exists (vs --help); every Markdown table row matches its header
 	python3 tests/docs/check-commands.py .

@@ -14,8 +14,9 @@ reverse. Number them in order; never rewrite an accepted record, supersede it wi
 | [0005](0005-credentials-outside-the-repo.md) | Credentials come from the environment or a private file outside the repo | Accepted |
 | [0006](0006-all-code-under-src-no-shims.md) | All code under src/, no compatibility shims | Accepted |
 | [0007](0007-object-storage-selection.md) | Object storage: DO Spaces by default, Garage when self-hosted | Accepted |
-| [0008](0008-database-topology.md) | Database topology: one hardened server now, managed prd before launch | Accepted |
+| [0008](0008-database-topology.md) | Database topology: one hardened server now, managed prd before launch | Accepted, amended by 0013 |
 | [0009](0009-mongodb-off-by-default.md) | MongoDB is not managed by the DB manager | Accepted |
 | [0010](0010-least-privilege-database-roles.md) | Least-privilege database roles (the 1.4.0 role split) | Accepted |
 | [0011](0011-cross-region-connectivity.md) | Cross-region connectivity: same region first, then peering, then WireGuard | Accepted |
 | [0012](0012-monitoring-stack.md) | Monitoring: configurable self-hosted stacks, loopback UIs, textfile metrics | Accepted |
+| [0013](0013-dev-on-2gb-postgres-only.md) | Development and staging stay on 2 GB droplets with Postgres only | Accepted |

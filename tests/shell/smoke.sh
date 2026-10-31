@@ -144,6 +144,16 @@ STUB_DOCTL=1 rr -- upgrade --no-snapshot
 ! grep -q '^doctl' "$L" && grep -q 'upgrade --no-snapshot' "$L" && ok "an explicit snapshot flag skips the chain" || fail "explicit flag"
 STUB_DOCTL=1 rr -- verify
 ! grep -q '^doctl' "$L" && ok "no snapshot offer for non-upgrade commands" || fail "non-upgrade snapshot"
+STUB_DOCTL=1 rr -- env-apply, pg-major-upgrade --to 19 --dry-run
+! grep -q '^doctl' "$L" && ! grep -q 'snapshot-taken' "$L" \
+  && ok "env-apply / pg-major-upgrade are not mistaken for upgrade" || fail "substring upgrade match: $(cat "$L")"
+STUB_DOCTL=1 rr -- env-apply, upgrade
+grep -q 'env-apply$' "$L" && grep -q 'upgrade --snapshot-taken' "$L" \
+  && ok "the snapshot flag goes to the upgrade command, not the first match" || fail "flag placement: $(cat "$L")"
+printf '#!/usr/bin/env bash\necho "scp $*" >> "%s"\n' "$L" > "$SB/scp"; chmod +x "$SB/scp"
+: > "$T/c.conf"; rr --no-upload --config "$T/c.conf" -- verify
+grep -q "scp -q $T/c.conf h:docker-db-server-manager.conf" "$L" && ! grep -q 'docker-db-server-manager.sh h:' "$L" \
+  && ok "--no-upload still uploads --config (no stale config installed)" || fail "--no-upload --config: $(cat "$L")"
 
 # --- deploy script: no Ploi placeholder collisions ---------------------------
 if grep -nE '\$\{(BRANCH|SITE|RELEASE|DOMAIN|REPOSITORY|REPOSITORY_NAME|PROJECT_ROOT|TIME)\}' "$D"; then

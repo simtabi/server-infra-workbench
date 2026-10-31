@@ -3,7 +3,7 @@
 # can be overridden here (e.g. GRAFANA_IMAGE=grafana/grafana:13.3.0). `bin/workbench configure` writes a
 # filled-in copy per node to local/<client>/monitor-<role>.conf. No secrets here: monitor.sh generates them
 # into /opt/vsw-monitor/<unit>/secrets.env (600) and reads webhook/SMTP secrets from the *_FILE paths below.
-# Guide: docs/tools/monitor.md (WHY each default), ADR docs/decisions/0012-monitoring-stack.md.
+# Guide: docs/tools/monitor.md (WHY each default), ADR docs/adr/0012-monitoring-stack.md.
 
 # ---- what runs here --------------------------------------------------------------------
 # MONITOR_STACKS=beszel,kuma            # any of beszel,kuma,netdata,prometheus  (or none)
@@ -34,6 +34,11 @@
 # MONITOR_PG_PASSWORD_FILE=/etc/vsw-monitor/pg-monitor.pass
 # MONITOR_TEXTFILE_DIR=/var/lib/vsw-monitor/textfile   # node-exporter reads the manager's backup/TLS metrics here
 # MONITOR_DB_NODE=auto                  # auto = the DB manager runs here (drives the RAM gate)
+# MONITOR_PG_USER=vsw_monitor           # the pg_monitor login `monitor-user` creates (password only in the file above)
+# MONITOR_PG_HOST=postgres              # compose service names on MONITOR_DB_NETWORK
+# MONITOR_PGBOUNCER_HOST=pgbouncer
+# MONITOR_PG_SSLMODE=disable            # require / verify-full once the manager runs TLS_MODE=require|verify-full
+# MONITOR_PGBOUNCER_SSLMODE=disable
 
 # ---- RAM gate ------------------------------------------------------------------------------
 # heavy stacks (netdata, prometheus) are refused next to a database on nodes with <= 2 GB RAM
@@ -49,3 +54,5 @@
 
 # ---- misc ----------------------------------------------------------------------------------
 # WAIT_TIMEOUT=240                      # seconds for `docker compose up --wait`
+# MONITOR_STACKS_DIR=                   # templates dir (default: stacks/monitor next to monitor.sh)
+# CADDY_IMAGE=caddy:2.11               # only for MONITOR_PUBLIC=1 (the basic-auth front)

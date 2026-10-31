@@ -1,6 +1,6 @@
 # 0008. Database topology: one hardened server now, managed prd before launch
 
-- Status: Accepted
+- Status: Accepted, sizing amended by [0013](0013-dev-on-2gb-postgres-only.md)
 - Date: 2026-10-31
 
 ## Context

@@ -44,7 +44,7 @@ Requires PHP 8.4+ and `composer install --working-dir=src/php` (the dispatcher s
 | `workbench do snapshot <droplet-id> [--name N] [--wait] [--timeout S]` | **Write.** Snapshot a droplet (default name `workbench-<id>-<UTC time>`) |
 | `workbench do snapshot-delete <snapshot-id>` | **Destructive.** Needs `--force` |
 | `workbench do account` | Check the token (prints the account record) |
-| `workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I] [--vpc UUID] [--tag T] [--backups] [--user-data FILE]` | **Write.** Create a droplet; a no-op when one with that name exists |
+| `workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I] [--vpc UUID] [--tag T] [--backups] [--user-data FILE]` | **Write.** Create a droplet; a no-op when one with that name exists. `--image` defaults to `ubuntu-24-04-x64`; pass `--image ubuntu-26-04-x64` to match servers already on 26.04 |
 | `workbench do resize <id> --size S [--disk] [--timeout S]` | **Write, downtime.** Shut down (falls back to power off), resize, power back on (always attempted, even when the resize fails). CPU/RAM-only by default so you can size back down; `--disk` grows the disk permanently and needs `--force`. Snapshot first |
 | `workbench do alerts [list]` | Monitoring alert policies |
 | `workbench do alerts standard --email a@x (--droplet ID[,ID] \| --tag T)` | **Write.** CPU > 85% for 10m, memory > 90% for 10m, disk > 85% for 5m. Creates only the missing ones (matched by description), so it is safe to rerun |
