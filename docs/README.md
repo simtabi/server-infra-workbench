@@ -24,6 +24,7 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 |---|---|
 | [DB server manager](tools/db-server-manager.md) | `src/shell/db/docker-db-server-manager.sh` and `remote-run.sh`: build, check, back up, upgrade the database droplet |
 | [Deploy script](tools/deploy-script.md) | `src/shell/deploy/ploi-deploy.sh`: zero-downtime Ploi deploys, presets, hooks, first run |
+| [Server tools](tools/server.md) | `src/shell/server/*` and `web/diagnose.sh`: harden, update with a reboot window, diagnose a Laravel site (plan, confirm, audit) |
 | [Add-ons](tools/addons.md) | `src/shell/addons/addon.sh` + `stacks/addons`: Gotenberg and one object store (Garage, SeaweedFS, RustFS) per node |
 | [Caddy stack](tools/caddy-stack.md) | `stacks/caddy`: the app in containers behind Caddy with automatic HTTPS |
 | [Command line](tools/cli.md) | `bin/workbench`: one entry point, platform commands, flags, exit codes |

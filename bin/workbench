@@ -3,6 +3,7 @@
 #
 #   bin/workbench list                       every tool and where it lives
 #   bin/workbench <area> <tool> [args...]    run src/shell/<area>/<tool>.sh    e.g. bin/workbench db remote-run --help
+#                                            server harden|update, web diagnose: plan first, --yes to apply
 #   bin/workbench do|cf|ploi|gcp ...         platform APIs (PHP core)      e.g. bin/workbench do snapshot 123 --dry-run
 #   bin/workbench keys [...]                 SSH keys: provider accounts + servers (menu without args)
 #   bin/workbench health <url>...            check health endpoints (status, body, latency)
@@ -18,12 +19,12 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)"
 
-usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; }
 die() { echo "workbench: $*" >&2; exit "${CODE:-2}"; }
 
 list() {
   echo "shell tools (bin/workbench <area> <tool>):"
-  find "$ROOT/src/shell" -mindepth 2 -maxdepth 2 -name '*.sh' | sort | while read -r f; do
+  find "$ROOT/src/shell" -mindepth 2 -maxdepth 2 -name '*.sh' -not -path '*/lib/*' | sort | while read -r f; do
     a="$(basename "$(dirname "$f")")"; t="$(basename "$f" .sh)"; printf '  %-8s %-28s src/shell/%s/%s.sh\n' "$a" "$t" "$a" "$t"
   done
   echo "platform APIs (PHP core, src/php):"
@@ -61,7 +62,7 @@ case "${1:-}" in
   py|python) shift; command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"
        PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vps_server_workbench "$@" ;;
   *) area="$1"; tool="${2:-}"
-     [[ "$area" =~ ^[a-z0-9-]+$ && "$tool" =~ ^[a-z0-9-]+$ ]] || die "usage: bin/workbench <area> <tool> [args] (see: bin/workbench list)"
+     [[ "$area" =~ ^[a-z0-9-]+$ && "$tool" =~ ^[a-z0-9-]+$ && "$area" != lib ]] || die "usage: bin/workbench <area> <tool> [args] (see: bin/workbench list)"
      f="$ROOT/src/shell/$area/$tool.sh"
      [ -f "$f" ] || f="$ROOT/src/shell/$area/$area-$tool.sh"   # e.g. server init -> server/server-init.sh
      [ -f "$f" ] || die "no tool src/shell/$area/$tool.sh (see: bin/workbench list)"

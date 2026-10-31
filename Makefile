@@ -76,6 +76,7 @@ test: ## offline smoke tests (no servers touched)
 	bash tests/shell/smoke.sh
 	bash tests/shell/smoke-db.sh
 	bash tests/shell/smoke-addons.sh
+	bash tests/shell/smoke-server.sh
 
 it: ## Docker integration tests: 1.3 -> 1.4 upgrade, privileges, envs, backups; add-ons (throwaway containers, ~6 min)
 	bash tests/shell/upgrade-it.sh
