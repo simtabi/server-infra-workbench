@@ -53,15 +53,16 @@ Ubuntu 24.04: real chown, `ssh-keygen`, `sshd -T`, a custom `AuthorizedKeysFile 
 
 ## Migration from `vps-ssh-key-manager` (vpskeys)
 
-The standalone `vps-ssh-key-manager` folder is superseded by this repo. It is left in place (not deleted);
-an archive of it is kept at `packages/_archive/vps-ssh-key-manager-2026-10-31.tar.gz`.
+The standalone `vps-ssh-key-manager` folder was superseded by this repo and retired (deleted) on 2026-10-31.
+It had no `.env`, so there were no tokens to move. An archive is kept at
+`packages/_archive/vps-ssh-key-manager-2026-10-31.tar.gz` (outside this repo).
 
 | Old | New | Notes |
 |---|---|---|
 | `vpskeys.py` account keys | `workbench keys account list/add/rename/remove` | Same providers; `--json`, `--dry-run`; remove needs `--force` |
 | `vpskeys.py` server keys (`serverkeys.py`) | `workbench keys server list/add/remove/fix-perms` | Adds read-back + fresh-login test with automatic restore |
 | `providers.py` + `config.json` (`extra_providers`) | built-in providers + `keys.json` | **Same schema**: copy `config.json` to `~/.config/vps-server-workbench/keys.json`, or point `$VPSKEYS_CONFIG` / `$VSW_KEYS_CONFIG` at it |
-| `.env` (`DIGITALOCEAN_TOKEN`, `VULTR_API_KEY`, `HCLOUD_TOKEN`, `LINODE_TOKEN`, `SCW_SECRET_KEY`, `SCW_PROJECT_ID`) | same names, in the environment or `~/.config/vps-server-workbench/credentials` (600) | Template: [`config/credentials.env.example`](../../config/credentials.env.example). Move the values yourself; no tool copies them |
+| `.env` (`DIGITALOCEAN_TOKEN`, `VULTR_API_KEY`, `HCLOUD_TOKEN`, `LINODE_TOKEN`, `SCW_SECRET_KEY`, `SCW_PROJECT_ID`) | same names, in the environment or `~/.config/vps-server-workbench/credentials` (600) | Template: [`config/credentials.env.example`](../../config/credentials.env.example). Put values there yourself; no tool copies them |
 | `fixkeys.sh` (menu only) | `src/shell/ssh/fixkeys.sh` 2.0 | Subcommands, `--user`, `--file`, `--root`, `FIXKEYS_TTY`, exact match, `sshd -T` + `AuthorizedKeysFile`, lock status, restore, ssh-keygen validation, audit |
 | Python 3.8 + `requests` | PHP 8.4 core (no Python needed for keys) | |
 
@@ -73,7 +74,7 @@ an archive of it is kept at `packages/_archive/vps-ssh-key-manager-2026-10-31.ta
 - [x] `fixkeys.sh` in the repo with the old menu and everything above; tests offline and in a container
 - [x] Credentials: same variable names, env or 600 file, never logged
 - [x] Docs: this page, the [lockout recipe](../recipes/recover-ssh-lockout.md), CLI reference
-- [ ] **You:** move your token values from the old folder's `.env` into `~/.config/vps-server-workbench/credentials`
-      (`install -m 600 /dev/null ~/.config/vps-server-workbench/credentials`, then edit), and copy `config.json`
-      if it has extra providers
-- [ ] **You:** once `workbench keys providers` shows your providers, retire the old folder (archive already made)
+- [x] **You:** move token values from the old folder's `.env` into `~/.config/vps-server-workbench/credentials`:
+      done, nothing to move (the old folder had no `.env`). New tokens go in that 600 file
+      (`install -m 600 /dev/null ~/.config/vps-server-workbench/credentials`, then edit)
+- [x] **You:** retire the old folder: done 2026-10-31 (deleted; archive kept)
