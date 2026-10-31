@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vps-server-workbench"
+version = "0.1.0"
+description = "Python helpers for vps-server-workbench (small server checks; platform APIs live in the PHP core)."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Simtabi LLC", email = "opensource@simtabi.com" }]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+workbench-py = "vps_server_workbench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["S101"]

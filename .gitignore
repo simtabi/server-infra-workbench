@@ -17,3 +17,8 @@ backups/
 .claude/
 __pycache__/
 *.pyc
+.venv/
+*.egg-info/
+php/vendor/
+php/.phpunit.cache/
+php/.phpstan.cache/
