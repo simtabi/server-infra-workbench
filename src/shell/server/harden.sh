@@ -40,7 +40,7 @@ TOOL=harden
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=src/shell/lib/common.sh
 . "$HERE/../lib/common.sh"
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p}' "$0"; }
+usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
 
 ROLE=base ONLY="" SKIP="" FIREWALL=0 ALLOW="" ROOT_LOGIN=prohibit-password CHECK=0 HOST=""
 ARGS=("$@")

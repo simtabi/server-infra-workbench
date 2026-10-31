@@ -48,7 +48,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 HOST="" EXPECT="" CONFIG="" SCRIPT="$HERE/docker-db-server-manager.sh" UPLOAD=1 DRY=0 SNAPWITH=auto
 WORKBENCH="${WORKBENCH:-$HERE/../../../bin/workbench}"
 die() { printf '!! %s\n' "$*" >&2; exit 1; }
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p}' "$0"; }
+usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in

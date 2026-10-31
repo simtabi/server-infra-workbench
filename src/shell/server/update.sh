@@ -29,7 +29,7 @@ TOOL=update
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=src/shell/lib/common.sh
 . "$HERE/../lib/common.sh"
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p}' "$0"; }
+usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
 
 WINDOW="" NOREBOOT=0 FULL=0 SECURITY=0 ALLOW_DOCKER=0 BACKUP_FIRST=0 REFRESH=1 HOST=""
 ARGS=("$@")

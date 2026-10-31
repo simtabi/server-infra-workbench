@@ -35,7 +35,7 @@ ENV_FILE="" SITE="" FROM="" REMOTE="" BACKUP=1 DRY=0
 SETS=()
 
 die()   { printf '!! %s\n' "$*" >&2; exit 1; }
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p}' "$0"; }
+usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in

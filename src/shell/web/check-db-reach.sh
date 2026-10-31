@@ -24,7 +24,7 @@ if [ "${1:-}" = "--env" ]; then
   host="$(grep -E '^DB_HOST=' "$2" | tail -1 | cut -d= -f2- | tr -d '"')"
   set -- "$host" "$(grep -E '^DB_PORT=' "$2" | tail -1 | cut -d= -f2- | tr -d '"')"
 fi
-case "${1:-}" in ""|-h|--help) sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p}' "$0"; exit 0 ;; esac
+case "${1:-}" in ""|-h|--help) sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; exit 0 ;; esac
 host="$1"; shift
 [ $# -gt 0 ] || set -- 5432 6432 3306 3307
 rc=0; TO=""; command -v timeout >/dev/null 2>&1 && TO="timeout 3"

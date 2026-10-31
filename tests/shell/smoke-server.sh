@@ -74,4 +74,28 @@ sed -i.x 's/APP_ENV=production/APP_ENV=local/; s/APP_DEBUG=false/APP_DEBUG=true/
 bash "$W" --site app.example.com --env dev >"$T/o" 2>&1 || true; grep -q 'ok    APP_DEBUG=true' "$T/o" && ok "diagnose: APP_DEBUG allowed in dev" || fail "dev debug"
 bash "$W" --site 'bad site' >/dev/null 2>&1 && fail "bad site" || ok "diagnose: validates --site"
 
+# --- env init / check ------------------------------------------------------------------------
+E=src/shell/env/env.sh
+fresh; mkdir -p "$T/root/home/ploi/shop.example.com"; EF="$T/root/home/ploi/shop.example.com/.env"
+printf 'DB_CONNECTION=pgsql\nDB_HOST=10.0.0.5\nDB_PORT=6432\nDB_DATABASE=shop_prd\nDB_USERNAME=shop_prd\nDB_PASSWORD=p@ss w$rd#1\n' > "$T/db.env"
+bash "$E" init --env prd --site shop.example.com --from "$T/db.env" --url https://shop.example.com --dry-run >"$T/o"
+[ ! -f "$EF" ] && grep -q 'generated: APP_KEY (value not shown)' "$T/o" && ok "env init --dry-run: plan, nothing written" || fail "env dry-run"
+if bash "$E" init --env prd --site shop.example.com --from "$T/db.env" >"$T/o" 2>&1; then fail "prd without https"; fi
+grep -q 'APP_URL must be https' "$T/o" && [ ! -f "$EF" ] && ok "env init: refuses prd without an https APP_URL" || fail "env validate"
+: > "$T/tty"; bash "$E" init --env prd --site shop.example.com --from "$T/db.env" --url https://shop.example.com --yes >/dev/null 2>&1 && fail "prd --yes"
+echo shop.example.com > "$T/tty"; bash "$E" init --env prd --site shop.example.com --from "$T/db.env" --url https://shop.example.com >"$T/o" 2>&1
+[ "$(stat -c %a "$EF" 2>/dev/null || stat -f %Lp "$EF")" = 600 ] && grep -q '^APP_DEBUG=false$' "$EF" && grep -q '^APP_ENV=production$' "$EF" \
+  && grep -qE '^APP_KEY=base64:.{44}$' "$EF" && grep -q "^DB_PASSWORD='p@ss w\$rd#1'$" "$EF" && ok "env init prd: typed confirm, 600, defaults, APP_KEY, quoting" || { cat "$T/o"; fail "env init write"; }
+! grep -q 'p@ss' "$T/o" && ! grep -q "$(sed -n 's/^APP_KEY=//p' "$EF")" "$T/o" && ok "env init: values never printed" || fail "env leaked"
+key="$(grep '^APP_KEY=' "$EF")"
+bash "$E" init --env prd --site shop.example.com --set APP_KEY=base64:other --set MAIL_MAILER=smtp >"$T/o" 2>&1
+[ "$(grep '^APP_KEY=' "$EF")" = "$key" ] && grep -q 'APP_KEY already set - kept' "$T/o" && grep -q 'changed: MAIL_MAILER' "$T/o" && ls "$EF".bak.* >/dev/null \
+  && ok "env init rerun: keeps APP_KEY, key-only diff, backup" || { cat "$T/o"; fail "env rerun"; }
+bash "$E" check --env prd --site shop.example.com >/dev/null && ok "env check: clean prd .env passes" || fail "env check clean"
+sed -i.x '/^REDIS_PORT=/d; s/^DB_USERNAME=.*/DB_USERNAME=postgres/' "$EF"; echo 'EXTRA_THING=1' >> "$EF"
+bash "$E" check --env prd --site shop.example.com >"$T/o" 2>&1 && fail "env check should fail"
+grep -q 'missing: REDIS_PORT' "$T/o" && grep -q 'extra (not in the reference): EXTRA_THING' "$T/o" && grep -q 'superuser' "$T/o" \
+  && ok "env check: missing, extra and superuser user reported" || { cat "$T/o"; fail "env check findings"; }
+bash "$E" init --env prd --site shop.example.com --set 'bad-key=1' >/dev/null 2>&1 && fail "bad key" || ok "env init: rejects bad keys"
+
 printf '\nsmoke-server: %d passed, 0 failed\n' "$pass"
