@@ -68,8 +68,9 @@ mermaid: ## render every Mermaid block to /tmp/vsw-mermaid (needs node; download
 
 test: ## offline smoke tests (no servers touched)
 	bash tests/shell/smoke.sh
+	bash tests/shell/smoke-db.sh
 
-it: ## Docker integration test of the guided upgrade (throwaway containers, ~3 min)
+it: ## Docker integration tests: 1.3 -> 1.4 upgrade, privileges, envs, backups (throwaway containers, ~5 min)
 	bash tests/shell/upgrade-it.sh
 
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message

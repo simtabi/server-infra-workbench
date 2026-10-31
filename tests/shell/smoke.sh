@@ -75,7 +75,8 @@ mkdir -p "$T/adm"; PRIVATE_IP=10.0.0.5 DB_DIR="$T/adm" ENABLE_ADMINER=1 \
 grep -qF '"127.0.0.1:${ADMINER_PORT}:8080"' "$T/adm/docker-compose.yml" && ! grep -q 'PRIVATE_IP}:${ADMINER' "$T/adm/docker-compose.yml" \
   && ok "adminer binds to 127.0.0.1 only" || fail "adminer binds to 127.0.0.1 only"
 grep -Eq '^ADMINER_IMAGE=adminer:[0-9]+\.[0-9]+\.[0-9]+' "$T/adm/stack.env" && ok "adminer image is pinned" || fail "adminer image is pinned"
-grep -q 'AUTH_USER: ${PG_USER}' "$T/adm/docker-compose.yml" && ok "pgbouncer auth_user set (create-db users pool)" || fail "pgbouncer auth_user"
+grep -q 'AUTH_USER: ${PGBOUNCER_AUTH_USER}' "$T/adm/docker-compose.yml" && grep -q 'pgbouncer.get_auth' "$T/adm/docker-compose.yml" \
+  && ok "pgbouncer: dedicated auth_user + auth_query function" || fail "pgbouncer auth_user"
 for c in "create-user x" "grant 'a;b' db" "drop-db postgres" "drop-user root mysql" "create-db shop --extensions 'x;y'"; do
   if eval "PRIVATE_IP=10.0.0.5 \"\$M\" $c" >/dev/null 2>&1; then fail "unsafe args accepted: $c"; fi
 done; ok "user commands reject unsafe/protected args"
