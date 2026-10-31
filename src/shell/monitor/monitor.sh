@@ -161,12 +161,8 @@ pinned_keys() { grep -oE '^[A-Z0-9_]+=' "$STACKS/$1/monitor.env.example" | tr -d
 images_of() { local k; for k in $(pinned_keys "$1" | grep '_IMAGE$'); do echo "${!k}"; done; }
 installed() { [ -f "$MONITOR_DIR/$1/stack.env" ]; }
 udir() { echo "$MONITOR_DIR/$1"; }
-urlenc() { # RFC 3986 percent-encoding for a DSN userinfo part (pure bash, byte-wise)
-  local LC_ALL=C s="$1" i c out=""
-  for ((i = 0; i < ${#s}; i++)); do c="${s:i:1}"
-    case "$c" in [A-Za-z0-9._~-]) out+="$c" ;; *) printf -v c '%%%02X' "'$c"; out+="$c" ;; esac
-  done
-  printf '%s' "$out"
+pqval() { # a libpq key=value DSN value: single-quoted, with \ and ' escaped
+  local v="${1//\\/\\\\}"; v="${v//\'/\\\'}"; printf "'%s'" "$v"
 }
 secret_get() { sed -n "s/^$2=//p" "$MONITOR_DIR/$1/secrets.env" 2>/dev/null | tail -1; }
 pg_on() { # agent side: run the DB exporters?
@@ -313,9 +309,10 @@ prepare_unit() {
       if pg_on; then [ -r "$MONITOR_PG_PASSWORD_FILE" ] || die "MONITOR_PG=1 but $MONITOR_PG_PASSWORD_FILE is missing (DB manager: monitor-user)"
         local pgpw; pgpw="$(tr -d '\n' < "$MONITOR_PG_PASSWORD_FILE")"
         set_secret exporters MONITOR_PG_PASSWORD "$pgpw"
-        # the pgbouncer exporter takes one DSN; build it here so no credential-shaped URL lives in a tracked compose file
+        # the pgbouncer exporter takes one connection string (lib/pq). Use the libpq key=value form, built
+        # here into secrets.env (600): no URL with a password slot anywhere in a tracked file.
         set_secret exporters PGBOUNCER_EXPORTER_CONNECTION_STRING \
-          "postgres://$(urlenc "${MONITOR_PG_USER:-vsw_monitor}"):$(urlenc "$pgpw")@${MONITOR_PGBOUNCER_HOST:-pgbouncer}:5432/pgbouncer?sslmode=${MONITOR_PGBOUNCER_SSLMODE:-disable}"
+          "host=${MONITOR_PGBOUNCER_HOST:-pgbouncer} port=5432 dbname=pgbouncer user=$(pqval "${MONITOR_PG_USER:-vsw_monitor}") password=$(pqval "$pgpw") sslmode=${MONITOR_PGBOUNCER_SSLMODE:-disable}"
         unset pgpw; fi ;;
     prometheus) write_secrets prometheus GRAFANA_ADMIN_PASSWORD:24
       owned_dir "$d/data/prometheus" 65534; owned_dir "$d/data/alertmanager" 65534; owned_dir "$d/data/grafana" 472

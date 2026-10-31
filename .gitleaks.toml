@@ -1,7 +1,7 @@
 # gitleaks config for vps-server-workbench. Run: make secrets-check
 # Repo rule: passwords and secrets are generated at runtime (openssl rand, random_bytes,
 # secrets.token_urlsafe) or are placeholders such as <generated>. Never a literal, not even in tests.
-# The built-in gitleaks rules stay on; the rule below adds the generic "password = literal" shape
+# The built-in gitleaks rules stay on; the rule below adds the generic password-assigned-a-literal shape
 # GitGuardian reports as "Generic Password".
 
 [extend]

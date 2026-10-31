@@ -20,6 +20,9 @@ KEY = r"(?:[A-Za-z0-9_]*(?:PASSWORD|PASSWD|PASS|PWD|SECRET|TOKEN|API_?KEY|SECRET
 # key = value, key: value, key => value, "key": "value", --password value, --password=value
 ASSIGN = re.compile(r"""(?<![A-Za-z0-9_.{:-])["']?(?P<key>%s)["']?\s*(?P<op>=>|:=|=|:)\s*(?P<val>"[^"\n]*"|'[^'\n]*'|[^\s,;)\]}#]+)""" % KEY)
 FLAG = re.compile(r"""--(?P<key>password|pass|secret|token|api-key)(?:=|\s+)(?P<val>"[^"\n]*"|'[^'\n]*'|[^\s;|&)]+)""")
+# Any scheme://user:pass@ shape, even with variables: secret scanners (GitGuardian "PostgreSQL Credentials")
+# flag the shape itself. Use separate user/password settings, a libpq key=value string, or PGPASSFILE.
+USERINFO = re.compile(r"""\b[a-z][a-z0-9+.-]*://[^\s/@'"]*:[^@/\n]{0,80}?@""", re.I)
 URL = re.compile(r"""[a-z][a-z0-9+.-]*://(?P<key>[^\s/:@"'$]+):(?P<val>[^\s@/"']+)@""")
 MYSQL_P = re.compile(r"""(?<![\w-])-p(?P<val>'[^'\n]+'|"[^"\n]+"|[A-Za-z0-9!#%^*+=_]{4,})(?=\s|$)""")
 
@@ -73,9 +76,8 @@ def scan_text(path, text):
         for m in FLAG.finditer(line):
             if literal(m.group("val")):
                 out.append((path, n, "flag", "--" + m.group("key")))
-        for m in URL.finditer(line):
-            if literal(m.group("val")):
-                out.append((path, n, "url-userinfo", m.group("key")))
+        if USERINFO.search(line):
+            out.append((path, n, "url-userinfo", "scheme://user:pass@ (use separate settings, key=value or PGPASSFILE)"))
         if re.search(r"\b(?:mysql|mysqladmin|mysqldump|mariadb[a-z-]*)\b", line):
             for m in MYSQL_P.finditer(line):
                 if literal(m.group("val")):
@@ -90,10 +92,11 @@ def tracked(staged):
 
 def self_test():
     pw = "Zq" + "8vT" + "w2"  # assembled so the scanner source holds no literal
-    bad = [f"DB_PASSWORD={pw}", f'"password": "{pw}"', f"postgres://app:{pw}@db:5432/app", f"mysql -uroot -p'{pw}' -e 1",
+    sch = "post" + "gres"      # likewise: no scheme://user:pass@ shape in this file
+    bad = [f"DB_PASSWORD={pw}", f'"password": "{pw}"', f"{sch}://app:{pw}@db:5432/app", f"{sch}://app:${{PW}}@db/app", f"{sch}://$(u):$(p \"$x\")@h/db", f"mysql -uroot -p'{pw}' -e 1",
            f"--password {pw}", f"GRAFANA_ADMIN_PASSWORD: {pw}", f"AWS_SECRET_ACCESS_KEY={pw}x"]
     good = ["DB_PASSWORD=", 'DB_PASSWORD="$(openssl rand -hex 24)"', "PG_PASSWORD=${PG_PASSWORD:?set it}", "password: <generated>",
-            "MONITOR_PG_PASSWORD_FILE=/root/.vsw-monitor.pass", "postgres://app:${PW}@db/app", "TARGET_PASSWORD=...",
+            "MONITOR_PG_PASSWORD_FILE=/root/.vsw-monitor.pass", f"{sch}://app@db/app", "https://example.com:8443/x", "TARGET_PASSWORD=...",
             "--password-file /run/pw", "pw = secrets.token_urlsafe(24)", "MYSQL_PWD=\"$pw\" mysql -uroot", "repo1-cipher-pass=<redacted>",
             "PASSWORD: the one you typed at install"]
     fails = [b for b in bad if not scan_text("t", b)] + [g for g in good if scan_text("t", g)]

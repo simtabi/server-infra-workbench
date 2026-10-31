@@ -70,7 +70,7 @@ being reused on a real box. Generated values also make tests prove the code hand
 
 | Check | Where |
 |---|---|
-| `tests/security/no-hardcoded-secrets.py` | tracked files: `KEY=literal`, `--password x`, `user:pass@` URLs, `mysql -p...`; never prints values |
+| `tests/security/no-hardcoded-secrets.py` | tracked files: `KEY=literal`, `--password <literal>`, URLs with a user and a password before the host (even when both are variables), `mysql -p...`; never prints values |
 | `gitleaks` with [`.gitleaks.toml`](../.gitleaks.toml) | default rules + a generic-password rule, whole history (`--log-opts=--all`) |
 | `make secrets-check` | both of the above; part of `make ci` and the pre-push hook in `.pre-commit-config.yaml` |
 
@@ -81,6 +81,11 @@ Lesson (2026-10): GitGuardian flagged four "Generic Password" findings in commit
 All were test fixtures or an env-reference DSN, never real credentials, so no rotation was needed and
 history was not rewritten. The fixtures are now generated per run, the DSN is built by `monitor.sh`
 into `secrets.env`, and the old commits are listed in `.gitleaks.toml` so the history scan stays green.
+A follow-up GitGuardian "PostgreSQL Credentials" alert on `222b630` matched a DSN made only of variables
+(`scheme://$(user):$(pass)@host`). The shape alone trips scanners, so no tracked file may contain a URL with
+a user and password before the host: the pgbouncer exporter now gets a libpq `key=value` string built into
+`secrets.env`, and docs use `postgres://USER@HOST/db` with the password in `PGPASSFILE` or a `<generated>`
+placeholder. The scanner flags the shape even when every part is a variable.
 
 ## Logs
 
