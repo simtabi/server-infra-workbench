@@ -107,6 +107,17 @@ bash "$E" check --env prd --site shop.example.com >"$T/o" 2>&1 && fail "env chec
 grep -q 'missing: REDIS_PORT' "$T/o" && grep -q 'extra (not in the reference): EXTRA_THING' "$T/o" && grep -q 'superuser' "$T/o" \
   && ok "env check: missing, extra and superuser user reported" || { cat "$T/o"; fail "env check findings"; }
 bash "$E" init --env prd --site shop.example.com --set 'bad-key=1' >/dev/null 2>&1 && fail "bad key" || ok "env init: rejects bad keys"
+# env init --addons: merges /opt/vsw-addons/*/laravel.env (600 only), --set wins, empty never clears, values hidden
+sed -i.x 's/^DB_USERNAME=.*/DB_USERNAME=shop_prd/; /^AWS_ACCESS_KEY_ID=/d' "$EF"; echo 'AWS_ACCESS_KEY_ID=keep-mine' >> "$EF"
+AD="$T/root/opt/vsw-addons"; mkdir -p "$AD/gotenberg" "$AD/garage" "$AD/seaweedfs"
+(umask 077; printf 'GOTENBERG_URL=http://127.0.0.1:3000\nGOTENBERG_PASSWORD=GotSecret42\n' > "$AD/gotenberg/laravel.env"
+ printf '# garage\nFILESYSTEM_DISK=s3\nAWS_ACCESS_KEY_ID=\nAWS_SECRET_ACCESS_KEY=GarSecret99\nAWS_BUCKET=app\n' > "$AD/garage/laravel.env")
+printf 'AWS_REGION=leaky\n' > "$AD/seaweedfs/laravel.env"; chmod 644 "$AD/seaweedfs/laravel.env"
+echo shop.example.com > "$T/tty"; bash "$E" init --env prd --site shop.example.com --addons --set AWS_BUCKET=override >"$T/o" 2>&1 || true
+grep -q '^GOTENBERG_PASSWORD=GotSecret42$' "$EF" && grep -q '^AWS_SECRET_ACCESS_KEY=GarSecret99$' "$EF" && grep -q '^AWS_ACCESS_KEY_ID=keep-mine$' "$EF" \
+  && grep -q '^AWS_BUCKET=override$' "$EF" && ! grep -q 'leaky' "$EF" && grep -q 'add-ons: garage gotenberg' "$T/o" && grep -q 'seaweedfs/laravel.env is mode 644' "$T/o" \
+  && [ "$(stat -c %a "$EF" 2>/dev/null || stat -f %Lp "$EF")" = 600 ] && ok "env init --addons: merged (600 files only), --set wins, empty keeps yours, 600" || { cat "$T/o"; fail "env addons"; }
+! grep -qE 'GotSecret42|GarSecret99' "$T/o" && ok "env init --addons: add-on values never printed" || fail "env addons leaked"
 
 # --- server init ------------------------------------------------------------------------------
 I=src/shell/server/init.sh

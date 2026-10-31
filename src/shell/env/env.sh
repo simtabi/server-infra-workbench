@@ -16,6 +16,9 @@
 #    env.sh init  --env stg --path /home/ploi/stg.example.com --set MAIL_MAILER=smtp --dry-run
 #    env.sh check --env prd --site app.example.com
 #    env.sh check --path .env --against /tmp/other.env       keys only, both ways
+#    env.sh init  --env prd --site app.example.com --from db.env --addons
+#         (--addons, or ENV_ADDONS=auto: also merge the laravel.env files the add-ons wrote
+#          on this host, /opt/vsw-addons/*/laravel.env; empty add-on values never clear yours)
 #    env.sh init  --host web-1 --env prd --site app.example.com --from db.env
 #         (--host copies this tool, the template and --from to the server over ssh; the
 #          values travel as a file, never in argv, and the copy is removed afterwards)
@@ -25,6 +28,7 @@
 #    --path FILE|DIR       the .env (a dir means DIR/.env)   --template FILE
 #    --from FILE           KEY=VALUE lines (e.g. `manager env` output)   --set KEY=VALUE (repeatable)
 #    --url URL             APP_URL     --name NAME   APP_NAME
+#    --addons              merge add-on keys (dir: ENV_ADDONS_DIR, default /opt/vsw-addons); --set still wins
 #    --against FILE        (check) compare keys with another .env instead of the template
 #    --dry-run, -n  --yes, -y  --host H  -h, --help
 #  Exit: 0 ok, 1 validation error, 2 usage, 3 not confirmed.
@@ -41,6 +45,7 @@ usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
 CMD="${1:-}"; [ $# -gt 0 ] && shift
 case "$CMD" in init|check) ;; -h|--help|help|"") usage; exit 0 ;; *) CODE=2 die "usage: env.sh init|check [options] (see --help)" ;; esac
 ENVN="" SITE="" TARGET="" TEMPLATE="" FROM="" URL="" NAME="" AGAINST="" HOST=""
+ADDONS=0; [ "${ENV_ADDONS:-}" = auto ] && ADDONS=1
 SETS=()
 ARGS=("$@")
 while [ $# -gt 0 ]; do
@@ -57,6 +62,7 @@ while [ $# -gt 0 ]; do
     --dry-run|-n) DRY=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
+    --addons) ADDONS=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) CODE=2 die "unknown option: $1 (see --help)" ;;
   esac
@@ -185,6 +191,23 @@ add_kv() {
   put "$WORK" "$k" "$v"
 }
 if [ -n "$FROM" ]; then [ -r "$FROM" ] || die "cannot read $FROM"; while IFS= read -r line || [ -n "$line" ]; do add_kv "$line"; done < "$FROM"; fi
+# add-on keys (WHY here: after --from, before --set, so an explicit --set still wins). Only
+# 600/400 files are read (they hold S3 secrets); an empty add-on value never clears one you set.
+merged=""
+if [ "$ADDONS" = 1 ]; then
+  adir="${ENV_ADDONS_DIR:-$R/opt/vsw-addons}"
+  for af in "$adir"/*/laravel.env; do
+    [ -f "$af" ] || continue
+    am="$(stat -c %a "$af" 2>/dev/null || stat -f %Lp "$af")"
+    case "$am" in 600|400) ;; *) warn "$af is mode $am (want 600): skipped, fix with chmod 600"; continue ;; esac
+    while IFS= read -r line || [ -n "$line" ]; do
+      [[ "$line" =~ ^[A-Z][A-Z0-9_]*=$ ]] && [ -n "$(get "$WORK" "${line%=}")" ] && continue
+      add_kv "$line"
+    done < "$af"
+    merged+="$(basename "$(dirname "$af")") "
+  done
+  [ -n "$merged" ] || warn "--addons: no laravel.env under $adir (run addon.sh laravel-env <name> first)"
+fi
 for kv in "${SETS[@]+"${SETS[@]}"}"; do add_kv "$kv"; done
 gen=""
 if [ -z "$(get "$WORK" APP_KEY)" ]; then
@@ -200,13 +223,14 @@ if [ -f "$TARGET" ]; then for k in $(keys_of "$WORK"); do [ "$(get "$TARGET" "$k
 say "  + added:   ${added:-none}"
 say "  ~ changed: ${changed:-none}"
 [ -z "$gen" ] || say "  * generated: $gen (value not shown)"
+[ -z "$merged" ] || say "  + add-ons: ${merged% } (values not shown)"
 validate "$WORK"
 if [ "$c_fail" -gt 0 ]; then summary; say "fix the errors above (use --set KEY=VALUE or --from FILE); nothing written"; exit 1; fi
 if [ -f "$TARGET" ] && cmp -s "$WORK" "$TARGET"; then summary; say "no change"; exit 0; fi
 if [ "$DRY" = 1 ]; then summary; say "dry run - nothing written"; exit 0; fi
 lock
 if [ "$ENVN" = prd ]; then confirm "write the PRODUCTION .env" "${SITE:-prd}"; else confirm "write $TARGET"; fi
-audit confirmed "file=$TARGET env=$ENVN added=${added// /,} changed=${changed// /,} generated=${gen:-none}"
+audit confirmed "file=$TARGET env=$ENVN added=${added// /,} changed=${changed// /,} generated=${gen:-none} addons=${merged:-none}"
 mkdir -p "$(dirname "$TARGET")"
 if [ -f "$TARGET" ]; then backup "$TARGET"; cat "$WORK" > "$TARGET"; else (umask 077; cp "$WORK" "$TARGET"); fi
 chmod 600 "$TARGET"

@@ -52,7 +52,7 @@ py-test: ## unittest for src/python
 
 python: py-lint py-test ## all Python checks
 
-compose-check: ## docker compose config for stacks/caddy + stacks/addons, caddy validate (needs docker)
+compose-check: ## docker compose config for stacks/caddy, stacks/addons, stacks/monitor; caddy validate; promtool (needs docker)
 	@command -v docker >/dev/null 2>&1 || { echo "docker not installed - skipping"; exit 0; }
 	cd stacks/caddy && SITE_DOMAIN=example.com docker compose config -q && echo "compose ok  stacks/caddy"
 	@for d in stacks/addons/*/; do n=$$(basename $$d); \
@@ -61,6 +61,14 @@ compose-check: ## docker compose config for stacks/caddy + stacks/addons, caddy 
 	  (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env config -q) && echo "compose ok  stacks/addons/$$n" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; \
 	  if [ -f $$d/compose.bridge.yml ]; then (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env -f docker-compose.yml -f compose.bridge.yml config -q) \
 	    && echo "compose ok  stacks/addons/$$n (bridge)" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; fi; rm -f /tmp/vsw-cc-$$n.env; done
+	@for d in stacks/monitor/*/; do n=$$(basename $$d); \
+	  { cat $$d/monitor.env.example; printf 'MONITOR_BIND=127.0.0.1\nMONITOR_AGENT_BIND=10.0.0.2\nMONITOR_TEXTFILE_DIR=/tmp/vsw-cc\nBESZEL_AGENT_LISTEN=10.0.0.2:45876\nNODE_EXPORTER_LISTEN=10.0.0.2:9100\nBESZEL_ADMIN_EMAIL=a@example.com\nBESZEL_ADMIN_PASSWORD=x\nGRAFANA_ADMIN_PASSWORD=y\nBESZEL_KEY=k\nPG_EXPORTER_DSN=x\nPGBOUNCER_EXPORTER_DSN=x\n'; } \
+	    | sed 's/[[:space:]]*#.*//' > /tmp/vsw-cc-m-$$n.env; \
+	  (cd $$d && docker compose --env-file /tmp/vsw-cc-m-$$n.env config -q) && echo "compose ok  stacks/monitor/$$n" || { rm -f /tmp/vsw-cc-m-$$n.env; exit 1; }; \
+	  if [ -f $$d/compose.host.yml ]; then (cd $$d && docker compose --env-file /tmp/vsw-cc-m-$$n.env -f docker-compose.yml -f compose.host.yml config -q) \
+	    && echo "compose ok  stacks/monitor/$$n (host network)" || { rm -f /tmp/vsw-cc-m-$$n.env; exit 1; }; fi; rm -f /tmp/vsw-cc-m-$$n.env; done
+	@docker run --rm --entrypoint promtool -v "$$PWD/stacks/monitor/prometheus/rules:/r:ro" $$(sed -n "s/^PROMETHEUS_IMAGE=//p" stacks/monitor/prometheus/monitor.env.example) \
+	  check rules /r/vsw.yml >/dev/null && echo "promtool ok stacks/monitor/prometheus/rules" || { echo "promtool check rules FAILED"; exit 1; }
 	@for f in stacks/caddy/conf/Caddyfile stacks/caddy/variants/*.Caddyfile; do \
 	  docker run --rm -e SITE_DOMAIN=example.com -v "$$PWD/$$f:/c/Caddyfile:ro" $${CADDY_IMAGE:-caddy:2.11} \
 	    caddy validate --config /c/Caddyfile --adapter caddyfile >/dev/null 2>&1 \
@@ -80,9 +88,12 @@ test: ## offline smoke tests (no servers touched)
 	bash tests/shell/smoke-server.sh
 	bash tests/shell/smoke-net.sh
 	bash tests/shell/smoke-progress.sh
+	bash tests/shell/smoke-monitor.sh
+	python3 stacks/monitor/prometheus/grafana/dashboards.py --check
 
-it: ## Docker integration tests: 1.3 -> 1.4 upgrade, privileges, envs, backups; add-ons; server tools on Ubuntu 24.04 (~9 min)
-	bash tests/shell/run-suites.sh tests/shell/upgrade-it.sh tests/shell/addons-it.sh tests/shell/server-it.sh
+it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (verify-full, metrics, migrate-managed, pg-major-upgrade), monitoring (~20 min)
+	bash tests/shell/run-suites.sh tests/shell/upgrade-it.sh tests/shell/addons-it.sh tests/shell/server-it.sh \
+	  tests/shell/db-features-it.sh tests/shell/monitor-it.sh
 
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
 	tests/shell/client-check.sh

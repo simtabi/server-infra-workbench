@@ -88,8 +88,9 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `PGBOUNCER_POOL_MODE` | `session` |  |
 | `DOCKER_NETWORK` | `vsw_db` | compose network with a fixed subnet |
 | `DOCKER_SUBNET` | `172.30.88.0/24` | pg_hba + MySQL root host use it |
-| `TLS_MODE` | `off` | off \| require (self-signed, made on the server) |
+| `TLS_MODE` | `off` | off \| require \| verify-full (self-signed CA made on the server; verify-full = clients check CA + host) |
 | `TLS_DAYS` | `825` |  |
+| `TLS_CA_WEB_PATH` | `/etc/ssl/certs/vsw-db-ca.crt` | where `tls-ca` tells web servers to put the public CA |
 | `EXTRA_BIND_IPS` | (empty) | e.g. 10.200.0.1 (wg0); comma or space separated |
 | `ALLOW_PUBLIC_BIND` | `0` | 1 = a public EXTRA_BIND_IPS entry is on purpose (TLS_MODE=require is then mandatory) |
 | `PEER_REGIONS` | (empty) | app servers' regions, e.g. nyc1; doctor warns on a mismatch |
@@ -103,6 +104,14 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `BINLOG_DAYS` | `7` | MySQL/MariaDB binlog retention on the server |
 | `STATE_DIR` | `/var/lib/vps-server-workbench/db` | status stamps for doctor/monitoring |
 | `DOCKER_GROUP_ALLOW` | (empty) | users allowed in the docker group; doctor warns about any other non-root member |
+
+## monitoring
+
+| Key | Default | Notes |
+|---|---|---|
+| `MONITOR_USER` | `vsw_monitor` | read-only pg_monitor role for postgres_exporter (CONNECTION LIMIT 5, db postgres only) |
+| `MONITOR_PASSWORD_FILE` | `/etc/vsw-monitor/pg-monitor.pass` | 600, written by `monitor-user`; never printed |
+| `METRICS_TEXTFILE_DIR` | `/var/lib/vsw-monitor/textfile` | vsw_db.prom for node_exporter; skipped when the folder is missing |
 
 ## environments
 

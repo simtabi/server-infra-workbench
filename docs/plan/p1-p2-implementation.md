@@ -84,12 +84,16 @@ runbook row that a human runs.
 
 #### 2.3 Major Postgres upgrade
 
-- **Design:** `pg-major-upgrade --to <major> [--dry-run]`: dump/restore into a **new** volume
-  (`pg_data_<major>`), the old volume is kept for rollback. Steps: plan → verified backup → stop PgBouncer →
-  build the new image → start it on the new volume → restore → converge roles/extensions → verify → doctor.
-  Any failure switches back to the old volume and image. `pg_upgrade` is not used: postgis/pgvector extension
-  binaries must exist for both majors in one image, which the upstream images don't provide.
-- **Acceptance:** `make it` upgrades a 17 server with data to 18, row counts equal, rollback path tested.
+- **Design:** `pg-major-upgrade --to <major> [--dry-run] | --cleanup <old>`: dump/reload in the **same volume**.
+  The 18+ images keep data in `/var/lib/postgresql/<major>/docker`, so the new major gets its own directory;
+  the old one is renamed to `.pg<old>-old` (the new entrypoint refuses to init while `<old>/docker` exists) and
+  kept for rollback until `--cleanup`. Steps: plan (images, pgvector package, disk) → verified backup →
+  `pg_dumpall` → stop → set old data aside → build the new image → init + reload → converge roles/extensions →
+  inventory compare → verify → PITR stanza-upgrade. Any failure puts the old data, image and config back.
+  `pg_upgrade` is not used: postgis/pgvector binaries must exist for both majors in one image, which the
+  upstream images don't provide. Recipe: [pg-major-upgrade](../recipes/pg-major-upgrade.md).
+- **Acceptance:** `make it` upgrades an 18 server with data to 19 (the 19 release candidate), row counts equal,
+  verify-full through PgBouncer works after; forced-failure rollback tested; `--cleanup` tested.
 
 #### 2.4 verify-full TLS
 
@@ -116,7 +120,8 @@ containers, monitoring stacks, `pg-major-upgrade`, `verify-full`, `migrate-manag
 #### 2.7 `env init` merges add-on keys
 
 `env init --addons` (or `ENV_ADDONS=auto`) merges every `laravel-env` file the add-ons wrote on that host
-(`/opt/vsw-addons/*/laravel.env`), masked in the output, 600 on disk.
+(`/opt/vsw-addons/*/laravel.env`), masked in the output, 600 on disk. Only 600/400 files are read; an explicit `--set` wins; an empty
+add-on value (RustFS's key placeholder) never clears a value you already have.
 
 #### 2.8 Retag the client-named Postgres image
 

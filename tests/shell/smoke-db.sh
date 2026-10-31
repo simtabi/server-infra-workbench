@@ -110,7 +110,7 @@ grep -qF 'ports: ["${PRIVATE_IP}:${PG_PORT}:5432", "10.200.0.1:${PG_PORT}:5432"]
   && ! grep -q '0\.0\.0\.0' "$T/db2/docker-compose.yml" && ok "EXTRA_BIND_IPS: every DB port also published on the tunnel IP" || { grep ports "$T/db2/docker-compose.yml"; fail "extra binds"; }
 L ip_in_cidr 10.200.0.2 10.0.0.0/8 && ! L ip_in_cidr 10.17.0.2 10.16.0.0/16 2>/dev/null && L ip_in_cidr 192.0.2.9 0.0.0.0/0 && ! L ip_private 203.0.113.5 2>/dev/null && L ip_private 100.64.1.1 \
   && ok "ip_in_cidr / ip_private" || fail "cidr math"
-EXTRA_BIND_IPS=203.0.113.5 L validate_config 2>"$T/e" && fail "public bind accepted" || { grep -q 'ALLOW_PUBLIC_BIND=1' "$T/e" && grep -q 'TLS_MODE=require is mandatory' "$T/e" && ok "public bind refused without ALLOW_PUBLIC_BIND=1 and TLS"; } || { cat "$T/e"; fail "public bind"; }
+EXTRA_BIND_IPS=203.0.113.5 L validate_config 2>"$T/e" && fail "public bind accepted" || { grep -q 'ALLOW_PUBLIC_BIND=1' "$T/e" && grep -q 'TLS_MODE=require or verify-full is mandatory' "$T/e" && ok "public bind refused without ALLOW_PUBLIC_BIND=1 and TLS"; } || { cat "$T/e"; fail "public bind"; }
 EXTRA_BIND_IPS=203.0.113.5 ALLOW_PUBLIC_BIND=1 TLS_MODE=require L validate_config 2>"$T/e" && ok "public bind accepted with ALLOW_PUBLIC_BIND=1 + TLS_MODE=require" || { cat "$T/e"; fail "public bind ok"; }
 PRIVATE_IP=203.0.113.5 L validate_config 2>"$T/e" && fail "public PRIVATE_IP" || { grep -q 'not a private' "$T/e" && ok "PRIVATE_IP must be a private address"; } || fail "private ip"
 PEER_REGIONS="nyc 1" L validate_config 2>"$T/e" && fail "bad region" || { grep -q 'PEER_REGIONS entry' "$T/e" && ok "PEER_REGIONS validated"; } || fail "region slug"
@@ -128,4 +128,20 @@ grep -q 'outside VPC_CIDR' "$T/net.out" && ok "doctor: PRIVATE_IP outside VPC_CI
 printf 'root:x:0:\ndocker:x:999:root,ploi,deploy\n' > "$T/group"
 [ "$(GROUP_FILE="$T/group" L docker_group_members)" = "ploi deploy" ] && [ "$(GROUP_FILE="$T/group" DOCKER_GROUP_ALLOW=ploi L docker_group_members)" = deploy ] \
   && ok "doctor: non-root docker group members found, DOCKER_GROUP_ALLOW honoured" || fail "docker group members"
+# ---- P2: textfile metrics, image major swap, migrate-managed target parsing ----------------------------
+mkdir -p "$T/tf" "$T/state"; rm -f "$T/state/offsite"; now="$(date +%s)"; echo "$now" > "$T/state/backup"; echo "$((now - 60)) x" > "$T/state/restore-test"; echo "$now fail 2" > "$T/state/doctor"
+METRICS_TEXTFILE_DIR="$T/tf" DB_DIR="$T/nodb" L write_metrics
+grep -qx "vsw_backup_last_success_timestamp_seconds{engine=\"all\"} $now" "$T/tf/vsw_db.prom" && grep -qx 'vsw_doctor_problems 2' "$T/tf/vsw_db.prom" \
+  && grep -qx "vsw_restore_test_last_success_timestamp_seconds $((now - 60))" "$T/tf/vsw_db.prom" && ! grep -q offsite "$T/tf/vsw_db.prom" \
+  && [ "$(grep -c '^# HELP' "$T/tf/vsw_db.prom")" = "$(grep -c '^# TYPE' "$T/tf/vsw_db.prom")" ] && [ "$(stat -c %a "$T/tf/vsw_db.prom" 2>/dev/null || stat -f %Lp "$T/tf/vsw_db.prom")" = 644 ] \
+  && ok "write_metrics: stamps -> gauges with HELP/TYPE, 644, absent stamps skipped" || { cat "$T/tf/vsw_db.prom"; fail "write_metrics"; }
+METRICS_TEXTFILE_DIR="$T/missing" L write_metrics && [ ! -e "$T/missing" ] && ok "write_metrics: no textfile folder -> silently skipped" || fail "metrics skip"
+[ "$(L pg_swap_major postgis/postgis:18-3.6 18 19)" = postgis/postgis:19-3.6 ] && [ "$(L pg_swap_major postgresql-18-pgvector 18 19)" = postgresql-19-pgvector ] \
+  && [ "$(L pg_swap_major local/pg:18 18 19)" = local/pg:19 ] && [ "$(L pg_swap_major postgres:180 18 19)" = postgres:180 ] && [ "$(L pg_major postgres:17-alpine)" = 17 ] \
+  && ok "pg_swap_major / pg_major: tags and package names, no partial-number matches" || fail "pg_swap_major"
+printf 'TARGET_HOST=db-x.example.com\nTARGET_USER=doadmin\nTARGET_PASSWORD="p$(touch %s/pwned)w"\nEVIL=$(touch %s/pwned2)\n' "$T" "$T" > "$T/tgt.env"; chmod 644 "$T/tgt.env"
+L mm_load_target "$T/tgt.env" 2>"$T/e" && fail "644 target file accepted" || grep -q 'chmod 600' "$T/e" || fail "mm perms"
+chmod 600 "$T/tgt.env"; out="$(TGT="$T/tgt.env" L eval 'mm_load_target "$TGT"; echo "$TARGET_HOST $TARGET_PORT $TARGET_SSLMODE ${TARGET_PASSWORD:0:4}"' 2>&1 || true)"
+[ "$out" = 'db-x.example.com 25060 require p$(t' ] && [ ! -e "$T/pwned" ] && [ ! -e "$T/pwned2" ] \
+  && ok "mm_load_target: 600 only, strict KEY=VALUE (no shell execution), managed-DB defaults" || fail "mm_load_target: $out"
 echo "smoke-db: all $pass checks passed"

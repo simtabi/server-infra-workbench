@@ -18,3 +18,4 @@ reverse. Number them in order; never rewrite an accepted record, supersede it wi
 | [0009](0009-mongodb-off-by-default.md) | MongoDB is not managed by the DB manager | Accepted |
 | [0010](0010-least-privilege-database-roles.md) | Least-privilege database roles (the 1.4.0 role split) | Accepted |
 | [0011](0011-cross-region-connectivity.md) | Cross-region connectivity: same region first, then peering, then WireGuard | Accepted |
+| [0012](0012-monitoring-stack.md) | Monitoring: configurable self-hosted stacks, loopback UIs, textfile metrics | Accepted |
