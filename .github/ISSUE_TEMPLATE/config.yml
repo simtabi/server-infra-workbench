@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Documentation
+    url: https://github.com/simtabi/vps-server-workbench/blob/main/docs/README.md
+    about: Guides, tool references and recipes, including troubleshooting.
+  - name: Security vulnerability
+    url: https://github.com/simtabi/vps-server-workbench/blob/main/SECURITY.md
+    about: Do not open a public issue; email security@simtabi.com.

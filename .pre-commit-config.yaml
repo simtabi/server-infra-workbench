@@ -1,0 +1,50 @@
+# Optional local hooks: pip install pre-commit && pre-commit install
+# They run the same checks as `make ci`, only on staged files where possible.
+# Do not set core.hooksPath for this repo; pre-commit installs into .git/hooks.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+        exclude: '^php/composer\.lock$'
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: detect-private-key
+      - id: check-added-large-files
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [-x]
+
+  - repo: local
+    hooks:
+      - id: smoke
+        name: smoke tests (make test)
+        entry: make test
+        language: system
+        pass_filenames: false
+        files: '\.(sh)$|^bin/'
+      - id: php
+        name: pint + phpstan + phpunit (make php)
+        entry: make php
+        language: system
+        pass_filenames: false
+        files: '^php/'
+      - id: python
+        name: python checks (make python)
+        entry: make python
+        language: system
+        pass_filenames: false
+        files: '^python/'
+      - id: links
+        name: markdown links (make links)
+        entry: make links
+        language: system
+        pass_filenames: false
+        files: '\.md$'

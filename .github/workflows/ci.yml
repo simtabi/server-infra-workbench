@@ -29,11 +29,11 @@ jobs:
           extensions: json, openssl
           tools: composer:v2
           coverage: none
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
       - name: Cache Composer packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/composer
           key: composer-${{ hashFiles('php/composer.lock') }}
