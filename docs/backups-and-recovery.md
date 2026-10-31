@@ -106,6 +106,12 @@ A port in the endpoint becomes `repo1-storage-port`; the CA is copied to `postgr
 read-only. Use a key scoped to the PITR bucket and keep `PITR_REPO_PATH` distinct per server
 (`/db-main`, `/db-staging`) so two stanzas never share a path.
 
+Make sure the endpoint resolves and answers from the DB server **before** `install` with `PITR=pgbackrest`:
+Postgres runs `archive_command` from its first boot. A reachable repo without a stanza fails each push at once
+(harmless: the WAL waits for `pitr setup`), but a name that does not resolve or a port that drops packets can
+make each push wait out pgBackRest's timeout. The first boot's shutdown then runs past 60 s and `install` stops
+at the health wait. `pitr-s3-it` hit this when its TLS front joined the network after `install`.
+
 Turn on bucket versioning, and give the server a key that can't delete objects if the provider supports it, so
 a compromised server can't erase its own off-site history.
 

@@ -49,6 +49,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   disk was. The limits are now keys (`DOCTOR_DISK_WARN_PCT`/`DOCTOR_DISK_BAD_PCT`, 80/90; add-ons
   `ADDON_DISK_WARN_PCT`/`ADDON_DISK_BAD_PCT`, 85/95), validated, and the suites set them to 100. Suites print
   the PROBLEM / `!!` lines on failure (`it_why`), not only a tail that had scrolled past them.
+- `pitr-s3-it` flake: the TLS front joined the DB network after `install`, so the first boot's `archive_command`
+  could wait on an unresolvable endpoint and the init server's shutdown ran past 60 s. The front now joins as
+  soon as compose creates the network, as a reachable Spaces endpoint would be; the docs say the repo must answer first.
 
 ### Added (P2: manager 1.5.0, monitoring, progress)
 

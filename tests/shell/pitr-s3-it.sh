@@ -71,6 +71,13 @@ archived() { local w _; w="$(psq 'select pg_walfile_name(pg_switch_wal())')"
 if OFFSITE_ENDPOINT="http://$HOSTNAME_S3:8443" run validate_config > "$W/v.out" 2>&1; then fail "http:// endpoint accepted for an S3 PITR repo"; fi
 grep -q 'HTTPS only' "$W/v.out" && ok "validate: an http:// S3 endpoint is refused (pgBackRest speaks HTTPS only)" || { cat "$W/v.out"; fail "http refusal"; }
 
+# The repo must be reachable from Postgres' first boot, as Spaces is on a server: the entrypoint's init server
+# already runs archive_command, and an endpoint that does not resolve makes pgbackrest wait out its timeout,
+# so the init server's shutdown (60 s) and the health wait failed some runs. Attach the front as soon as
+# compose creates the network (the manager creates it, so it cannot be attached earlier).
+( for _ in $(seq 1 240); do docker network inspect "$DOCKER_NETWORK" >/dev/null 2>&1 \
+    && { docker network connect --alias "$HOSTNAME_S3" "$DOCKER_NETWORK" "$FRONT" >/dev/null 2>&1; exit 0; }; sleep 0.25; done ) &
+attach=$!
 run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "install with PITR=pgbackrest, s3 repo" || { it_why "$W/install.out" 40; fail "install"; }
 conf="$D/postgres/conf/pgbackrest.conf"
 grep -qx 'repo1-s3-endpoint=s3.vsw.test' "$conf" && grep -qx 'repo1-storage-port=8443' "$conf" && grep -qx 'repo1-s3-uri-style=path' "$conf" \
@@ -78,7 +85,9 @@ grep -qx 'repo1-s3-endpoint=s3.vsw.test' "$conf" && grep -qx 'repo1-storage-port
 sk="$(kv AWS_SECRET_ACCESS_KEY)"
 ! grep -qF "$sk" "$conf" && grep -qF "$sk" "$D/postgres/pitr.env" && [ "$(stat -c %a "$D/postgres/pitr.env" 2>/dev/null || stat -f %Lp "$D/postgres/pitr.env")" = 600 ] \
   && ok "S3 secret only in postgres/pitr.env (600), not in pgbackrest.conf" || fail "secret placement"
-docker network connect --alias "$HOSTNAME_S3" "$DOCKER_NETWORK" "$FRONT"
+wait "$attach" || true
+docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' "$DOCKER_NETWORK" | grep -qw "$FRONT" \
+  || docker network connect --alias "$HOSTNAME_S3" "$DOCKER_NETWORK" "$FRONT"
 
 run cmd_pitr setup > "$W/setup.out" 2>&1 && grep -q 'PITR ready' "$W/setup.out" && ok "pitr setup over S3: stanza + full backup" || { it_why "$W/setup.out" 40; fail "pitr setup"; }
 ! cat "$W"/*.out "$W/run.log" 2>/dev/null | grep -qF "$sk" && ok "the S3 secret is never printed or logged" || fail "secret printed"
