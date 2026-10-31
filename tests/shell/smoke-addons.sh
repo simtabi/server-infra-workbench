@@ -58,6 +58,8 @@ check "garage key id is GK + 24 hex" L '[[ "$(gen_value gk)" =~ ^GK[0-9a-f]{24}$
 check "write_secrets: 600, only adds missing keys" L "ADDONS_DIR=$W/s; mkdir -p $W/s/garage; write_secrets garage; a=\$(cat $W/s/garage/secrets.env); write_secrets garage; [ \"\$a\" = \"\$(cat $W/s/garage/secrets.env)\" ] && [ \"\$(perm $W/s/garage/secrets.env)\" = 600 ]"
 check "garage.toml: replication and rpc_public_addr = ADDON_BIND in host mode" L "load_addon garage; ADDONS_DIR=$W/t; mkdir -p $W/t/garage; ADDON_BIND=10.10.0.5; GARAGE_REPLICATION=3; write_secrets garage; garage_toml $W/t/garage.toml; grep -qx 'replication_factor = 3' $W/t/garage.toml && grep -qxE 'rpc_(public|bind)_addr = .10.10.0.5:3901.' $W/t/garage.toml && [ \$(grep -cE '10.10.0.5:3901' $W/t/garage.toml) = 2 ]"
 
+check "compose project: an exported COMPOSE_PROJECT_NAME is ignored (one project per add-on)" L "ADDONS_DIR=$W/p; export COMPOSE_PROJECT_NAME=web; ADDON_PROJECT_PREFIX=vsw; [ \"\$(project_of garage)\" = vsw-garage ] && [ \"\$(project_of gotenberg)\" = vsw-gotenberg ]"
+
 for f in "$ROOT"/stacks/addons/*/addon.env.example; do
   n="$(basename "$(dirname "$f")")"
   check "$n: image pinned to a version" bash -c "grep -E '^[A-Z]+_IMAGE=' '$f' | grep -vqE ':latest|=[^:]+\$'"

@@ -14,7 +14,7 @@ A="$PWD/src/shell/addons/addon.sh"
 W="$(mktemp -d /tmp/vsw-gcl.XXXX)"; P="$(it_name -gcl)"; LAST="/tmp/$P-last"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 cleanup() {
-  it_purge "$P-n1" "$P-n2" "$P-n3"
+  it_purge "$P-n1-garage" "$P-n2-garage" "$P-n3-garage"
   rm -rf "$LAST"; mkdir -p "$LAST"; cp "$W"/*.out "$LAST/" 2>/dev/null || true
   rm -rf "$W"
 }
@@ -36,11 +36,12 @@ GARAGE_REPLICATION=3
 STORAGE_BUCKET=cluster
 ADDON_DISK_WARN_PCT=100
 ADDON_DISK_BAD_PCT=100
+ADDON_PROJECT_PREFIX=$P-n$i
 CONF
 done
-# node N: its own conf and compose project (the template's `name:` is overridden by COMPOSE_PROJECT_NAME)
-node() { local i="$1"; shift; ADDON_CONF="$W/n$i.conf" ADDON_ALLOW_NONROOT=1 COMPOSE_PROJECT_NAME="$P-n$i" "$A" "$@"; }
-gx() { local i="$1"; shift; docker exec -e RUST_LOG=warn "$(docker ps -q --filter "label=com.docker.compose.project=$P-n$i" | head -1)" /garage "$@"; }
+# node N: its own conf; ADDON_PROJECT_PREFIX in it gives each node its own compose project, <P>-nN-garage
+node() { local i="$1"; shift; ADDON_CONF="$W/n$i.conf" ADDON_ALLOW_NONROOT=1 "$A" "$@"; }
+gx() { local i="$1"; shift; docker exec -e RUST_LOG=warn "$(docker ps -q --filter "label=com.docker.compose.project=$P-n$i-garage" | head -1)" /garage "$@"; }
 # S3 from the Docker host's network namespace (host networking binds there, not on a Docker Desktop VM's client)
 s3() { local f="$1" m="$2" u="$3"; shift 3
   printf 'user = "%s:%s"\naws-sigv4 = "aws:amz:%s:s3"\n' "$(sed -n 's/^AWS_ACCESS_KEY_ID=//p' "$f")" \
@@ -52,7 +53,7 @@ openssl rand -hex 64 > "$W/obj.bin"
 
 node 1 install garage --role web --yes > "$W/n1.out" 2>&1 && grep -q 'layout staged' "$W/n1.out" && ! grep -q 'garage: bucket' "$W/n1.out" \
   && ok "node 1: installed in host mode; layout staged (1 of 3), no bucket yet" || { it_why "$W/n1.out" 30; fail "node 1 install"; }
-c1="$(docker ps -q --filter "label=com.docker.compose.project=$P-n1")"
+c1="$(docker ps -q --filter "label=com.docker.compose.project=$P-n1-garage")"
 [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$c1")" = host ] && [ -z "$(docker port "$c1")" ] \
   && ok "host networking: no published ports" || fail "network mode"
 docker run --rm --network host busybox:1.37 netstat -ltn > "$W/listen.out" 2>&1
@@ -82,11 +83,11 @@ node 1 laravel-env garage --out "$W/app.env" > "$W/env.out" 2>&1
 [ "$(s3 "$W/app.env" PUT "http://127.0.0.1:$(s3p 1)/cluster/obj.bin" --data-binary @/w/obj.bin)" = 200 ] \
   && [ "$(s3 "$W/app.env" GET "http://127.0.0.1:$(s3p 3)/cluster/obj.bin")" = 200 ] && cmp -s "$W/s3.body" "$W/obj.bin" \
   && ok "write through node 1, read the same bytes through node 3" || fail "cross-node read"
-docker stop "$(docker ps -q --filter "label=com.docker.compose.project=$P-n2")" >/dev/null
+docker stop "$(docker ps -q --filter "label=com.docker.compose.project=$P-n2-garage")" >/dev/null
 [ "$(s3 "$W/app.env" GET "http://127.0.0.1:$(s3p 1)/cluster/obj.bin")" = 200 ] && cmp -s "$W/s3.body" "$W/obj.bin" \
   && [ "$(s3 "$W/app.env" PUT "http://127.0.0.1:$(s3p 3)/cluster/b.bin" --data-binary @/w/obj.bin)" = 200 ] \
   && ok "node 2 down: reads and writes still succeed (quorum 2 of 3)" || fail "one node down"
-docker start "$(docker ps -aq --filter "label=com.docker.compose.project=$P-n2")" >/dev/null
+docker start "$(docker ps -aq --filter "label=com.docker.compose.project=$P-n2-garage")" >/dev/null
 code=000; for _ in $(seq 1 30); do code="$(s3 "$W/app.env" GET "http://127.0.0.1:$(s3p 2)/cluster/b.bin" || true)"; [ "$code" = 200 ] && break; sleep 2; done
 [ "$code" = 200 ] && cmp -s "$W/s3.body" "$W/obj.bin" \
   && ok "node 2 back: serves the object written while it was down" || { gx 1 status; fail "node 2 catch-up (HTTP $code)"; }

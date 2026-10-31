@@ -221,8 +221,10 @@ config_sha() { # hash of mounted config files (not of secrets.env; compose alrea
   for f in garage.toml s3.json; do [ -f "$ADDONS_DIR/$1/$f" ] && out="$out$( (sha256sum "$ADDONS_DIR/$1/$f" 2>/dev/null || shasum -a 256 "$ADDONS_DIR/$1/$f") | cut -c1-16)"; done
   echo "${out:-none}"
 }
-# compose project: what install recorded (ADDON_PROJECT), else COMPOSE_PROJECT_NAME, else <ADDON_PROJECT_PREFIX>-<name>
-project_of() { local p; p="$(stack_get "$1" ADDON_PROJECT)"; echo "${p:-${COMPOSE_PROJECT_NAME:-${ADDON_PROJECT_PREFIX:-vsw}-$1}}"; }
+# compose project: what install recorded (ADDON_PROJECT), else <ADDON_PROJECT_PREFIX>-<name>.
+# An exported COMPOSE_PROJECT_NAME (the caddy stack uses one) is deliberately ignored: it would put
+# every add-on in one project, and `uninstall` (down --remove-orphans) would remove the others.
+project_of() { local p; p="$(stack_get "$1" ADDON_PROJECT)"; echo "${p:-${ADDON_PROJECT_PREFIX:-vsw}-$1}"; }
 dca() { local n="$1" p; shift; p="$(project_of "$n")"; (cd "$ADDONS_DIR/$n" && docker compose -p "$p" --env-file stack.env --env-file secrets.env "$@"); }
 need_docker() { { command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; } || die "docker with the compose plugin is required"; }
 need_root() { [ "$(id -u)" -eq 0 ] || [ "${ADDON_ALLOW_NONROOT:-0}" = 1 ] || die "run as root (sudo)"; }

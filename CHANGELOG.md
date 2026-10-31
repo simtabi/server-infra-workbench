@@ -48,6 +48,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `addons-it` and `garage-cluster-it` their own project names and ports, and the leak guard watches only its
   own prefix. Before, a second run recreated the first run's Garage containers and its leak guard could remove
   them. `addon.sh` takes `ADDON_PROJECT_PREFIX` and records `ADDON_PROJECT` in `stack.env`.
+  It ignores an exported `COMPOSE_PROJECT_NAME` (the caddy stack documents one): honouring it would put every
+  add-on in one compose project, and `uninstall` (`down --remove-orphans`) would remove the other add-ons.
 
 - `reset` and `uninstall --purge` accept `--force-prod`. On a server with a protected env they told you to add
   the flag but never parsed it (only `RESET_FORCE_PROD=1` / `PURGE_FORCE_PROD=1` worked); unknown options are
