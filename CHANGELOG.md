@@ -46,7 +46,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   extensions, and `install` passed only if the restart got healthy in time. This was the intermittent
   `monitor-it` "postgres unhealthy": that suite used `postgres:18` with the default extension list; it now sets
   `PG_EXTENSIONS`.
-- `server-it` prints `sshd -t` / `sshd -T` and the drop-ins when its sshd check fails (it was `2>/dev/null`).
+- `server-it` failed some runs at "sshd -T" while sshd showed exactly the expected settings: `sshd -T | grep -qx`
+  under `pipefail` is false when grep exits on the first match and sshd gets SIGPIPE. The output is now captured,
+  then grepped; the same for monitor-it's Prometheus rules and Grafana datasources bodies. The check also prints
+  `sshd -t` / `sshd -T` and the drop-ins on failure (it was `2>/dev/null`, which hid the cause).
 - RustFS: install now creates a bucket-scoped app key (IAM user + policy `vsw-app-<bucket>` through the admin
   API) and `laravel-env` writes it. Before, the app had no usable key unless you made one in the console, and
   a failed bucket create was only a warning. `doctor` checks the app key.

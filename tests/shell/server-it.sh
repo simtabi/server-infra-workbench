@@ -23,7 +23,8 @@ bash $S/server/init.sh --role base --swap 0 --dry-run > /tmp/o
 grep -q 'todo  packages' /tmp/o && grep -q 'todo  harden' /tmp/o && [ ! -f /etc/ssh/sshd_config.d/10-workbench.conf ] && ok "init --dry-run: plan only" || { cat /tmp/o; fail "init plan"; }
 bash $S/server/init.sh --role base --swap 0 --timezone Europe/London > /tmp/o 2>&1 || { cat /tmp/o; fail "init apply"; }
 [ "$(cat /etc/timezone)" = Europe/London ] && command -v jq >/dev/null && ok "init: timezone (no systemd fallback) and base packages" || fail "init tz/packages"
-sshd -t && sshd -T 2>/dev/null | grep -qx 'passwordauthentication no' && sshd -T 2>/dev/null | grep -qx 'permitrootlogin without-password' \
+# capture, then grep: `sshd -T | grep -q` under pipefail fails when grep exits first and sshd gets SIGPIPE
+sshd -t && T="$(sshd -T 2>/dev/null)" && grep -qx 'passwordauthentication no' <<<"$T" && grep -qx 'permitrootlogin without-password' <<<"$T" \
   && ok "init -> harden: real sshd -T shows keys only, root by key" \
   || { echo "--- sshd -t:"; sshd -t || true; echo "--- sshd -T (auth lines):"; sshd -T 2>&1 | grep -iE "passwordauth|permitroot|error|fatal|bad|unsupported" || true; ls -la /etc/ssh/sshd_config.d/ /etc/ssh/ | grep -E "key|conf"; fail "sshd -T"; }
 [ -f /etc/fail2ban/jail.d/workbench-sshd.local ] && dpkg -s fail2ban unattended-upgrades >/dev/null 2>&1 && ok "harden: fail2ban + unattended-upgrades installed for real" || fail "harden pkgs"

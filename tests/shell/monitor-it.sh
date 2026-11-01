@@ -94,14 +94,15 @@ ok "prometheus targets up: node, cadvisor, postgres, pgbouncer ($t)"
 [ "$(q pg_up)" = 1 ] && ok "postgres-exporter logs in as vsw_monitor (pg_up 1)" || fail "pg_up"
 [ "$(q pgbouncer_up)" = 1 ] && ok "pgbouncer-exporter reads SHOW STATS (pgbouncer_up 1)" || fail "pgbouncer_up"
 [ -n "$(q vsw_backup_last_success_timestamp_seconds)" ] && ok "node-exporter serves the manager's textfile metrics" || fail "textfile metric"
-prom /api/v1/rules | grep -q VswBackupStale && [ "$(prom /api/v1/rules | grep -o '"type":"alerting"' | wc -l | tr -d ' ')" -ge 10 ] && ok "alert rules loaded (VswBackupStale and the rest)" || fail "rules"
+# captured first: a multi-chunk body piped to grep -q can SIGPIPE the producer, and pipefail turns a hit into a miss
+rules="$(prom /api/v1/rules)"; grep -q VswBackupStale <<<"$rules" && [ "$(grep -o '"type":"alerting"' <<<"$rules" | wc -l | tr -d ' ')" -ge 10 ] && ok "alert rules loaded (VswBackupStale and the rest)" || fail "rules"
 curl -fsS -m 10 http://127.0.0.1:29093/-/ready >/dev/null && ok "alertmanager ready" || fail "alertmanager"
 
 # ---- Grafana: auth + provisioning ---------------------------------------------------------------------------------
 [ "$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://127.0.0.1:23300/api/search)" = 401 ] && ok "grafana refuses anonymous access" || fail "grafana anon"
 gpw="$(sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' "$W/mon/prometheus/secrets.env")"
 g() { printf 'user = "admin:%s"\n' "$gpw" | curl -fsS -m 10 -K - "http://127.0.0.1:23300$1"; }
-g /api/datasources | grep -q '"type":"prometheus"' && [ "$(g '/api/search?query=vsw' | grep -o '"uid":"vsw-' | wc -l | tr -d ' ')" -ge 4 ] \
+ds="$(g /api/datasources)"; grep -q '"type":"prometheus"' <<<"$ds" && [ "$(g '/api/search?query=vsw' | grep -o '"uid":"vsw-' | wc -l | tr -d ' ')" -ge 4 ] \
   && ok "grafana: prometheus datasource + the 4 vsw dashboards provisioned" || fail "grafana provisioning"
 
 # ---- Beszel + Kuma -----------------------------------------------------------------------------------------------
