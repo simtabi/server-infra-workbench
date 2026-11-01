@@ -83,7 +83,7 @@ final readonly class Input
                 }
                 $values[$key] = $value;
             } else {
-                throw new ValidationException(sprintf('unknown option --%s (see: workbench help)', $key));
+                throw new ValidationException(sprintf('unknown option --%s (see: siwo help)', $key));
             }
         }
 
@@ -115,7 +115,7 @@ final readonly class Input
     public function expectAtMost(int $count, string $usage): void
     {
         if (count($this->args) > $count) {
-            throw new ValidationException(sprintf('unexpected argument "%s"; usage: workbench %s', $this->args[$count], $usage));
+            throw new ValidationException(sprintf('unexpected argument "%s"; usage: siwo %s', $this->args[$count], $usage));
         }
     }
 

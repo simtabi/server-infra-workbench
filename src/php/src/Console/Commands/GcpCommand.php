@@ -12,7 +12,7 @@ use Simtabi\ServerInfraWorkbench\Gcp\Gcp;
 use Simtabi\ServerInfraWorkbench\Gcp\RunningOperation;
 use Simtabi\ServerInfraWorkbench\Support\Item;
 
-/** `workbench gcp ...`: Compute Engine, Cloud DNS and Cloud Storage. */
+/** `siwo gcp ...`: Compute Engine, Cloud DNS and Cloud Storage. */
 final readonly class GcpCommand implements Command
 {
     public function __construct(private ProviderFactory $providers, private Runner $r) {}
@@ -35,7 +35,7 @@ final readonly class GcpCommand implements Command
             'dns' => $this->dns($in, $gcp()),
             'buckets' => $this->buckets($in, $gcp()),
             null, 'help' => $r->usage('gcp'),
-            default => throw new ValidationException(sprintf('unknown "gcp %s" (see: workbench gcp --help)', $in->arg(0, 'command'))),
+            default => throw new ValidationException(sprintf('unknown "gcp %s" (see: siwo gcp --help)', $in->arg(0, 'command'))),
         };
     }
 

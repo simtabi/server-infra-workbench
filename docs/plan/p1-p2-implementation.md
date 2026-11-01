@@ -37,7 +37,7 @@ runbook row that a human runs.
 - **Design.** One contract, three implementations: `spinner` (unknown length), `bar` (known total, with ETA),
   `step` (`[3/9] label ... 12s`). TTY-aware: on a terminal it redraws one line; otherwise (CI, cron, a pipe,
   `TERM=dumb`) it prints one plain line per start/finish, never control codes. `NO_COLOR` disables colour,
-  `--quiet`/`SIW_QUIET=1` silences progress (errors still print). Output goes to stderr so stdout stays
+  `--quiet`/`SIWO_QUIET=1` silences progress (errors still print). Output goes to stderr so stdout stays
   parseable.
 - **Shell:** `src/shell/lib/progress.sh` (`progress_step`, `progress_run "label" cmd...`, `progress_bar i n`,
   `progress_done`). The DB manager is a single uploaded file, so it carries a copy between
@@ -50,7 +50,7 @@ runbook row that a human runs.
   terminal (fd 3 when present) only, and plain lines everywhere else.
 - **Acceptance:** non-TTY output has no `\r`/ESC (test), `NO_COLOR` honoured (test), library copy in sync (test).
 
-#### 2.2 Monitoring add-on: `workbench monitor`
+#### 2.2 Monitoring add-on: `siwo monitor`
 
 - **Stacks** (any combination, `MONITOR_STACKS=beszel,kuma,netdata,prometheus` or `none`):
 
@@ -74,7 +74,7 @@ runbook row that a human runs.
 - **Validation:** the configurator rejects unknown stacks, checks placement (hub on one node) and RAM: on a
   2 GB node, `prometheus` or `netdata` next to the database is **blocked** unless `MONITOR_ALLOW_TIGHT=1`;
   Beszel and Kuma only warn. The tool repeats the check against `/proc/meminfo`.
-- **`workbench status`:** a quick health table for one or more hosts over ssh (load, RAM, disk, containers,
+- **`siwo status`:** a quick health table for one or more hosts over ssh (load, RAM, disk, containers,
   unhealthy, reboot needed, last backup, monitor stacks) plus optional URLs, `--json` for scripts.
 - **Docs:** guide, [ADR 0012](../adr/0012-monitoring-stack.md) (why Beszel + Kuma is the default), checklist.
 - **Risk:** monitoring itself exhausting RAM on 2 GB droplets → RAM gates; exporters exposing data → private

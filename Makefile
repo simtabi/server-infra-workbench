@@ -4,7 +4,7 @@
 # is linted without editing this file. PHP and Python targets skip (exit 0) with
 # a note when php, composer or python3 is missing, so `make ci` works anywhere.
 SHELL   := /bin/bash
-SCRIPTS := $(shell find . -name '*.sh' -not -path './.git/*' -not -path '*/vendor/*' | sort) bin/workbench
+SCRIPTS := $(shell find . -name '*.sh' -not -path './.git/*' -not -path '*/vendor/*' | sort) bin/siwo
 PHP_OK   = command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'
 PY_OK    = command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))'
 

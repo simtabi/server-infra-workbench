@@ -24,7 +24,7 @@ Made up: blog `blog.example.com` on Ploi web droplet `web-01` (`10.0.0.6`), MySQ
 
 ```bash
 examples/run.sh wordpress         # validate (offline): profile, app-env self-test
-bin/workbench configure --profile mysql-app --client <you> --set APP=blog --set ALERT_EMAIL=<you@example.com> \
+bin/siwo configure --profile mysql-app --client <you> --set APP=blog --set ALERT_EMAIL=<you@example.com> \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 sudo /root/docker-db-server-manager.sh env-creds stg mysql --out /root/stg-db.env   # DB server; copy, remove
 # web server: shared helpers once (examples/_shared/README.md), then as ploi:

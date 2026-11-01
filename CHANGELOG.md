@@ -11,8 +11,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The project is now `server-infra-workbench` (was `vps-server-workbench`); it covers far more than one VPS
   ([ADR 0014](docs/adr/0014-rename-to-server-infra-workbench.md)). GitHub redirects the old URLs.
   - Composer package `simtabi/server-infra-workbench`, PHP namespace `Simtabi\ServerInfraWorkbench`, Python
-    package `server_infra_workbench` (console script still `workbench-py`). `bin/workbench` is unchanged.
-  - Environment variables are `SIW_*`. An unset `SIW_X` falls back to `VSW_X` and prints one deprecation note.
+    package `server_infra_workbench`.
+  - The command is `siwo` (Server + Infrastructure + WOrkbench): `bin/siwo`, console script `siwo-py`,
+    `src/php/bin/siwo-php`. `bin/workbench` is a deprecated shim that prints one notice and runs `bin/siwo`;
+    `workbench-py` still works. Help text, docs, examples, runbooks and checklists use `siwo`, and
+    `make docs-commands` fails on `bin/workbench` in the docs. `remote-run.sh --snapshot-with siwo`
+    (`workbench` still accepted).
+  - Environment variables are `SIWO_*` (the command's name). An unset `SIWO_X` falls back to `VSW_X` and prints
+    one deprecation note.
   - Credentials, `keys.json` and the audit log live under `~/.config|~/.local/state/server-infra-workbench/`;
     an existing `vps-server-workbench` directory keeps being used while the new one does not exist. Server
     directories (`/etc`, `/var/lib`, `/var/log`, `/usr/local/lib`) follow the same rule (`siw_path`).

@@ -9,7 +9,7 @@ it off and use a migrator role instead ([database environments](../../docs/datab
 
 ```bash
 examples/run.sh laravel-multitenant         # validate (offline)
-bin/workbench configure --profile dev-budget --client <you> --set APP=shop --set 'TENANT_ENVS=dev stg' ...
+bin/siwo configure --profile dev-budget --client <you> --set APP=shop --set 'TENANT_ENVS=dev stg' ...
 ```
 
 | File | Use |

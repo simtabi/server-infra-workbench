@@ -1,6 +1,6 @@
 # /etc/vsw-monitor.conf - settings for src/shell/monitor/monitor.sh on ONE node (chmod 600, owned by root).
 # Everything is optional. Image pins and ports live in stacks/monitor/<unit>/monitor.env.example and
-# can be overridden here (e.g. GRAFANA_IMAGE=grafana/grafana:13.3.0). `bin/workbench configure` writes a
+# can be overridden here (e.g. GRAFANA_IMAGE=grafana/grafana:13.3.0). `bin/siwo configure` writes a
 # filled-in copy per node to local/<client>/monitor-<role>.conf. No secrets here: monitor.sh generates them
 # into /opt/vsw-monitor/<unit>/secrets.env (600) and reads webhook/SMTP secrets from the *_FILE paths below.
 # Guide: docs/tools/monitor.md (WHY each default), ADR docs/adr/0012-monitoring-stack.md.

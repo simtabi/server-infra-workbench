@@ -50,9 +50,9 @@ is_key() { [[ "$1" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$ ]]; }
 fp() { printf '%s' "$1" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -c1-12; }
 
 # run_on HOST SUBCOMMAND ARGS... : the server side of this script, on HOST over ssh
-# (tests: SIW_WG_LOCAL=<dir> runs it locally with SIW_SYSROOT=<dir>/<host>)
+# (tests: SIWO_WG_LOCAL=<dir> runs it locally with SIWO_SYSROOT=<dir>/<host>)
 run_on() { local h="$1"; shift
-  if [ -n "${SIW_WG_LOCAL:-}" ]; then SIW_SYSROOT="$SIW_WG_LOCAL/$h" bash "$0" "$@"
+  if [ -n "${SIWO_WG_LOCAL:-}" ]; then SIWO_SYSROOT="$SIWO_WG_LOCAL/$h" bash "$0" "$@"
   else REMOTE_NOTTY=1 remote "$h" "$0" "$@"; fi
 }
 
@@ -218,7 +218,7 @@ Next:
   2. DB manager config on $HOST: EXTRA_BIND_IPS=$HOST_IP  PEER_REGIONS=$pr
      then: sudo /root/docker-db-server-manager.sh upgrade --dry-run, then upgrade
   3. App .env on $PEER: DB_HOST=$HOST_IP (PgBouncer 6432 or Postgres 5432)
-  4. Check: bin/workbench web check-db-reach --remote $PEER $HOST_IP 6432 5432
+  4. Check: bin/siwo web check-db-reach --remote $PEER $HOST_IP 6432 5432
 NEXT
 }
 

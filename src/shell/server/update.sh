@@ -45,7 +45,7 @@ while [ $# -gt 0 ]; do
     --backup-first) BACKUP_FIRST=1; shift ;;
     --no-refresh) REFRESH=0; shift ;;
     --dry-run|-n) DRY=1; shift ;;
-    --quiet|-q) export SIW_QUIET=1; shift ;;
+    --quiet|-q) export SIWO_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -66,7 +66,7 @@ in_window() { # in_window HH:MM-HH:MM NOW(HH:MM)
   local s e n; s="$(mins "${1%-*}")"; e="$(mins "${1#*-}")"; n="$(mins "$2")"
   if [ "$s" -le "$e" ]; then [ "$n" -ge "$s" ] && [ "$n" -lt "$e" ]; else [ "$n" -ge "$s" ] || [ "$n" -lt "$e" ]; fi
 }
-NOW="${SIW_NOW:-$(date +%H:%M)}"
+NOW="${SIWO_NOW:-$(date +%H:%M)}"
 REBOOT_FLAG="$R/var/run/reboot-required"
 DOCKER_PKGS="docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker.io"
 

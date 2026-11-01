@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Check that every documented `bin/workbench ...` and `src/shell/<area>/<tool>.sh ...` command exists.
+"""Check that every documented `bin/siwo ...` and `src/shell/<area>/<tool>.sh ...` command exists.
 
 Why: docs drift silently. A renamed subcommand or flag keeps working in the README long after the
 tool stopped accepting it, and the first person to notice is someone copying it onto a server.
 This reads every Markdown file (code spans and fenced blocks), resolves the tool the same way
-bin/workbench does, and checks the subcommand and every --flag against that tool's own --help.
+bin/siwo does, and checks the subcommand and every --flag against that tool's own --help.
 Offline: only --help/help is run, never a real command.
 
 Also checked (added in the docs audit, each one a bug that reached a doc):
@@ -20,12 +20,15 @@ Inline opt-out for a deliberate example of a wrong command: `<!-- siw-commands: 
 import os, re, subprocess, sys
 
 root = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else ".")
-WB = os.path.join(root, "bin", "workbench")
-CMD = re.compile(r"(?:\./)?(bin/workbench|src/shell/[a-z0-9-]+/[a-z0-9-]+\.sh)((?:[ \t]+(?:<[^\s<>`]+>|[^\s`|;&#)<>])+)*)")
+WB = os.path.join(root, "bin", "siwo")
+# bin/workbench is the deprecated old name of bin/siwo (ADR 0014): only the CHANGELOG and that ADR may use it
+OLD = re.compile(r"(?<![\w/-])(?:\./)?bin/workbench(?![\w-])")
+OLD_OK = ("CHANGELOG.md", "bin/README.md", "docs/tools/cli.md", "docs/adr/0014-rename-to-server-infra-workbench.md")
+CMD = re.compile(r"(?:\./)?(bin/siwo|src/shell/[a-z0-9-]+/[a-z0-9-]+\.sh)((?:[ \t]+(?:<[^\s<>`]+>|[^\s`|;&#)<>])+)*)")
 MGR_PATH = "src/shell/db/docker-db-server-manager.sh"
 MGR = re.compile(r"(?:^|[\s(`])(?:sudo\s+)?(?:[\w./~-]*/)?docker-db-server-manager\.sh((?:[ \t]+(?:<[^\s<>`]+>|[^\s`|;&#)<>])+)*)")
 M_SPAN = re.compile(r"^\s*(?:sudo\s+)?M((?:[ \t]+(?:<[^\s<>`]+>|[^\s`|;&#)<>])+)+)")
-# docs shorten `bin/workbench do snapshots <id>` to `do snapshots <id>` after the first mention
+# docs shorten `bin/siwo do snapshots <id>` to `do snapshots <id>` after the first mention
 SHORT = re.compile(r"^\s*((?:do|cf|ploi|gcp|github|gh|keys|monitor|addon|env|net|server|web)[ \t]+[a-z][a-z0-9-]*(?:[ \t]+(?:<[^\s<>`]+>|[^\s`|;&#)<>])+)*)\s*$")
 REMOTE = re.compile(r"remote-run(?:\.sh)?\b[^`]*?[ \t]--[ \t]+([^`#<(]+)")
 FENCE = re.compile(r"^\s*(```|~~~)")
@@ -39,7 +42,7 @@ _cache = {}
 def helptext(argv):
     key = tuple(argv)
     if key not in _cache:
-        env = dict(os.environ, NO_COLOR="1", SIW_DOCS_CHECK="1")
+        env = dict(os.environ, NO_COLOR="1", SIWO_DOCS_CHECK="1")
         try:
             r = subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
             _cache[key] = r.stdout + r.stderr
@@ -61,32 +64,32 @@ def resolve(prog, args):
             return prog, None, "no such tool"
         return prog, ["bash", f, "--help"], args
     if not args:
-        return "bin/workbench", None, None
+        return "bin/siwo", None, None
     a = args[0]
     if a.startswith("<") or a.isupper() or a in ("...", "<area>"):
-        return "bin/workbench", None, None
+        return "bin/siwo", None, None
     if a in PHP:
-        return f"bin/workbench {a}", [WB, "help", a], args[1:]
+        return f"bin/siwo {a}", [WB, "help", a], args[1:]
     if a in SCRIPT:
-        return f"bin/workbench {a}", ["bash", os.path.join(root, "src/shell", SCRIPT[a]), "--help"], args[1:]
+        return f"bin/siwo {a}", ["bash", os.path.join(root, "src/shell", SCRIPT[a]), "--help"], args[1:]
     if a in PY:
         sub = [a] if a not in ("py", "python") else []
         rest = args[1:]
         if a in ("py", "python", "profile") and rest and is_word(rest[0]):
             sub, rest = (sub + [rest[0]]), rest[1:]
-            return f"bin/workbench {a} {sub[-1]}", [WB] + ([a] if a in ("py", "python") else []) + sub + ["--help"], ["--"] + rest
-        return f"bin/workbench {a}", [WB, a, "--help"], ["--"] + rest
+            return f"bin/siwo {a} {sub[-1]}", [WB] + ([a] if a in ("py", "python") else []) + sub + ["--help"], ["--"] + rest
+        return f"bin/siwo {a}", [WB, a, "--help"], ["--"] + rest
     if a in TOP:
-        return f"bin/workbench {a}", None, None
+        return f"bin/siwo {a}", None, None
     if os.path.isdir(os.path.join(root, "src/shell", a)) and (len(args) < 2 or not is_word(args[1])):
-        return f"bin/workbench {a}", None, None   # "bin/workbench db <tool>": the area alone
+        return f"bin/siwo {a}", None, None   # "bin/siwo db <tool>": the area alone
     if len(args) < 2 or not is_word(args[1]):
-        return f"bin/workbench {a}", None, "unknown command (not a top-level command or <area> <tool>)"
+        return f"bin/siwo {a}", None, "unknown command (not a top-level command or <area> <tool>)"
     area, tool = a, args[1]
     for cand in (f"src/shell/{area}/{tool}.sh", f"src/shell/{area}/{area}-{tool}.sh"):
         if os.path.isfile(os.path.join(root, cand)):
-            return f"bin/workbench {area} {tool}", ["bash", os.path.join(root, cand), "--help"], args[2:]
-    return f"bin/workbench {area} {tool}", None, f"no tool src/shell/{area}/{tool}.sh"
+            return f"bin/siwo {area} {tool}", ["bash", os.path.join(root, cand), "--help"], args[2:]
+    return f"bin/siwo {area} {tool}", None, f"no tool src/shell/{area}/{tool}.sh"
 
 def check(prog, argstr):
     # a Markdown table writes alternatives as `do\|cf`: keep the first
@@ -155,7 +158,7 @@ def php_rules(area):
         text = helptext([WB, "help", area])
         destr = []
         for line in text.splitlines():
-            m = re.match(r"\s*workbench\s+(\S+)\s+((?:[a-z][a-z0-9-]*\s+)*)", line)
+            m = re.match(r"\s*siwo\s+(\S+)\s+((?:[a-z][a-z0-9-]*\s+)*)", line)
             if m and "destructive" in line:
                 destr.append(" ".join([m.group(1)] + m.group(2).split()))
         _php_help[area] = destr
@@ -172,13 +175,13 @@ def check_php_extra(argstr):
         m = re.fullmatch(r"--([a-z][a-z0-9-]*)(=.*)?", t)
         if m:
             if m.group(1) in seen and m.group(1) not in ("json", "yes", "force", "dry-run"):
-                errs.append(f"bin/workbench {area}: --{m.group(1)} given twice (the CLI rejects it; use a comma list)")
+                errs.append(f"bin/siwo {area}: --{m.group(1)} given twice (the CLI rejects it; use a comma list)")
             seen.add(m.group(1))
     words = " ".join([area] + [a for a in args[1:] if is_word(a)])
     if "--force" not in args and "..." not in args and not any(a.startswith("<") and a.endswith(">...") for a in args):
         for d in php_rules(area):
             if (words + " ").startswith(d + " ") and len(args) > len(d.split()):
-                errs.append(f"bin/workbench {d}: destructive, needs --force to run")
+                errs.append(f"bin/siwo {d}: destructive, needs --force to run")
     return errs
 
 def coverage(docs_text):
@@ -193,12 +196,12 @@ def coverage(docs_text):
             continue
         for f in files:
             a, t = os.path.basename(d), f[:-3]
-            if f.endswith(".sh") and f not in docs_text and not re.search(rf"workbench {a} {t}(?![a-z0-9-])", docs_text):
+            if f.endswith(".sh") and f not in docs_text and not re.search(rf"siwo {a} {t}(?![a-z0-9-])", docs_text):
                 errs.append(f"undocumented shell tool src/shell/{os.path.basename(d)}/{f}")
-    lines = [set(re.findall(r"[a-z0-9][a-z0-9-]*", ln)) for ln in docs_text.splitlines() if "workbench" in ln or "`" in ln]
+    lines = [set(re.findall(r"[a-z0-9][a-z0-9-]*", ln)) for ln in docs_text.splitlines() if "siwo" in ln or "`" in ln]
     for area in ("do", "cf", "ploi", "gcp", "github", "keys"):
         for line in helptext([WB, "help", area]).splitlines():
-            m = re.match(r"\s*workbench\s+(\S+) ((?:[a-z][a-z0-9-]*(?: |$))+)", line)
+            m = re.match(r"\s*siwo\s+(\S+) ((?:[a-z][a-z0-9-]*(?: |$))+)", line)
             if not m:
                 continue
             words = m.group(2).split()
@@ -206,7 +209,7 @@ def coverage(docs_text):
             sub = " ".join(words[:2])
             # on one doc line: the area and every word of the subcommand (tables write `account list/add/remove`)
             if not any(area in ws and all(w in ws for w in sub.split()) for ws in lines):
-                errs.append(f"undocumented PHP command 'bin/workbench {area} {sub}'")
+                errs.append(f"undocumented PHP command 'bin/siwo {area} {sub}'")
     return sorted(set(errs))
 
 def commands(path):
@@ -232,23 +235,23 @@ def commands(path):
                         yield n, "M", m.group(1)
                     m = SHORT.match(s)
                     if m and not CMD.search(s):
-                        yield n, "bin/workbench", " " + m.group(1)
+                        yield n, "bin/siwo", " " + m.group(1)
                 for m in REMOTE.finditer(s):
                     yield n, "REMOTE", m.group(1)
 
 def self_test():
     """The checker must catch a wrong flag, subcommand and tool, and accept real ones."""
-    cases = [("bin/workbench", " addon plan garage --bogus-flag", 1), ("bin/workbench", " addon frobnicate", 1),
-             ("bin/workbench", " nosuch tool", 1), ("bin/workbench", " addon plan garage --role web", 0),
-             ("bin/workbench", " env init --env prd --site x", 0), ("bin/workbench", " profile show dev-budget", 0),
+    cases = [("bin/siwo", " addon plan garage --bogus-flag", 1), ("bin/siwo", " addon frobnicate", 1),
+             ("bin/siwo", " nosuch tool", 1), ("bin/siwo", " addon plan garage --role web", 0),
+             ("bin/siwo", " env init --env prd --site x", 0), ("bin/siwo", " profile show dev-budget", 0),
              ("src/shell/web/check-db-reach.sh", " --remote web-1 10.0.0.5", 0),
-             ("bin/workbench", " do alerts standard --email a@x --droplet 1 --droplet 2", 1),
-             ("bin/workbench", " do alerts delete abc", 1), ("bin/workbench", " do alerts delete abc --force", 0),
+             ("bin/siwo", " do alerts standard --email a@x --droplet 1 --droplet 2", 1),
+             ("bin/siwo", " do alerts delete abc", 1), ("bin/siwo", " do alerts delete abc --force", 0),
              ("M", " frobnicate", 1), ("M", " engine disable mysql --dry-run", 0), ("M", " backup --bogus", 1),
              ("REMOTE", "verify, doctor, nosuch", 1), ("REMOTE", "upgrade --dry-run, cron-install", 0)]
     for prog, argstr, want in cases:
         got = len(check_manager(argstr) if prog == "M" else check_remote(argstr) if prog == "REMOTE"
-                  else check(prog, argstr) + (check_php_extra(argstr) if prog == "bin/workbench" else []))
+                  else check(prog, argstr) + (check_php_extra(argstr) if prog == "bin/siwo" else []))
         if (got > 0) != (want > 0):
             print(f"check-commands self-test FAILED: {prog}{argstr} -> {got} problem(s)")
             return False
@@ -267,6 +270,12 @@ def main():
             p = os.path.join(d, f)
             if not os.path.relpath(p, root).startswith("CHANGELOG"):
                 docs_text.append(open(p, encoding="utf-8").read())
+            rel = os.path.relpath(p, root)
+            if rel not in OLD_OK:
+                for n, line in enumerate(open(p, encoding="utf-8"), 1):
+                    if OLD.search(line) and "siw-commands: ignore" not in line:
+                        bad += 1
+                        print(f"{rel}:{n}: bin/workbench is the deprecated name; write bin/siwo")
             for n, prog, argstr in commands(p):
                 total += 1
                 if prog == "M":
@@ -276,7 +285,7 @@ def main():
                 else:
                     if prog.endswith("remote-run.sh"):
                         argstr = argstr.split(" -- ", 1)[0]
-                    found = check(prog, argstr) + (check_php_extra(argstr) if prog == "bin/workbench" else [])
+                    found = check(prog, argstr) + (check_php_extra(argstr) if prog == "bin/siwo" else [])
                 for e in found:
                     bad += 1
                     print(f"{os.path.relpath(p, root)}:{n}: {e}")

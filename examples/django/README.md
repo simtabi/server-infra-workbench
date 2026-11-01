@@ -22,7 +22,7 @@ tier and how the app finds its database. The choices:
 
 ```bash
 examples/run.sh django            # validate (offline): profile, plan, app-env self-test
-bin/workbench configure --profile dev-budget --client <you> --set APP=api \
+bin/siwo configure --profile dev-budget --client <you> --set APP=api \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 # DB server: the stg block into a 600 file; copy it to the web server, then remove it there
 sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env
@@ -30,7 +30,7 @@ sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env
 siw-app-env --stack django --from ~/stg-db.env --out /home/ploi/api.example.com-shared \
   --set DJANGO_ALLOWED_HOSTS=api.example.com --set DJANGO_SETTINGS_MODULE=config.settings.production
 shred -u ~/stg-db.env
-bin/workbench ploi daemon-create <server-id> --directory /home/ploi/api.example.com --dry-run \
+bin/siwo ploi daemon-create <server-id> --directory /home/ploi/api.example.com --dry-run \
   --command "/usr/local/bin/siw-with-env /home/ploi/api.example.com-shared/.env .venv/bin/gunicorn -c gunicorn.conf.py config.wsgi"
 ```
 

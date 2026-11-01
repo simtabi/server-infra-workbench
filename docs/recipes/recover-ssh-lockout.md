@@ -78,8 +78,8 @@ against a mounted disk, so it reads `/mnt/etc/ssh/sshd_config` and its drop-ins 
 
 ## Prevent the next one
 
-- `workbench server harden` refuses to turn passwords off when no `authorized_keys` entry exists and rolls
+- `siwo server harden` refuses to turn passwords off when no `authorized_keys` entry exists and rolls
   back a drop-in that fails `sshd -t`. Keep a second session open when changing ssh.
-- Remove keys with `workbench keys server remove`: it won't remove the key you are logged in with, and it
+- Remove keys with `siwo keys server remove`: it won't remove the key you are logged in with, and it
   tests a fresh login after every change.
 - Keep the provider account's console access (and 2FA recovery codes) somewhere you can reach.

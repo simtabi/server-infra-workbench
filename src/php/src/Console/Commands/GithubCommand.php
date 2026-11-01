@@ -12,7 +12,7 @@ use Simtabi\ServerInfraWorkbench\Github\Github;
 use Simtabi\ServerInfraWorkbench\Github\Repo;
 use Simtabi\ServerInfraWorkbench\Support\Item;
 
-/** `workbench github ...` (alias gh): GitHub REST API 2022-11-28. */
+/** `siwo github ...` (alias gh): GitHub REST API 2022-11-28. */
 final readonly class GithubCommand implements Command
 {
     public function __construct(private ProviderFactory $providers, private Runner $r) {}
@@ -35,7 +35,7 @@ final readonly class GithubCommand implements Command
                 ? $r->showOne($in, $repo()->workflows()->wait($in->arg(1, 'run-id'), $in->int('timeout', 3600)), 'run finished')
                 : $r->showOne($in, $repo()->workflows()->run($in->arg(1, 'run-id'))),
             'dispatch' => $r->write($in, $repo()->workflows()->dispatch($in->arg(1, 'workflow'), $in->required('ref', 'branch or tag'), self::inputs($in->list('inputs'))),
-                fn (bool $ok): int => $r->done($in, $ok, 'workflow dispatched (see: workbench github runs --repo '.$in->required('repo').' --workflow '.$in->arg(1, 'workflow').')')),
+                fn (bool $ok): int => $r->done($in, $ok, 'workflow dispatched (see: siwo github runs --repo '.$in->required('repo').' --workflow '.$in->arg(1, 'workflow').')')),
             'rerun' => $r->write($in, $repo()->workflows()->rerunFailed($in->arg(1, 'run-id')), fn (bool $ok): int => $r->done($in, $ok, 'failed jobs re-queued')),
             'cancel' => $r->write($in, $repo()->workflows()->cancel($in->arg(1, 'run-id')), fn (bool $ok): int => $r->done($in, $ok, 'cancellation requested')),
             'secrets' => match ($in->optionalArg(1)) {
@@ -60,7 +60,7 @@ final readonly class GithubCommand implements Command
                 default => $r->usage('github'),
             },
             null, 'help' => $r->usage('github'),
-            default => throw new ValidationException(sprintf('unknown "github %s" (see: workbench github --help)', $in->arg(0, 'command'))),
+            default => throw new ValidationException(sprintf('unknown "github %s" (see: siwo github --help)', $in->arg(0, 'command'))),
         };
     }
 

@@ -1,6 +1,6 @@
 {
     "name": "simtabi/server-infra-workbench",
-    "description": "PHP core of server-infra-workbench: safe, fluent clients for DigitalOcean, Ploi, Cloudflare, Google Cloud and GitHub, plus the workbench CLI.",
+    "description": "PHP core of server-infra-workbench: safe, fluent clients for DigitalOcean, Ploi, Cloudflare, Google Cloud and GitHub, plus the siwo CLI.",
     "type": "library",
     "license": "MIT",
     "keywords": ["digitalocean", "ploi", "cloudflare", "gcp", "github", "vps", "devops", "psr-18"],
@@ -19,7 +19,7 @@
         "psr/log": "^3.0"
     },
     "suggest": {
-        "ext-sodium": "Required for `workbench github secrets set` (GitHub secrets are sealed with libsodium)"
+        "ext-sodium": "Required for `siwo github secrets set` (GitHub secrets are sealed with libsodium)"
     },
     "require-dev": {
         "laravel/pint": "^1.32",
@@ -33,7 +33,7 @@
     "autoload-dev": {
         "psr-4": {"Simtabi\\ServerInfraWorkbench\\Tests\\": "tests/"}
     },
-    "bin": ["bin/workbench-php"],
+    "bin": ["bin/siwo-php"],
     "scripts": {
         "test": "phpunit --no-coverage",
         "lint": ["@pint", "@phpstan"],

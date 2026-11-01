@@ -3,7 +3,7 @@
 # Not part of `make ci` (needs Docker, ~2 min): run by `make it`. Covers Gotenberg (PDF, SSRF guard,
 # basic auth), Garage (layout, bucket, least-privilege key, idempotent re-install) and SeaweedFS
 # (bucket-scoped identity) and RustFS (experimental gate, bucket-scoped app key, console on loopback).
-# Names and ports follow SIW_IT_PREFIX (tests/shell/it-lib.sh), so a parallel run does not collide.
+# Names and ports follow SIWO_IT_PREFIX (tests/shell/it-lib.sh), so a parallel run does not collide.
 # shellcheck disable=SC2015
 set -euo pipefail
 cd "$(dirname "$0")/../.."

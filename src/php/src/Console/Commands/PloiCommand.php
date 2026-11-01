@@ -14,7 +14,7 @@ use Simtabi\ServerInfraWorkbench\Ploi\ServerResource;
 use Simtabi\ServerInfraWorkbench\Security\IssuedCredential;
 use Simtabi\ServerInfraWorkbench\Support\Item;
 
-/** `workbench ploi ...`: Ploi API v1. */
+/** `siwo ploi ...`: Ploi API v1. */
 final readonly class PloiCommand implements Command
 {
     public function __construct(private ProviderFactory $providers, private Runner $r) {}
@@ -62,7 +62,7 @@ final readonly class PloiCommand implements Command
                 fn (Item $i): int => $r->showOne($in, $i, 'certificate requested (Ploi issues it in the background)')),
             'cert-delete' => $r->write($in, $server()->certificates($in->arg(2, 'site-id'))->delete($in->arg(3, 'certificate-id')), fn (bool $ok): int => $r->done($in, $ok, 'certificate deleted')),
             null, 'help' => $r->usage('ploi'),
-            default => throw new ValidationException(sprintf('unknown "ploi %s" (see: workbench ploi --help)', $in->arg(0, 'command'))),
+            default => throw new ValidationException(sprintf('unknown "ploi %s" (see: siwo ploi --help)', $in->arg(0, 'command'))),
         };
     }
 }

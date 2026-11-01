@@ -35,8 +35,8 @@ final class ProgressTest extends TestCase
 
     public function test_detect_honours_quiet_env_override_tty_and_no_color(): void
     {
-        self::assertSame(Progress::OFF, Progress::detect($this->stream, ['SIW_QUIET' => '1', 'SIW_PROGRESS' => 'tty'], true)->mode());
-        self::assertSame(Progress::PLAIN, Progress::detect($this->stream, ['SIW_PROGRESS' => 'plain', 'TERM' => 'xterm'], true)->mode());
+        self::assertSame(Progress::OFF, Progress::detect($this->stream, ['SIWO_QUIET' => '1', 'SIWO_PROGRESS' => 'tty'], true)->mode());
+        self::assertSame(Progress::PLAIN, Progress::detect($this->stream, ['SIWO_PROGRESS' => 'plain', 'TERM' => 'xterm'], true)->mode());
         self::assertSame(Progress::TTY, Progress::detect($this->stream, ['TERM' => 'xterm'], true)->mode());
         self::assertSame(Progress::PLAIN, Progress::detect($this->stream, ['TERM' => 'dumb'], true)->mode());
         self::assertSame(Progress::PLAIN, Progress::detect($this->stream, ['TERM' => 'xterm'], false)->mode());

@@ -49,7 +49,7 @@ while [ $# -gt 0 ]; do
     --skip) SKIP="${2:?}"; shift 2 ;;
     --firewall) FIREWALL=1; shift ;;
     --dry-run|-n) DRY=1; shift ;;
-    --quiet|-q) export SIW_QUIET=1; shift ;;
+    --quiet|-q) export SIWO_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -115,7 +115,7 @@ plan_item() {
       local hargs=(--role "$ROLE" --dry-run); [ "$FIREWALL" = 1 ] && [ "$PLOI" = 0 ] && hargs+=(--firewall)
       local out; out="$(bash "$HERE/harden.sh" "${hargs[@]}" 2>&1 || true)"
       if grep -q 'nothing to change' <<<"$out"; then ok "harden: baseline in place"
-      else todo "harden: $(grep -c '^  todo' <<<"$out" || true) change(s) (see: workbench server harden --role $ROLE)"; PENDING+=(harden)
+      else todo "harden: $(grep -c '^  todo' <<<"$out" || true) change(s) (see: siwo server harden --role $ROLE)"; PENDING+=(harden)
         grep -E '^  (todo|FAIL)' <<<"$out" | sed 's/^/    /' || true; fi ;;
   esac
 }
@@ -173,4 +173,4 @@ audit confirmed "items=${PENDING[*]} role=$ROLE"
 for i in "${PENDING[@]}"; do apply_item "$i"; done
 summary
 audit succeeded "items=${PENDING[*]} role=$ROLE"
-say "next: workbench server inventory   (record what this server is now)"
+say "next: siwo server inventory   (record what this server is now)"

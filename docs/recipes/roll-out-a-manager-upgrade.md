@@ -11,7 +11,7 @@ Project examples: [`examples/`](../../examples). Full reference: [db-server.md](
 flowchart TD
   A[1. upgrade --dry-run: diff only] --> B[2. upgrade]
   B --> P[preflight: config, disk, docker, health, bindings]
-  P --> S[snapshot: doctl, else bin/workbench, else server token, else typed CONTINUE]
+  P --> S[snapshot: doctl, else bin/siwo, else server token, else typed CONTINUE]
   S --> K[backup + verify dump trailers]
   K --> V[savepoint: script, conf, compose, .env, pgbouncer, images]
   V --> X[apply]
@@ -25,9 +25,9 @@ flowchart TD
 - Quiet window: changed containers are recreated (a few seconds of reconnects through PgBouncer).
 - `make ci` green on the commit you deploy.
 - A snapshot before the upgrade is taken by the first of these that works on the Mac: **doctl**, then
-  **bin/workbench** (`DIGITALOCEAN_TOKEN` or the credentials file), then a **token on the server**; with
+  **bin/siwo** (`DIGITALOCEAN_TOKEN` or the credentials file), then a **token on the server**; with
   none of them you must type `CONTINUE` to go on without one. Set up at least one (the token stays on the
-  Mac). Force a choice with `remote-run.sh --snapshot-with doctl|workbench|server|none`.
+  Mac). Force a choice with `remote-run.sh --snapshot-with doctl|siwo|server|none`.
 - doctl:
   Run each line on its own: `doctl auth init` prompts for the token, and a pasted block would feed it the
   next line instead.
@@ -38,16 +38,16 @@ flowchart TD
   doctl account get      # check it works
   ```
 
-- Or the [workbench CLI](../tools/cli.md): put the token in the
+- Or the [siwo CLI](../tools/cli.md): put the token in the
   [credentials file](../configuration.md#platform-credentials) and check it; `remote-run.sh` then uses it
   automatically when doctl is not set up. To take the snapshot by hand instead, then pass `--snapshot-taken`:
 
   ```bash
-  bin/workbench credentials                                            # DIGITALOCEAN_TOKEN: file or env
-  bin/workbench do account                                             # the token works
-  bin/workbench do droplets --tag db                                   # find the droplet id
-  bin/workbench do snapshot <droplet-id> --name db-pre-upgrade --dry-run
-  bin/workbench do snapshot <droplet-id> --name db-pre-upgrade --yes --wait
+  bin/siwo credentials                                            # DIGITALOCEAN_TOKEN: file or env
+  bin/siwo do account                                             # the token works
+  bin/siwo do droplets --tag db                                   # find the droplet id
+  bin/siwo do snapshot <droplet-id> --name db-pre-upgrade --dry-run
+  bin/siwo do snapshot <droplet-id> --name db-pre-upgrade --yes --wait
   ```
 
 ## 1. Dry run: what would change (writes nothing)
@@ -67,7 +67,7 @@ src/shell/db/remote-run.sh --host db-alias --expect-ip 10.0.0.5 --config db-serv
 You are asked, in order (every answer is validated; Enter takes the safe default):
 
 1. **Snapshot?** `remote-run.sh` offers it from the Mac with doctl or, if doctl is not set up, with
-   `bin/workbench do snapshot`, and waits for it. Otherwise the server offers one if
+   `bin/siwo do snapshot`, and waits for it. Otherwise the server offers one if
    `/root/.config/digitalocean-token` (chmod 600) exists, or makes you type `CONTINUE` to skip it.
 2. **Apply these changes?** after the diff, the verified backup and the savepoint.
 

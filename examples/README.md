@@ -15,12 +15,12 @@ examples/run.sh --all                # every runnable example (part of `make tes
 ```
 
 Each runnable example has an `example.conf`: the profile, `set KEY=VALUE` overrides and read-only
-`plan` commands. `run.sh` runs `bin/workbench configure --profile P --set ... --dry-run`, so the same
+`plan` commands. `run.sh` runs `bin/siwo configure --profile P --set ... --dry-run`, so the same
 checks as a real configure run (RAM per node, TLS on prd, alerts, VPC ranges).
 `run.sh` also runs each example's `selftest <script>` lines (`<script> --self-test`, offline, throwaway files),
 checks a `ploi-deploy.settings.sh` against the deploy script (`_shared/ploi-script.sh --check`), and scans every
 file for hardcoded secrets. To use one for real:
-`bin/workbench configure --profile <PROFILE> --client <you> --set ...` (files go to `local/<you>/`).
+`bin/siwo configure --profile <PROFILE> --client <you> --set ...` (files go to `local/<you>/`).
 
 ## Catalog
 
@@ -63,7 +63,7 @@ Shared scripts and snippets live in [`_shared/`](_shared/README.md). Profiles: [
 | [managed-postgres-prd](managed-postgres-prd/README.md) | prd on DO Managed Postgres with a standby, two web nodes, Spaces | `production-ha` | `DB_MODE=managed` | available |
 | [multi-engine-migration](multi-engine-migration/README.md) | Postgres, MySQL and MariaDB side by side while an app moves engines | `multi-engine` | `ENABLE_MYSQL=1`, `ENABLE_MARIADB=1` | available |
 | [ha-two-web-lb](ha-two-web-lb/README.md) | load balancer + 2 web nodes + managed DB | `production-ha` | `WEB_NODES=2`, `LOAD_BALANCER=1` | available |
-| [gcp-vm](gcp-vm/README.md) | the same layout on a GCP VM | `production-single` | `bin/workbench gcp` | available |
+| [gcp-vm](gcp-vm/README.md) | the same layout on a GCP VM | `production-single` | `bin/siwo gcp` | available |
 
 ### Services, monitoring, backups, DNS
 
@@ -72,7 +72,7 @@ Shared scripts and snippets live in [`_shared/`](_shared/README.md). Profiles: [
 | [s3-storage](s3-storage/README.md) | self-hosted S3 (Garage; SeaweedFS or RustFS as alternatives) | `dev-budget` | `STORAGE=garage`, `STORAGE_ROLE=db` | available |
 | [monitoring](monitoring/README.md) | Beszel + Uptime Kuma hub; Prometheus + Grafana as the upgrade | `staging` | `MONITOR_STACKS`, `MONITOR_HUB` | available |
 | [backups-pitr-spaces](backups-pitr-spaces/README.md) | nightly dumps + pgBackRest PITR to DO Spaces | `production-single` | `PITR=pgbackrest`, `OFFSITE=s3` | available |
-| [cloudflare-dns-proxy](cloudflare-dns-proxy/README.md) | DNS records and proxy through Cloudflare | `dev-budget` | `bin/workbench cf` | available |
+| [cloudflare-dns-proxy](cloudflare-dns-proxy/README.md) | DNS records and proxy through Cloudflare | `dev-budget` | `bin/siwo cf` | available |
 
 New project: `cp -R examples/<one> local/<yourproject>` and follow
 [docs/getting-started.md](../docs/getting-started.md).

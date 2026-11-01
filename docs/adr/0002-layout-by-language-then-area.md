@@ -13,7 +13,7 @@ pyproject and the `src/` layout) that works best on a self-contained folder.
 
 Top-level folders by language or artefact type (`shell/`, `php/`, `python/`, `stacks/`, `config/`,
 `docs/`), and inside `shell/` one folder per area (`db/`, `web/`, `deploy/`, `tunnels/`). One entry point,
-`bin/workbench`, reaches all of them. Old `scripts/` paths keep working through shims until the next major
+`bin/siwo`, reaches all of them. Old `scripts/` paths keep working through shims until the next major
 release. Docs follow the other Simtabi packages: guides in `docs/`, tool references in `docs/tools/`,
 recipes in `docs/recipes/`.
 

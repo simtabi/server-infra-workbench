@@ -15,8 +15,8 @@ class Clock:
 class ProgressTest(unittest.TestCase):
     def test_detect(self):
         s = io.StringIO()
-        self.assertEqual(Progress.detect(s, {"SIW_QUIET": "1", "SIW_PROGRESS": "tty"}, True).mode, OFF)
-        self.assertEqual(Progress.detect(s, {"SIW_PROGRESS": "plain", "TERM": "xterm"}, True).mode, PLAIN)
+        self.assertEqual(Progress.detect(s, {"SIWO_QUIET": "1", "SIWO_PROGRESS": "tty"}, True).mode, OFF)
+        self.assertEqual(Progress.detect(s, {"SIWO_PROGRESS": "plain", "TERM": "xterm"}, True).mode, PLAIN)
         self.assertEqual(Progress.detect(s, {"TERM": "xterm"}, True).mode, TTY)
         self.assertEqual(Progress.detect(s, {"TERM": "dumb"}, True).mode, PLAIN)
         self.assertEqual(Progress.detect(s, {"TERM": "xterm"}, False).mode, PLAIN)

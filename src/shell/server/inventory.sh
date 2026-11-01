@@ -115,7 +115,7 @@ if [ -n "$HOST" ]; then
     rest=(); [ "$FMT" = json ] && rest+=(--json); [ "$CRON" = 1 ] && rest+=(--install-cron); [ "$YES" = 1 ] && rest+=(--yes); [ "$DRY" = 1 ] && rest+=(--dry-run)
     [ -z "$OUT" ] || rest+=(--out "$OUT"); remote "$HOST" "$0" "${rest[@]+"${rest[@]}"}"; exit $?
   fi
-  root="${SIW_REPO_ROOT:-$(cd "$HERE/../../.." && pwd)}"   # tests point this at a temp dir
+  root="${SIWO_REPO_ROOT:-$(cd "$HERE/../../.." && pwd)}"   # tests point this at a temp dir
   dest="$root/${CLIENT:+local/$CLIENT/}inventory/$HOST"; mkdir -p "$dest"; chmod 700 "$dest"
   tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
   REMOTE_NOTTY=1 remote "$HOST" "$0" --txt > "$tmp" || die "inventory on $HOST failed (needs passwordless sudo for a non-interactive run)"

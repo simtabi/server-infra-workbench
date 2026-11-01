@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Simtabi\ServerInfraWorkbench\Support;
 
 /**
- * Settings named SIW_* (server-infra-workbench). Before the rename they were VSW_* (vps-server-workbench):
- * an unset SIW_X falls back to VSW_X, and the CLI prints a one-line deprecation notice for each VSW_*
+ * Settings named SIWO_* (server-infra-workbench). Before the rename they were VSW_* (vps-server-workbench):
+ * an unset SIWO_X falls back to VSW_X, and the CLI prints a one-line deprecation notice for each VSW_*
  * it sees. The same holds for the per-user config paths: a file that only exists under the old
  * directory keeps being used. See docs/adr/0014-rename-to-server-infra-workbench.md.
  */
 final class Env
 {
-    public const string PREFIX = 'SIW_';
+    public const string PREFIX = 'SIWO_';
 
     public const string LEGACY_PREFIX = 'VSW_';
 
@@ -21,7 +21,7 @@ final class Env
     public const string LEGACY_NAME = 'vps-server-workbench';
 
     /**
-     * SIW_X from $env (default getenv()), else the pre-rename VSW_X; null when both are unset or empty.
+     * SIWO_X from $env (default getenv()), else the pre-rename VSW_X; null when both are unset or empty.
      *
      * @param array<string, string>|null $env
      */
@@ -35,14 +35,14 @@ final class Env
         return $value;
     }
 
-    /** SIW_X -> VSW_X (any other name is returned as is). */
+    /** SIWO_X -> VSW_X (any other name is returned as is). */
     public static function legacyName(string $name): string
     {
         return str_starts_with($name, self::PREFIX) ? self::LEGACY_PREFIX.substr($name, strlen(self::PREFIX)) : $name;
     }
 
     /**
-     * $env with every VSW_X copied to SIW_X where SIW_X is unset: for code that reads an env array.
+     * $env with every VSW_X copied to SIWO_X where SIWO_X is unset: for code that reads an env array.
      *
      * @param array<string, string> $env
      * @return array<string, string>

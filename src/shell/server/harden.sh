@@ -20,7 +20,7 @@
 #    firewall    ufw: allow OpenSSH (+ --allow ports), deny other inbound.
 #                Only with --firewall, and never on a Ploi server (Ploi owns ufw).
 #                Note: Docker-published ports bypass ufw; bind DB ports to the
-#                private IP and use a DO cloud firewall (workbench do firewall-apply).
+#                private IP and use a DO cloud firewall (siwo do firewall-apply).
 #    dockergroup members of the docker group other than root are reported (warn):
 #                docker group = root on the host. --fix-docker-group removes them
 #                (gpasswd -d, confirmed); DOCKER_GROUP_ALLOW=user,... exempts users.
@@ -63,7 +63,7 @@ while [ $# -gt 0 ]; do
     --root-login) ROOT_LOGIN="${2:?}"; shift 2 ;;
     --check) CHECK=1; DRY=1; shift ;;
     --dry-run|-n) DRY=1; shift ;;
-    --quiet|-q) export SIW_QUIET=1; shift ;;
+    --quiet|-q) export SIWO_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -149,7 +149,7 @@ plan_item() { # plan_item NAME : prints the state, queues the item when it needs
     ssh)
       if same "$F_SSH" ssh_conf; then ok "ssh: keys-only drop-in in place"
       elif [ "$(key_count)" -eq 0 ]; then bad "ssh: no authorized_keys entry for root or any /home user - refusing (lockout guard)"
-        why "turning off passwords with no key installed locks everyone out; add a key first (workbench keys server add)"
+        why "turning off passwords with no key installed locks everyone out; add a key first (siwo keys server add)"
       else todo "ssh: write $F_SSH (passwords off, root $ROOT_LOGIN, MaxAuthTries 3), sshd -t, reload"; PENDING+=(ssh)
         why "password and keyboard-interactive logins are what bots brute-force"
       fi
@@ -234,7 +234,7 @@ apply_item() {
 say "harden plan (role $ROLE$(ploi_managed && echo ', Ploi server')):"
 for i in $ITEMS; do want "$i" && plan_item "$i"; done
 if [ "$FIREWALL" = 0 ] && ! ploi_managed && have ufw && ufw status 2>/dev/null | grep 'Status: inactive' >/dev/null; then
-  say "  note  ufw is inactive and not managed without --firewall; the DO cloud firewall (workbench do firewall-apply) is the"
+  say "  note  ufw is inactive and not managed without --firewall; the DO cloud firewall (siwo do firewall-apply) is the"
   say "        filter then. For ufw too: rerun with --firewall --allow <ports> (a Garage node also needs its RPC port from the VPC)"
 fi
 if have docker && docker ps --format '{{.Ports}}' 2>/dev/null | grep '0\.0\.0\.0:' >/dev/null; then

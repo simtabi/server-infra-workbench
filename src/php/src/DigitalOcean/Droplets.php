@@ -21,15 +21,15 @@ final readonly class Droplets
     /**
      * The image a new droplet gets when nothing else is asked for: the newest Ubuntu LTS DigitalOcean offers.
      * The one place to bump when a new LTS ships (every April of an even year). Override per run with
-     * --image, per workstation with SIW_DROPLET_IMAGE, or pass "latest" to ask the API at create time.
+     * --image, per workstation with SIWO_DROPLET_IMAGE, or pass "latest" to ask the API at create time.
      */
     public const string DEFAULT_IMAGE = 'ubuntu-26-04-x64';
 
-    /** The --image / SIW_DROPLET_IMAGE value that resolves the newest Ubuntu LTS from the API. */
+    /** The --image / SIWO_DROPLET_IMAGE value that resolves the newest Ubuntu LTS from the API. */
     public const string LATEST = 'latest';
 
     /** Workstation setting (environment or credentials file; not a secret) for the default image. */
-    public const string IMAGE_ENV = 'SIW_DROPLET_IMAGE';
+    public const string IMAGE_ENV = 'SIWO_DROPLET_IMAGE';
 
     public function __construct(private Transport $transport, private Actions $actions) {}
 
@@ -137,7 +137,7 @@ final readonly class Droplets
      * Create a droplet. The plan (dry run) shows the exact body; nothing is created until confirm().
      * Idempotent by name: when a droplet with this name exists, confirm() returns it and sends nothing.
      *
-     * @param list<int|string> $sshKeys   account key ids or fingerprints (see: workbench keys account list)
+     * @param list<int|string> $sshKeys   account key ids or fingerprints (see: siwo keys account list)
      * @param list<string>     $tags
      * @return PendingAction<Droplet>
      */
@@ -185,7 +185,7 @@ final readonly class Droplets
             '/v2/droplets',
             $body,
             fn (): Droplet => Droplet::fromArray(Data::map($this->transport->send('POST', '/v2/droplets', [], $body)->json, 'droplet')),
-            note: "billed hourly from creation (size {$size}); see: workbench plans --regions {$region}",
+            note: "billed hourly from creation (size {$size}); see: siwo plans --regions {$region}",
         );
     }
 
@@ -201,7 +201,7 @@ final readonly class Droplets
     {
         $id = Validate::id($id, 'droplet id');
         if (preg_match('/^[a-z0-9][a-z0-9.-]{0,63}$/', $size) !== 1) {
-            throw new ValidationException(sprintf('size "%s" must be a DigitalOcean size slug (e.g. s-2vcpu-4gb; see: workbench plans)', $size));
+            throw new ValidationException(sprintf('size "%s" must be a DigitalOcean size slug (e.g. s-2vcpu-4gb; see: siwo plans)', $size));
         }
         $droplet = $this->find($id);
         $path = "/v2/droplets/{$id}/actions";
@@ -231,7 +231,7 @@ final readonly class Droplets
         };
 
         return $this->transport->pending('resize droplet', $target, 'POST', $path, $body, $run, destructive: $disk,
-            note: 'downtime: shutdown, resize, power on (a few minutes). Snapshot first: workbench do snapshot '.$id.' --wait'.($disk ? '. Disk resize is permanent' : '. CPU/RAM only, reversible'));
+            note: 'downtime: shutdown, resize, power on (a few minutes). Snapshot first: siwo do snapshot '.$id.' --wait'.($disk ? '. Disk resize is permanent' : '. CPU/RAM only, reversible'));
     }
 
     /** Power and reboot actions; each one is a short outage except power_on. */
@@ -269,6 +269,6 @@ final readonly class Droplets
 
         return $this->transport->pending('delete droplet', sprintf('%d "%s" (%s, %s)', $droplet->id, $droplet->name, $droplet->region, $droplet->size), 'DELETE', $path, [],
             fn (): bool => $this->transport->send('DELETE', $path)->status < 300, destructive: true,
-            note: 'the disk is destroyed; take a snapshot first if you may need it (workbench do snapshot '.$droplet->id.' --wait)');
+            note: 'the disk is destroyed; take a snapshot first if you may need it (siwo do snapshot '.$droplet->id.' --wait)');
     }
 }

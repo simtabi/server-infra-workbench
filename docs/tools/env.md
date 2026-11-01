@@ -1,4 +1,4 @@
-# Laravel `.env` per environment: `workbench env init|check`
+# Laravel `.env` per environment: `siwo env init|check`
 
 `src/shell/env/env.sh` creates and checks a site's `.env` on the web server. It reads and writes values but
 **never prints one**: output is key names only (`+ added`, `~ changed`, `* generated`).
@@ -26,9 +26,9 @@ ssh -t db-1 'sudo /root/docker-db-server-manager.sh env-creds prd --out /root/pr
 (umask 077; ssh db-1 'sudo cat /root/prd-db.env && sudo rm /root/prd-db.env' > ~/prd-db.env)
 
 # from your workstation: write the prd .env on web-1 (values go over as a file, not argv)
-bin/workbench env init --host web-1 --env prd --site app.example.com \
+bin/siwo env init --host web-1 --env prd --site app.example.com \
   --from ~/prd-db.env --url https://app.example.com --set MAIL_MAILER=smtp --dry-run
-bin/workbench env init --host web-1 --env prd --site app.example.com \
+bin/siwo env init --host web-1 --env prd --site app.example.com \
   --from ~/prd-db.env --url https://app.example.com --set MAIL_MAILER=smtp     # type app.example.com
 rm ~/prd-db.env
 ```
@@ -54,8 +54,8 @@ PgBouncer 6432 on prd, `MAIL_MAILER=log` or `LOG_LEVEL=debug` on prd, duplicate 
 ## Check
 
 ```bash
-bin/workbench env check --host web-1 --env prd --site app.example.com      # vs the template + rules
-bin/workbench env check --path ./stg.env --against ./prd.env                # keys only, both ways (local)
+bin/siwo env check --host web-1 --env prd --site app.example.com      # vs the template + rules
+bin/siwo env check --path ./stg.env --against ./prd.env                # keys only, both ways (local)
 ```
 
 Reports keys missing from and extra to the reference, the file mode, and the validation rules above.

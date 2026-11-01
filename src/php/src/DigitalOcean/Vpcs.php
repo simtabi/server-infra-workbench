@@ -114,7 +114,7 @@ final readonly class Vpcs
     {
         $vpc = $this->find($id);
         if ($vpc->get('default') === true) {
-            throw new ValidationException(sprintf('"%s" is the default VPC for %s; DigitalOcean will not delete it. Make another VPC the default first: workbench do vpcs default <other-vpc-id>', $vpc->string('name'), $vpc->string('region')));
+            throw new ValidationException(sprintf('"%s" is the default VPC for %s; DigitalOcean will not delete it. Make another VPC the default first: siwo do vpcs default <other-vpc-id>', $vpc->string('name'), $vpc->string('region')));
         }
         $members = $this->members($vpc->string('id'));
         if ($members !== []) {

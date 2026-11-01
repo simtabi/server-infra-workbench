@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# examples/cloudflare-dns-proxy/cf-dns.sh - apply records.txt to Cloudflare with `bin/workbench cf dns upsert`.
+# examples/cloudflare-dns-proxy/cf-dns.sh - apply records.txt to Cloudflare with `bin/siwo cf dns upsert`.
 #
 #   cf-dns.sh [records.txt]             print the commands (offline; nothing is sent)
 #   cf-dns.sh --check [records.txt]     run them with --dry-run (reads the zone, shows each change, writes nothing)
@@ -53,7 +53,7 @@ commands() { # records file -> the commands, shell-quoted, for reading
   local line a out
   records "$1" > "$T.rec" || return 1
   while IFS= read -r line; do
-    out="bin/workbench"
+    out="bin/siwo"
     while IFS= read -r -d '' a; do out="$out $(printf '%q' "$a")"; done < <(args_of "$line")
     echo "$out"
   done < "$T.rec"
@@ -110,6 +110,6 @@ while IFS= read -r line; do
   args=()
   while IFS= read -r -d '' a; do args+=("$a"); done < <(args_of "$line")
   if [ "$mode" = yes ]; then args+=(--yes); else args+=(--dry-run); fi
-  echo "+ bin/workbench ${args[*]}"
-  "$ROOT/bin/workbench" "${args[@]}"
+  echo "+ bin/siwo ${args[*]}"
+  "$ROOT/bin/siwo" "${args[@]}"
 done < "$T.rec"

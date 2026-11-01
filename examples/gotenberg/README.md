@@ -8,8 +8,8 @@ The configurator refuses a 2 GB web node for PHP + Gotenberg (~2.5 GB), so this 
 
 ```bash
 examples/run.sh gotenberg                   # configure checks + `addon plan gotenberg`
-bin/workbench addon install gotenberg --role web --yes                   # on the web node
-bin/workbench env init --env stg --site <site> --addons                  # merges GOTENBERG_URL/USERNAME/PASSWORD
+bin/siwo addon install gotenberg --role web --yes                   # on the web node
+bin/siwo env init --env stg --site <site> --addons                  # merges GOTENBERG_URL/USERNAME/PASSWORD
 ```
 
 The basic-auth password is generated at install (`secrets.env`, 600) and merged into the app `.env`

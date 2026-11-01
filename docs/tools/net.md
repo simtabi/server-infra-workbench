@@ -1,6 +1,6 @@
 # Networking tools
 
-`src/shell/net/wireguard.sh` (`bin/workbench net wireguard ...`): an encrypted WireGuard tunnel between two
+`src/shell/net/wireguard.sh` (`bin/siwo net wireguard ...`): an encrypted WireGuard tunnel between two
 servers, for a web server and a DB server in different regions. Why and when: [Servers in different
 regions](../cross-region.md).
 
@@ -35,7 +35,7 @@ server; by default the rule is printed for Ploi's Network tab).
 1. DB manager config: `EXTRA_BIND_IPS=10.200.0.1`, `PEER_REGIONS=<web region>`, then `upgrade --dry-run` and
    `upgrade`. `doctor` then reports "reached over WireGuard".
 2. App `.env`: `DB_HOST=10.200.0.1`.
-3. `bin/workbench web check-db-reach --remote <web> 10.200.0.1 6432 5432`.
+3. `bin/siwo web check-db-reach --remote <web> 10.200.0.1 6432 5432`.
 
 ## Testing
 

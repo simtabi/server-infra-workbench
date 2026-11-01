@@ -1,4 +1,4 @@
-# 0014. Rename to server-infra-workbench; frozen on-server identifiers; time-boxed fallbacks
+# 0014. Rename to server-infra-workbench and `siwo`; frozen on-server identifiers; time-boxed fallbacks
 
 - Status: Accepted
 - Date: 2026-11-01
@@ -33,10 +33,18 @@ using the tool, and breaking them is not ours to decide.
 ## Decision
 
 - **Repository names change everywhere**: `simtabi/server-infra-workbench` (GitHub, folder, Composer
-  package), `Simtabi\ServerInfraWorkbench` (PHP), `server_infra_workbench` (Python; console script still
-  `workbench-py`). The front door stays `bin/workbench`. `sshmgr` is a separate project and is not renamed.
-- **Settings are `SIW_*`**. An unset `SIW_X` falls back to `VSW_X`, and each `VSW_*` that is set prints one
-  `note: VSW_X is deprecated, use SIW_X` line on stderr (shell: `lib/progress.sh`, embedded in the DB
+  package), `Simtabi\ServerInfraWorkbench` (PHP), `server_infra_workbench` (Python). `sshmgr` is a separate
+  project and is not renamed.
+- **The command is `siwo`** (Server + Infrastructure + WOrkbench): `bin/siwo`, `siwo-py`, `src/php/bin/siwo-php`.
+  `workbench` was a generic word that collides with other tools on a `PATH` and reads as prose in the docs
+  ("the workbench"); `siwo` is short, unique, and names the project. `bin/workbench` stays as a thin shim that
+  prints one deprecation notice (hidden by `SIWO_QUIET=1`) and execs `bin/siwo`, so scripts, shell aliases
+  and runbooks keep working; `workbench-py` stays as a second console-script name. The docs checker
+  (`tests/docs/check-commands.py`) treats `siwo` as canonical and fails on `bin/workbench` outside the
+  CHANGELOG, this ADR and the two pages that explain the shim. `remote-run.sh --snapshot-with` takes `siwo`
+  and still accepts `workbench`.
+- **Settings are `SIWO_*`**, the command's name, so a variable says which tool reads it. An unset `SIWO_X` falls back to `VSW_X`, and each `VSW_*` that is set prints one
+  `note: VSW_X is deprecated, use SIWO_X` line on stderr (shell: `lib/progress.sh`, embedded in the DB
   manager; PHP: `Support\Env`; Python: `compat`). The notice is printed once per name per process tree.
 - **Per-user paths** are `~/.config/server-infra-workbench/` and `~/.local/state/server-infra-workbench/`.
   While only the old `vps-server-workbench` directory has the file, the old one is used (`Env::userPath`),
@@ -49,8 +57,12 @@ using the tool, and breaking them is not ours to decide.
 - **Temporary names** (`/tmp/siw-*`, `mktemp` templates) and **live-test names** (`siw-livetest` tag,
   `siwlt-` prefix) use the new prefix. `tests/live/sweep.sh` also sweeps the old `vsw-livetest` /
   `vswlt-` names. Integration-test containers keep the `vsw` prefix because the code under test creates
-  `vsw-*` objects and the leak guard must see both.
-- The fallbacks are removed in the first release after 1.0 that is allowed to break settings, with a
+  `vsw-*` objects and the leak guard must see both. Lowercase `siw` (the project's initials) stays in these
+  throwaway resource names; `siwo` is for the command and its settings.
+- Labels and descriptions already written to cloud resources (`managed-by: workbench` on GCE, `managed by
+  workbench` on Cloud DNS and firewalls, `workbench: ...` on DO alert policies, the `X-Client: workbench`
+  header) are unchanged: existing resources carry them and filters match on them.
+- The fallbacks (`VSW_*`, old directories, `bin/workbench`, `workbench-py`) are removed in the first release after 1.0 that is allowed to break settings, with a
   CHANGELOG entry; until then they are tested (`smoke-progress`, `EnvTest`, `test_compat`).
 
 ## Consequences

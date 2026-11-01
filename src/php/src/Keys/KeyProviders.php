@@ -49,7 +49,7 @@ final class KeyProviders
     }
 
     /**
-     * Built-ins plus the extra providers in $file (or $SIW_KEYS_CONFIG, $VPSKEYS_CONFIG,
+     * Built-ins plus the extra providers in $file (or $SIWO_KEYS_CONFIG, $VPSKEYS_CONFIG,
      * ~/.config/server-infra-workbench/keys.json). A missing file is fine; a broken one is an error.
      */
     public static function load(?string $file = null): self
@@ -74,7 +74,7 @@ final class KeyProviders
 
     public static function defaultConfig(): ?string
     {
-        foreach (['SIW_KEYS_CONFIG', 'VPSKEYS_CONFIG'] as $env) {
+        foreach (['SIWO_KEYS_CONFIG', 'VPSKEYS_CONFIG'] as $env) {
             $value = Env::get($env);
             if ($value !== null) {
                 return $value;

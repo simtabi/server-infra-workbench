@@ -10,7 +10,7 @@ estimate) and `configure` refuses a droplet too small for them.
 
 ```bash
 examples/run.sh multi-engine-migration   # validate (offline): RAM for three engines, ranges, off-site
-bin/workbench configure --profile multi-engine --client <you> --set APP=shop \
+bin/siwo configure --profile multi-engine --client <you> --set APP=shop \
   --set ALERT_EMAIL=<you@example.com> --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 ```
 

@@ -24,15 +24,15 @@ alerts.
 
 ```bash
 examples/run.sh laravel-horizon-reverb      # validate (offline): profile checks, plans, app-env self-test
-bin/workbench configure --profile production-single --client <you> --set APP=shop --set ALERT_EMAIL=<you@example.com> \
+bin/siwo configure --profile production-single --client <you> --set APP=shop --set ALERT_EMAIL=<you@example.com> \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20 --set OFFSITE_BUCKET=<bucket>
-bin/workbench env init --host web-01 --env prd --site app.example.com --from ~/prd-db.env --url https://app.example.com
+bin/siwo env init --host web-01 --env prd --site app.example.com --from ~/prd-db.env --url https://app.example.com
 # web server, as ploi (helpers: examples/_shared/README.md): the Reverb keys, once; later runs keep them
 siw-app-env --stack none --out /home/ploi/app.example.com-shared \
   --generate REVERB_APP_ID --generate REVERB_APP_KEY --generate REVERB_APP_SECRET
-bin/workbench ploi daemon-create <server-id> --directory /home/ploi/app.example.com --command "php artisan horizon" --dry-run
-bin/workbench ploi daemon-create <server-id> --directory /home/ploi/app.example.com --command "php artisan reverb:start" --dry-run
-bin/workbench ploi daemon-create <server-id> --directory /home/ploi/app.example.com --command "php artisan schedule:work" --dry-run
+bin/siwo ploi daemon-create <server-id> --directory /home/ploi/app.example.com --command "php artisan horizon" --dry-run
+bin/siwo ploi daemon-create <server-id> --directory /home/ploi/app.example.com --command "php artisan reverb:start" --dry-run
+bin/siwo ploi daemon-create <server-id> --directory /home/ploi/app.example.com --command "php artisan schedule:work" --dry-run
 ```
 
 | Daemon | Command | Processes | Why |

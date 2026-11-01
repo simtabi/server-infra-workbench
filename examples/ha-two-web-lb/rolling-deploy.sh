@@ -32,12 +32,12 @@ served() { ssh -o BatchMode=yes "$1" "curl -fsS -m 5 -H 'Host: $domain' http://1
 for n in "${nodes[@]}"; do
   host="${n%%=*}" ids="${n#*=}"; server="${ids%%:*}" site="${ids#*:}"
   if [ "$yes" -eq 0 ]; then
-    echo "plan: $host: bin/workbench ploi deploy $server $site, then wait until $host serves /version = ${sha:0:12} (max ${timeout}s)"
+    echo "plan: $host: bin/siwo ploi deploy $server $site, then wait until $host serves /version = ${sha:0:12} (max ${timeout}s)"
     continue
   fi
   [ "$(served "$host")" != "$sha" ] || { echo "$host: already on ${sha:0:12}, skipped"; continue; }
   echo "$host: deploying (server $server, site $site)"
-  "$ROOT/bin/workbench" ploi deploy "$server" "$site" --yes
+  "$ROOT/bin/siwo" ploi deploy "$server" "$site" --yes
   start=$SECONDS
   until [ "$(served "$host")" = "$sha" ]; do
     [ $((SECONDS - start)) -lt "$timeout" ] || die "$host: not on ${sha:0:12} after ${timeout}s; stopped, later nodes untouched (Ploi -> Site -> Deployments)"

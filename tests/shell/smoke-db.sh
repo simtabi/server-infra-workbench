@@ -77,7 +77,7 @@ mkdir -p "$T/bin" "$T/bucket" "$T/b/20261031-031500" "$T/etc"
 cat > "$T/bin/rclone" <<'EOF'
 #!/usr/bin/env bash
 # stub: siw:bucket/prefix/name -> $STUB_BUCKET/prefix/name ; records that creds came from env
-[ -n "${RCLONE_CONFIG_SIW_ACCESS_KEY_ID:-}" ] || { echo "no creds" >&2; exit 1; }
+[ -n "${RCLONE_CONFIG_SIWO_ACCESS_KEY_ID:-}" ] || { echo "no creds" >&2; exit 1; }
 map() { local p="${1#siw:}"; echo "$STUB_BUCKET/${p#*/}"; }
 case "$1" in
   copyto) shift; [ "$1" = --s3-no-check-bucket ] && shift; if [[ "$1" == siw:* ]]; then cp "$(map "$1")" "$2"; else mkdir -p "$(dirname "$(map "$2")")"; cp "$1" "$(map "$2")"; fi ;;

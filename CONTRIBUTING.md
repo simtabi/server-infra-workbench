@@ -27,7 +27,7 @@ Where things go and how to name them: [docs/structure.md](docs/structure.md#wher
 - **Python**: `make python`.
 - **Docs**: `make links` (relative links and anchors).
 - **Secrets**: `make secrets-check` (repo scanner + gitleaks over the full history). `make ci` runs it.
-- **Documented commands**: `make docs-commands` checks every `bin/workbench` / `src/shell` command, subcommand
+- **Documented commands**: `make docs-commands` checks every `bin/siwo` / `src/shell` command, subcommand
   and `--flag` in the Markdown against the tool's own `--help`. Rename a flag and the docs fail CI.
 - **Same gate as CI**: `make ci-local` runs `make ci` with the pinned shellcheck image (`SHELLCHECK_VERSION`).
 

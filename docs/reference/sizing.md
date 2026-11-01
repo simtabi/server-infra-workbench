@@ -23,7 +23,7 @@ and `free -m` once real traffic arrives.
 | All four engines | 3392 MB | `s-2vcpu-4gb`, no headroom; 8 GB for real load |
 
 `doctor` and `engine enable` warn when the host has less than 90% of the estimate and print the
-`bin/workbench do resize <droplet> --size ...` command for the smallest size that fits (or suggest
+`bin/siwo do resize <droplet> --size ...` command for the smallest size that fits (or suggest
 `engine disable mysql`). Each extra environment on the
 same server adds databases, not processes, so it costs disk and cache rather than a fixed amount of RAM.
 

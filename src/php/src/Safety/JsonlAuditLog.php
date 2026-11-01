@@ -8,12 +8,12 @@ use Simtabi\ServerInfraWorkbench\Support\Env;
 
 /**
  * Append-only JSON lines, one per event. The directory is 0700 and the file 0600.
- * Default: $SIW_AUDIT_LOG, else ~/.local/state/server-infra-workbench/audit.log (or the pre-rename
+ * Default: $SIWO_AUDIT_LOG, else ~/.local/state/server-infra-workbench/audit.log (or the pre-rename
  * ~/.local/state/vps-server-workbench/audit.log while only that one exists).
  */
 final class JsonlAuditLog implements AuditLog
 {
-    public const string PATH_ENV = 'SIW_AUDIT_LOG';
+    public const string PATH_ENV = 'SIWO_AUDIT_LOG';
 
     public function __construct(private readonly string $path) {}
 

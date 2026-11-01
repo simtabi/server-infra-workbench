@@ -91,7 +91,7 @@ final readonly class RestAccountKeys implements AccountKeys
         return $this->transport->pending('remove ssh key', "\"{$current->name}\" [{$id}]", 'DELETE', $path, [],
             fn (): bool => $this->transport->send('DELETE', $path)->status < 300,
             destructive: true,
-            note: 'removes it from the dashboard only: servers that already have this key keep it (see: workbench keys server)');
+            note: 'removes it from the dashboard only: servers that already have this key keep it (see: siwo keys server)');
     }
 
     public function find(string $id): SshKey
@@ -102,7 +102,7 @@ final readonly class RestAccountKeys implements AccountKeys
             }
         }
 
-        throw new NotFoundException("{$this->spec->name}: no SSH key with id {$id} (see: workbench keys account list --provider {$this->spec->name})");
+        throw new NotFoundException("{$this->spec->name}: no SSH key with id {$id} (see: siwo keys account list --provider {$this->spec->name})");
     }
 
     private function path(string $template, string $id): string

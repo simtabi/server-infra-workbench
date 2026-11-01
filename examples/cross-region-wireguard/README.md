@@ -9,8 +9,8 @@ latency per query (a few ms to tens of ms, depending on the pair), so batch quer
 
 ```bash
 examples/run.sh cross-region-wireguard      # validate (offline)
-bin/workbench net wireguard setup --host <db-alias> --peer <web-alias> --dry-run   # plan, writes nothing
-bin/workbench net wireguard setup --host <db-alias> --peer <web-alias> --yes       # keys generated on each host
+bin/siwo net wireguard setup --host <db-alias> --peer <web-alias> --dry-run   # plan, writes nothing
+bin/siwo net wireguard setup --host <db-alias> --peer <web-alias> --yes       # keys generated on each host
 ```
 
 Private keys are generated on each server (`wg genkey`, 600) and never leave it or reach the output.
@@ -20,4 +20,4 @@ Checklist:
 
 - [ ] DO cloud firewall: UDP 51820 from the peer's public IP only
 - [ ] DB manager: `EXTRA_BIND_IPS=10.200.0.1`, then `upgrade --dry-run`, then `upgrade`
-- [ ] App `.env`: `DB_HOST=10.200.0.1`; check with `bin/workbench web check-db-reach --remote <web-alias> 10.200.0.1 6432`
+- [ ] App `.env`: `DB_HOST=10.200.0.1`; check with `bin/siwo web check-db-reach --remote <web-alias> 10.200.0.1 6432`

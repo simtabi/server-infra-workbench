@@ -20,9 +20,9 @@ use Simtabi\ServerInfraWorkbench\Support\Env;
 /**
  * Live, READ-ONLY smoke tests against the real APIs. Not part of the default run:
  *
- *   SIW_LIVE=1 DIGITALOCEAN_TOKEN=... vendor/bin/phpunit --testsuite live
+ *   SIWO_LIVE=1 DIGITALOCEAN_TOKEN=... vendor/bin/phpunit --testsuite live
  *
- * Each provider is skipped unless SIW_LIVE=1 and its token is set. Every request goes through a client
+ * Each provider is skipped unless SIWO_LIVE=1 and its token is set. Every request goes through a client
  * that refuses anything but GET (plus the OAuth token POST for a GCP service account), so a bug here
  * can never change an account. Nothing is printed; assertions only check shapes.
  */
@@ -60,8 +60,8 @@ final class ReadOnlyProvidersTest extends TestCase
 
     private static function need(string ...$keys): Credentials
     {
-        if (Env::get('SIW_LIVE') !== '1') {
-            self::markTestSkipped('set SIW_LIVE=1 to run live read-only tests');
+        if (Env::get('SIWO_LIVE') !== '1') {
+            self::markTestSkipped('set SIWO_LIVE=1 to run live read-only tests');
         }
         $credentials = Credentials::fromEnvironment();
         foreach ($keys as $key) {

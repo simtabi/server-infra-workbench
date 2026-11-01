@@ -181,7 +181,7 @@ _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def repo_root() -> Path:
-    env = compat.get("SIW_ROOT")
+    env = compat.get("SIWO_ROOT")
     return Path(env) if env else Path(__file__).resolve().parents[4]
 
 
@@ -611,7 +611,7 @@ def _q(value: str) -> str:
 def render_workbench(r: Resolved, stamp: str) -> str:
     over = [f"{k}={r.values[k]}" for k, s in r.source.items() if s == "override"]
     lines = [
-        f"# workbench.conf - written by `bin/workbench configure` on {stamp}",
+        f"# workbench.conf - written by `bin/siwo configure` on {stamp}",
         f"# profile {r.profile} v{r.version}; overrides: {' '.join(over) or 'none'}",
         "# Resolved settings (no secrets). Re-run configure to change them; edits here are kept only until then.",
         f"PROFILE={r.profile}",
@@ -637,7 +637,7 @@ def render_db(r: Resolved, existing: str | None, stamp: str) -> str:
     vals = db_values(r)
     if not existing:
         head = [
-            f"# /etc/docker-db-server-manager.conf - written by `bin/workbench configure` ({r.profile} v{r.version}, {stamp})",
+            f"# /etc/docker-db-server-manager.conf - written by `bin/siwo configure` ({r.profile} v{r.version}, {stamp})",
             "# No secrets: the manager generates passwords on the server. Keys: config/db-server.env.example",
         ]
         return "\n".join(head + [f"{k}={_q(val)}" for k, val in vals.items()]) + "\n"
@@ -654,7 +654,7 @@ def render_db(r: Resolved, existing: str | None, stamp: str) -> str:
             lines.append(line)
     missing = [k for k in vals if k not in seen]
     if missing:
-        lines.append(f"# added by `bin/workbench configure` ({r.profile} v{r.version}, {stamp})")
+        lines.append(f"# added by `bin/siwo configure` ({r.profile} v{r.version}, {stamp})")
         lines.extend(f"{k}={_q(vals[k])}" for k in missing)
     return "\n".join(lines) + "\n"
 
@@ -665,7 +665,7 @@ def render_addons(r: Resolved, role: str, stamp: str) -> str:
     envs = _envs(v, "ENVS")
     node_env = "prd" if ("prd" in envs and v["PRD_LOCATION"] == "local") else (envs[-1] if envs else "")
     lines = [
-        f"# /etc/vsw-addons.conf for the {role} node - written by `bin/workbench configure` ({r.profile} v{r.version}, {stamp})",
+        f"# /etc/vsw-addons.conf for the {role} node - written by `bin/siwo configure` ({r.profile} v{r.version}, {stamp})",
         f"# install: addon.sh install {' / '.join(names)}   (no secrets here; addon.sh generates them on the node)",
         f"ADDON_ROLE={role}",
         f"ADDON_ENV={node_env}",
@@ -685,7 +685,7 @@ def render_monitor(r: Resolved, role: str, stamp: str) -> str:
     mode = monitor_placed(v)[role]
     stacks = monitor_stacks(v)
     lines = [
-        f"# /etc/vsw-monitor.conf for the {role} node - written by `bin/workbench configure` ({r.profile} v{r.version}, {stamp})",
+        f"# /etc/vsw-monitor.conf for the {role} node - written by `bin/siwo configure` ({r.profile} v{r.version}, {stamp})",
         "# install: monitor.sh plan && monitor.sh install   (no secrets here; monitor.sh generates them on the node)",
         f"MONITOR_STACKS={','.join(stacks)}",
         f"MONITOR_ROLE={mode}",

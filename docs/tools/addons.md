@@ -1,6 +1,6 @@
 # Add-ons tool
 
-`src/shell/addons/addon.sh` (also `bin/workbench addons addon ...`) installs optional services next to the
+`src/shell/addons/addon.sh` (also `bin/siwo addons addon ...`) installs optional services next to the
 app: Gotenberg for PDFs and one S3-compatible object store. The templates and the comparison are in
 [stacks/addons](../../stacks/addons/README.md); the decision is [ADR 0007](../adr/0007-object-storage-selection.md).
 
@@ -58,7 +58,7 @@ Flags: `--accept-experimental` (RustFS), `--force`, `-h`. Exit codes: 0 ok, 1 re
   key (policy `vsw-app-<bucket>`, created through the RustFS admin API), put/get with the app key, the app key
   refused on bucket create/delete and the admin API, anonymous denied, an idempotent re-install, the console
   on 127.0.0.1, doctor's app-key check, and `laravel-env` writing the app key but never the root key.
-- Both suites take their compose project names and ports from `SIW_IT_PREFIX` / `SIW_IT_PORT_OFFSET`
+- Both suites take their compose project names and ports from `SIWO_IT_PREFIX` / `SIWO_IT_PORT_OFFSET`
   ([parallel runs](../../tests/README.md#parallel-runs)); `ADDON_PROJECT_PREFIX` is the add-on key that makes this work.
 - `tests/shell/garage-cluster-it.sh` (Docker, in `make it`, about 1 minute): three Garage nodes in **host
   networking** mode (S3, RPC and admin on 127.0.0.1 only, no published ports), `GARAGE_REPLICATION=3`, joins

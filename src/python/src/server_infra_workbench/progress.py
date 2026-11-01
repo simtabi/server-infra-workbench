@@ -1,7 +1,7 @@
 """Spinner, bar, ETA and elapsed time on stderr, so stdout (tables, JSON) stays parseable.
 
 Same switches as the shell tools (src/shell/lib/progress.sh) and the PHP core (Console\\Progress):
-SIW_PROGRESS=auto|tty|plain|off (auto animates on a terminal, prints plain lines otherwise), SIW_QUIET=1, NO_COLOR.
+SIWO_PROGRESS=auto|tty|plain|off (auto animates on a terminal, prints plain lines otherwise), SIWO_QUIET=1, NO_COLOR.
 
     progress = Progress.detect()
     with progress.task("DigitalOcean sizes"):
@@ -54,10 +54,10 @@ class Progress:
         stream = stream or sys.stderr
         env = compat.with_fallbacks(os.environ if env is None else env)
         tty = stream.isatty() if isatty is None else isatty
-        if env.get("SIW_QUIET") == "1":
+        if env.get("SIWO_QUIET") == "1":
             mode = OFF
-        elif env.get("SIW_PROGRESS") in (TTY, PLAIN, OFF):
-            mode = env["SIW_PROGRESS"]
+        elif env.get("SIWO_PROGRESS") in (TTY, PLAIN, OFF):
+            mode = env["SIWO_PROGRESS"]
         else:
             mode = TTY if tty and env.get("TERM", "dumb") != "dumb" else PLAIN
         return cls(stream, mode, color=mode == TTY and not env.get("NO_COLOR"))

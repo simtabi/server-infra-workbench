@@ -32,12 +32,12 @@ one is the web tier.
 
 ```bash
 examples/run.sh ha-two-web-lb      # validate (offline): profile checks, plans, the assembled deploy script
-bin/workbench configure --profile production-ha --client <you> --set APP=shop --set ALERT_EMAIL=<you@example.com> \
+bin/siwo configure --profile production-ha --client <you> --set APP=shop --set ALERT_EMAIL=<you@example.com> \
   --set VPC_CIDR=10.0.0.0/20
 # DO control panel: the load balancer (HTTPS 443 -> HTTP 80, certificate, health check HTTP :80 /up, both droplets
 # in the VPC), Managed Valkey (trusted sources: both nodes), the Spaces bucket with a key limited to it
-bin/workbench do firewall-apply web --vpc 10.0.0.0/20 --droplet <web-01-id>,<web-02-id> --dry-run
-bin/workbench do uptime check-create shop-prd https://app.example.com/up --dry-run
+bin/siwo do firewall-apply web --vpc 10.0.0.0/20 --droplet <web-01-id>,<web-02-id> --dry-run
+bin/siwo do uptime check-create shop-prd https://app.example.com/up --dry-run
 # every deploy: the commit you merged, node by node (dry run first)
 examples/ha-two-web-lb/rolling-deploy.sh --domain app.example.com --sha "$(git rev-parse origin/main)" \
   web-01=<server-id>:<site-id> web-02=<server-id>:<site-id>
@@ -58,7 +58,7 @@ Checklist:
 - [ ] `curl -sI http://<web-01 public IP>/` times out (port 80 only from the LB)
 - [ ] log in, then take `web-01` out of the LB: still logged in (sessions in Valkey)
 - [ ] upload a file, then take the node out: still served (Spaces)
-- [ ] the scheduler daemon exists on `web-01` only (`bin/workbench ploi daemons <server-id>` on both)
+- [ ] the scheduler daemon exists on `web-01` only (`bin/siwo ploi daemons <server-id>` on both)
 
 Lesson: the LB's health check sends no `Host` header. If the site isn't Nginx's `default_server` on the node,
 the check hits Ploi's catch-all page, gets a 200, and the LB keeps sending traffic to a node whose app is down.

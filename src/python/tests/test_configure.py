@@ -279,7 +279,7 @@ class ProfilesTest(unittest.TestCase):
 
     def test_reference_doc_table_is_current(self):
         doc = (P.repo_root() / "docs" / "reference" / "profiles.md").read_text()
-        self.assertIn(P.markdown_table(), doc, "regenerate with: bin/workbench profile table")
+        self.assertIn(P.markdown_table(), doc, "regenerate with: bin/siwo profile table")
         for key in P.defaults():
             if key not in P.META:
                 self.assertIn(f"`{key}`", doc, key)

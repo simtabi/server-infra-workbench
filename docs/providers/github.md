@@ -1,10 +1,10 @@
-# GitHub (`workbench github`, alias `gh`)
+# GitHub (`siwo github`, alias `gh`)
 
 **Why:** deploys are driven from GitHub: Actions runs build and test, secrets hold deploy credentials, deploy
 keys let a server pull its repository, and releases tag what went out. The workbench uses the REST API
 (`https://api.github.com`, `X-GitHub-Api-Version` pinned) so a rollout can set a secret, add a read-only deploy
 key, dispatch a workflow and watch it finish, with the same plan/confirm/audit as every other provider. The
-`gh` CLI is not required (and the alias name does not clash with it: this one is `bin/workbench gh`).
+`gh` CLI is not required (and the alias name does not clash with it: this one is `bin/siwo gh`).
 
 ## Least-privilege token
 
@@ -28,26 +28,26 @@ owner must be that organisation (or the org must allow fine-grained tokens).
 `--repo owner/name` names the repository. All take `--json`; writes take `--dry-run`, `--yes`; destructive
 writes need `--force`.
 
-- `bin/workbench github whoami`, `bin/workbench github rate-limit`
-- `bin/workbench github repos --org <org> --limit 100`, `bin/workbench github repo --repo owner/name`
-- `bin/workbench github workflows --repo owner/name`
-- `bin/workbench github runs --repo owner/name --workflow ci.yml --branch main --status failure --limit 20`
-- `bin/workbench github run <run-id> --repo owner/name --wait --timeout 1800` polls until the run completes
+- `bin/siwo github whoami`, `bin/siwo github rate-limit`
+- `bin/siwo github repos --org <org> --limit 100`, `bin/siwo github repo --repo owner/name`
+- `bin/siwo github workflows --repo owner/name`
+- `bin/siwo github runs --repo owner/name --workflow ci.yml --branch main --status failure --limit 20`
+- `bin/siwo github run <run-id> --repo owner/name --wait --timeout 1800` polls until the run completes
   (or the timeout passes) and shows its result.
-- `bin/workbench github dispatch ci.yml --repo owner/name --ref main --inputs target=staging`
-- `bin/workbench github rerun <run-id> --repo owner/name` re-queues the failed jobs; `bin/workbench github cancel <run-id> --repo owner/name`
-- `bin/workbench github secrets list --repo owner/name --env production`
-- `bin/workbench github secrets set DEPLOY_KEY --repo owner/name --env production --value-file ~/.config/server-infra-workbench/deploy.key`
+- `bin/siwo github dispatch ci.yml --repo owner/name --ref main --inputs target=staging`
+- `bin/siwo github rerun <run-id> --repo owner/name` re-queues the failed jobs; `bin/siwo github cancel <run-id> --repo owner/name`
+- `bin/siwo github secrets list --repo owner/name --env production`
+- `bin/siwo github secrets set DEPLOY_KEY --repo owner/name --env production --value-file ~/.config/server-infra-workbench/deploy.key`
   (or the value on stdin). The value is sealed locally with the repository's public key (libsodium sealed box)
   and sent encrypted; it is never accepted on the command line and never printed or logged.
-- `bin/workbench github secrets delete DEPLOY_KEY --repo owner/name --force`
-- `bin/workbench github deploy-keys list --repo owner/name`
-- `bin/workbench github deploy-keys add --repo owner/name --title "app server" --key-file ~/.ssh/app_deploy.pub`
+- `bin/siwo github secrets delete DEPLOY_KEY --repo owner/name --force`
+- `bin/siwo github deploy-keys list --repo owner/name`
+- `bin/siwo github deploy-keys add --repo owner/name --title "app server" --key-file ~/.ssh/app_deploy.pub`
   adds a read-only key; `--write` (push access) also needs `--force`.
-- `bin/workbench github deploy-keys delete <key-id> --repo owner/name --force`
-- `bin/workbench github releases list --repo owner/name`, `bin/workbench github releases latest --repo owner/name`
-- `bin/workbench github releases create v1.4.0 --repo owner/name --target main --title "v1.4.0" --notes-file CHANGELOG.md --draft`
-- `bin/workbench github releases delete <release-id> --repo owner/name --force`
+- `bin/siwo github deploy-keys delete <key-id> --repo owner/name --force`
+- `bin/siwo github releases list --repo owner/name`, `bin/siwo github releases latest --repo owner/name`
+- `bin/siwo github releases create v1.4.0 --repo owner/name --target main --title "v1.4.0" --notes-file CHANGELOG.md --draft`
+- `bin/siwo github releases delete <release-id> --repo owner/name --force`
 
 The PHP `sodium` extension is needed for `secrets set` (bundled with most PHP 8.4 builds; `php -m | grep sodium`).
 
@@ -57,7 +57,7 @@ The PHP `sodium` extension is needed for `secrets set` (bundled with most PHP 8.
 - [ ] Deploy keys are read-only, one per server, titled with the server name.
 - [ ] Secrets go in from a file or stdin, never `echo VALUE |` in shell history; prefer environment secrets with
       required reviewers for production.
-- [ ] `bin/workbench github runs --repo owner/name --status failure` is empty before a release.
+- [ ] `bin/siwo github runs --repo owner/name --status failure` is empty before a release.
 
 ## Lessons learned
 
@@ -72,4 +72,4 @@ The PHP `sodium` extension is needed for `secrets set` (bundled with most PHP 8.
 - **Write deploy keys are push credentials.** A server that only pulls needs a read-only key, so `--write` is
   treated as destructive.
 - **Dispatch is fire-and-forget.** The API answers 204 without a run id; follow up with
-  `bin/workbench github runs --repo owner/name --workflow ci.yml --limit 1`.
+  `bin/siwo github runs --repo owner/name --workflow ci.yml --limit 1`.

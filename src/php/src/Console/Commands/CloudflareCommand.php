@@ -13,7 +13,7 @@ use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
 use Simtabi\ServerInfraWorkbench\Security\IssuedCredential;
 use Simtabi\ServerInfraWorkbench\Support\Item;
 
-/** `workbench cf ...`: Cloudflare API v4. */
+/** `siwo cf ...`: Cloudflare API v4. */
 final readonly class CloudflareCommand implements Command
 {
     public function __construct(private ProviderFactory $providers, private Runner $r) {}
@@ -82,7 +82,7 @@ final readonly class CloudflareCommand implements Command
                 default => $r->usage('cf'),
             },
             null, 'help' => $r->usage('cf'),
-            default => throw new ValidationException(sprintf('unknown "cf %s" (see: workbench cf --help)', $in->arg(0, 'command'))),
+            default => throw new ValidationException(sprintf('unknown "cf %s" (see: siwo cf --help)', $in->arg(0, 'command'))),
         };
     }
 }

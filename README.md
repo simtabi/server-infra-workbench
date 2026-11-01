@@ -10,8 +10,8 @@
 > deploys, daemons, backups with point-in-time restore, monitoring, cross-region WireGuard, SSH access, and
 > typed API clients for DigitalOcean, Cloudflare, Google Cloud, GitHub and Ploi.
 
-Formerly `vps-server-workbench` (old URLs redirect; `VSW_*` settings still work):
-see [ADR 0014](docs/adr/0014-rename-to-server-infra-workbench.md).
+The command is `siwo` (Server + Infrastructure + WOrkbench). Formerly `vps-server-workbench` with `bin/workbench` <!-- siw-commands: ignore -->
+(old URLs redirect; `bin/workbench` and `VSW_*` settings still work, with a deprecation notice): see [ADR 0014](docs/adr/0014-rename-to-server-infra-workbench.md). <!-- siw-commands: ignore -->
 
 Server tooling is plain Bash plus docker compose; platform automation is a small PHP 8.4 library with a CLI.
 Every name, path, IP, port and image version is a parameter with a default; project-specific values live
@@ -22,7 +22,7 @@ only in [`examples/`](examples).
 ```bash
 git clone <your remote or path> server-infra-workbench && cd server-infra-workbench
 composer install --working-dir=src/php        # only needed for the platform APIs (PHP 8.4+)
-bin/workbench list                        # every tool and where it lives
+bin/siwo list                        # every tool and where it lives
 ```
 
 Requirements and credentials: [docs/installation.md](docs/installation.md).
@@ -51,13 +51,13 @@ src/shell/web/update-env-db.sh --remote prd-web-00 --site example.com --from db.
 Platform APIs, read-only unless you confirm:
 
 ```bash
-bin/workbench credentials                                         # which tokens are set (never the values)
-bin/workbench do droplets --tag db
-bin/workbench do snapshot 123456 --name db-pre-upgrade --dry-run  # shows the request, sends nothing
-bin/workbench do snapshot 123456 --name db-pre-upgrade --yes --wait
-bin/workbench cf dns upsert example.com A db 203.0.113.10 --ttl 300 --dry-run
-bin/workbench ploi deploy 42 1001 --yes
-bin/workbench gcp firewalls --project my-project                  # flags rules open to 0.0.0.0/0
+bin/siwo credentials                                         # which tokens are set (never the values)
+bin/siwo do droplets --tag db
+bin/siwo do snapshot 123456 --name db-pre-upgrade --dry-run  # shows the request, sends nothing
+bin/siwo do snapshot 123456 --name db-pre-upgrade --yes --wait
+bin/siwo cf dns upsert example.com A db 203.0.113.10 --ttl 300 --dry-run
+bin/siwo ploi deploy 42 1001 --yes
+bin/siwo gcp firewalls --project my-project                  # flags rules open to 0.0.0.0/0
 ```
 
 ```php
@@ -85,7 +85,7 @@ New project end to end: **[Getting started](docs/getting-started.md)** (about 10
 
 | Path | What |
 |---|---|
-| [`bin/workbench`](bin/workbench) | One entry point: `list`, `<area> <tool>` for shell tools, `do`/`cf`/`ploi`/`gcp` for platform APIs, `py` for Python helpers ([cli.md](docs/tools/cli.md)) |
+| [`bin/siwo`](bin/siwo) | One entry point: `list`, `<area> <tool>` for shell tools, `do`/`cf`/`ploi`/`gcp` for platform APIs, `py` for Python helpers ([cli.md](docs/tools/cli.md)) |
 | [`src/shell/db/docker-db-server-manager.sh`](src/shell/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP, each engine optional. `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user logs backup restore tls-ca monitor-user metrics migrate-managed pg-major-upgrade cron-install cron-remove uninstall help` |
 | [`src/shell/db/remote-run.sh`](src/shell/db/remote-run.sh) | Run the manager on the DB server from your workstation, with a wrong-server guard |
 | [`src/shell/db/pg-log-errors.sh`](src/shell/db/pg-log-errors.sh) | Read-only: grouped, masked Postgres/PgBouncer log errors from your workstation (ssh + `docker logs`) |
@@ -97,9 +97,9 @@ New project end to end: **[Getting started](docs/getting-started.md)** (about 10
 | [`src/shell/env/env.sh`](docs/tools/env.md) | Laravel `.env` per environment: `env init` / `env check` from the template, `--addons` merges add-on keys |
 | [`src/shell/ssh/fixkeys.sh`](docs/tools/ssh-keys.md) | `authorized_keys` repair and console lockout recovery (also from the DO recovery ISO) |
 | [`src/shell/net/wireguard.sh`](docs/tools/net.md) | WireGuard tunnel between two servers in different regions ([cross-region](docs/cross-region.md)) |
-| [`src/shell/monitor/monitor.sh`](docs/tools/monitor.md) | Self-hosted monitoring per node: Beszel, Uptime Kuma, Netdata, Prometheus + Grafana + exporters; loopback UIs, RAM gate. `bin/workbench status` for a one-screen health check |
+| [`src/shell/monitor/monitor.sh`](docs/tools/monitor.md) | Self-hosted monitoring per node: Beszel, Uptime Kuma, Netdata, Prometheus + Grafana + exporters; loopback UIs, RAM gate. `bin/siwo status` for a one-screen health check |
 | [`src/shell/addons/addon.sh`](docs/tools/addons.md) | Optional services: Gotenberg (PDF) and one S3-compatible store (Garage, SeaweedFS, RustFS) |
-| [`configure`](docs/configure.md) | `bin/workbench configure` wizard and versioned `config/profiles` (dev-budget and others) into gitignored `local/<client>/` |
+| [`configure`](docs/configure.md) | `bin/siwo configure` wizard and versioned `config/profiles` (dev-budget and others) into gitignored `local/<client>/` |
 | [`src/php`](src/php/README.md) | Typed PHP 8.4 clients for DigitalOcean, Cloudflare, Ploi and GCP on PSR-18, with retries, pagination, redaction, pending actions and an audit log ([platform-api.md](docs/tools/platform-api.md)) |
 | [`src/python`](src/python/README.md) | Standard-library helpers with tests: `ping` (TCP probe) and `plans` (which DO plans each region offers through Ploi) ([python.md](docs/tools/python.md)) |
 | [`stacks/caddy`](stacks/README.md) | Laravel (php-fpm, queue, scheduler) behind Caddy with automatic HTTPS, for a Ploi Docker web server; reverse-proxy and smoke-test variants |

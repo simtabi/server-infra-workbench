@@ -1,6 +1,6 @@
 # /etc/vsw-addons.conf - settings for src/shell/addons/addon.sh on ONE node (chmod 600, owned by root).
 # Everything is optional: each add-on's pinned defaults live in stacks/addons/<name>/addon.env.example and
-# this file overrides them. `bin/workbench configure` writes a filled-in copy per node to local/<client>/addons-<role>.conf.
+# this file overrides them. `bin/siwo configure` writes a filled-in copy per node to local/<client>/addons-<role>.conf.
 # No secrets here: addon.sh generates them into /opt/vsw-addons/<name>/secrets.env (600).
 
 # ADDONS_DIR=/opt/vsw-addons            # rendered stacks, secrets, a copy of addon.sh + templates

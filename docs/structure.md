@@ -2,19 +2,19 @@
 
 `server-infra-workbench` holds the tools for building and running VPS servers (DigitalOcean + Ploi today).
 The top level has one folder per *kind of thing*; all code lives under `src/`, grouped by language and then
-by area. Every tool is reachable through one entry point, [`bin/workbench`](tools/cli.md), and every
+by area. Every tool is reachable through one entry point, [`bin/siwo`](tools/cli.md), and every
 top-level folder has a short `README.md` saying what is in it.
 
 ```text
-bin/                 entry point: workbench (shell tools, platform APIs, Python helpers)
+bin/                 entry point: siwo (shell tools, platform APIs, Python helpers)
 src/                 all source code
-  shell/               Bash tools, one folder per area (bin/workbench <area> <tool>)
+  shell/               Bash tools, one folder per area (bin/siwo <area> <tool>)
     db/                  docker-db-server-manager.sh (runs on the DB server), remote-run.sh, pg-log-errors.sh (workstation)
     web/                 update-env-db.sh, check-db-reach.sh (web server)
     deploy/              ploi-deploy.sh (pasted into Ploi)
     tunnels/             db-tunnel.sh (workstation SSH tunnels)
   php/                 Composer package simtabi/server-infra-workbench (namespace Simtabi\ServerInfraWorkbench)
-    bin/                 workbench-php (the CLI behind bin/workbench do|cf|ploi|gcp)
+    bin/                 siwo-php (the CLI behind bin/siwo do|cf|ploi|gcp)
     src/                 Http, Safety, Security, Console, Support, and one folder per platform:
                          DigitalOcean/ Cloudflare/ Ploi/ Gcp/
     tests/               PHPUnit on a mock PSR-18 client (no network)
@@ -39,18 +39,18 @@ packages do it. Why: [ADR 0002](adr/0002-layout-by-language-then-area.md) and
 
 | I want to … | Look in | Run |
 |---|---|---|
-| build, check, back up or upgrade the DB server | `src/shell/db/docker-db-server-manager.sh` | `bin/workbench db remote-run --host … -- <command>` |
-| run the manager on a server from my Mac | `src/shell/db/remote-run.sh` | `bin/workbench db remote-run --help` |
-| check the DB server's Postgres log for errors (read-only) | `src/shell/db/pg-log-errors.sh` | `bin/workbench db pg-log-errors --host <db-alias>` |
+| build, check, back up or upgrade the DB server | `src/shell/db/docker-db-server-manager.sh` | `bin/siwo db remote-run --host … -- <command>` |
+| run the manager on a server from my Mac | `src/shell/db/remote-run.sh` | `bin/siwo db remote-run --help` |
+| check the DB server's Postgres log for errors (read-only) | `src/shell/db/pg-log-errors.sh` | `bin/siwo db pg-log-errors --host <db-alias>` |
 | point a site's `.env` at the DB | `src/shell/web/update-env-db.sh` | on the web server |
 | check the web server can reach the DB | `src/shell/web/check-db-reach.sh` | on the web server |
 | the Ploi deploy script | `src/shell/deploy/ploi-deploy.sh` | paste into Ploi |
-| connect servers in different regions | `src/shell/net/wireguard.sh` | `bin/workbench net wireguard setup --host … --peer …` |
-| monitor a node (dashboards, alerts) | `src/shell/monitor/monitor.sh`, `stacks/monitor/` | `bin/workbench monitor plan`, then `install` |
-| one-screen health of a node | `src/shell/server/status.sh` | `bin/workbench status --host …` |
-| open a tunnel to the DB from my Mac | `src/shell/tunnels/db-tunnel.sh` | `bin/workbench tunnels db-tunnel` |
-| snapshot a droplet, manage DNS, Ploi, GCP | `src/php/src/<Platform>/` | `bin/workbench do\|cf\|ploi\|gcp …` |
-| find DO plans available per region in Ploi | `src/python/src/server_infra_workbench/plan_finder.py` | `bin/workbench plans` |
+| connect servers in different regions | `src/shell/net/wireguard.sh` | `bin/siwo net wireguard setup --host … --peer …` |
+| monitor a node (dashboards, alerts) | `src/shell/monitor/monitor.sh`, `stacks/monitor/` | `bin/siwo monitor plan`, then `install` |
+| one-screen health of a node | `src/shell/server/status.sh` | `bin/siwo status --host …` |
+| open a tunnel to the DB from my Mac | `src/shell/tunnels/db-tunnel.sh` | `bin/siwo tunnels db-tunnel` |
+| snapshot a droplet, manage DNS, Ploi, GCP | `src/php/src/<Platform>/` | `bin/siwo do\|cf\|ploi\|gcp …` |
+| find DO plans available per region in Ploi | `src/python/src/server_infra_workbench/plan_finder.py` | `bin/siwo plans` |
 | a config template | `config/` | copy outside the repo |
 | a project's real values | `examples/<project>/` | |
 | app containers behind Caddy | `stacks/caddy/` | `docker compose` |
@@ -62,7 +62,7 @@ packages do it. Why: [ADR 0002](adr/0002-layout-by-language-then-area.md) and
 
 | You are adding | Put it in | Name it | Wire it into |
 |---|---|---|---|
-| a Bash tool | `src/shell/<area>/` (new area folder if none fits) | `kebab-case.sh`, executable, header with usage | nothing: `make lint` finds every `*.sh` and `bin/workbench <area> <tool>` finds it; add checks to `tests/shell/smoke.sh` |
+| a Bash tool | `src/shell/<area>/` (new area folder if none fits) | `kebab-case.sh`, executable, header with usage | nothing: `make lint` finds every `*.sh` and `bin/siwo <area> <tool>` finds it; add checks to `tests/shell/smoke.sh` |
 | a platform API call | `src/php/src/<Platform>/` resource method + DTO in `Data/`; a command in `src/php/src/Console/Application.php` | `PascalCase.php`, one class per file | a mocked test in `src/php/tests/Unit/` (`make php`); [platform-api.md](tools/platform-api.md), [cli.md](tools/cli.md) |
 | Python automation | `src/python/src/server_infra_workbench/` module + a subcommand in `cli.py` | `snake_case.py` | a `test_*.py` in `src/python/tests/` (`make python`); [python.md](tools/python.md) |
 | a Docker stack | `stacks/<name>/` with `docker-compose.yml`, `.env.example` | lower-case folder | `make compose-check` |
@@ -88,10 +88,10 @@ the old paths are gone. Servers are not affected: the manager is still installed
 | `scripts/deploy/ploi-deploy.sh`, `shell/deploy/ploi-deploy.sh` | `src/shell/deploy/ploi-deploy.sh` (re-paste into Ploi) |
 | `php/` | `src/php/` (`composer install --working-dir=src/php`) |
 | `python/` | `src/python/` |
-| `tools/ploi-do-plan-finder/ploi_do_plan_finder.py` | `src/python/src/server_infra_workbench/plan_finder.py` (`bin/workbench plans`) |
+| `tools/ploi-do-plan-finder/ploi_do_plan_finder.py` | `src/python/src/server_infra_workbench/plan_finder.py` (`bin/siwo plans`) |
 | `tools/ploi-do-plan-finder/.env.example` | `config/ploi-do-plan-finder.env.example` |
 | `compose/caddy/` | `stacks/caddy/` |
 | `tests/*.sh`, `tests/*.py` | `tests/shell/…`, `tests/docs/…` (use `make test`, `make links`, `make mermaid`) |
-| `bin/vsw` | `bin/workbench` |
+| `bin/vsw` | `bin/siwo` |
 | `docs/db-server.md`, `docs/deploy.md`, `docs/web-server-caddy.md` | `docs/tools/db-server-manager.md`, `deploy-script.md`, `caddy-stack.md` |
 | `docs/ssh-access.md`, `web-server-ploi.md`, `daemons.md`, `connections.md`, `upgrading.md`, `runbooks/rollout-plan.md` | `docs/recipes/…` (see the [index](README.md)) |

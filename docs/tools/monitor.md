@@ -1,6 +1,6 @@
 # Monitoring tool
 
-`src/shell/monitor/monitor.sh` (also `bin/workbench monitor ...`) installs self-hosted monitoring on one node.
+`src/shell/monitor/monitor.sh` (also `bin/siwo monitor ...`) installs self-hosted monitoring on one node.
 You pick the stacks with `MONITOR_STACKS` and the node's side with `MONITOR_ROLE`. The configurator writes
 the settings for you (`MONITOR_*` keys in [profiles](../reference/profiles.md)). The decision record is
 [ADR 0012](../adr/0012-monitoring-stack.md); the rollout steps are in [checklist 07](../checklists/07-monitoring.md).
@@ -73,7 +73,7 @@ restore test older than 8 days, DB doctor problems, and reboot required.
 The backup, restore-test and TLS facts come from the DB manager. After each backup, restore test, off-site
 copy and doctor run, the manager writes `vsw_db.prom` into `METRICS_TEXTFILE_DIR`, and node-exporter serves
 it. WHY a textfile: only the manager knows when a backup *succeeded*. A file needs no extra daemon and
-survives exporter restarts. `bin/workbench db ... metrics` rewrites it by hand.
+survives exporter restarts. `bin/siwo db ... metrics` rewrites it by hand.
 
 ## Files on the node
 
@@ -102,11 +102,11 @@ monitor.sh beszel-register --name db --host 10.10.0.5
 monitor.sh tunnel --host deploy@web-1                  # run the printed ssh line on your laptop
 ```
 
-`bin/workbench configure` prints these steps per node, hub first, with the right file names.
+`bin/siwo configure` prints these steps per node, hub first, with the right file names.
 
-## `workbench status`
+## `siwo status`
 
-`src/shell/server/status.sh` (`bin/workbench status`) is the one-screen answer to "is anything wrong right
+`src/shell/server/status.sh` (`bin/siwo status`) is the one-screen answer to "is anything wrong right
 now?": load, RAM, disk, containers (unhealthy ones named), reboot needed, last backup, monitor stacks, and
 optional health URLs. It is read-only and takes no locks, so it's safe on prd at any time. `--json` is for
 scripts, `--host H` runs it over ssh. It exits 1 when something needs a look (`STATUS_DISK_WARN`,

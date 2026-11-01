@@ -161,7 +161,7 @@ final class ConsoleTest extends TestCase
     public function test_help_and_version(): void
     {
         self::assertSame(0, $this->app()->run(['help']));
-        self::assertStringContainsString('workbench do ...', $this->out());
+        self::assertStringContainsString('siwo do ...', $this->out());
         self::assertSame(0, $this->app()->run(['cf', '--help']));
         self::assertStringContainsString('dns upsert', $this->out());
         self::assertSame(0, $this->app()->run(['--version']));

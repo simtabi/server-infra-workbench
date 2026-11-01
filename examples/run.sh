@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# examples/run.sh - run an example offline: validate its settings with `workbench configure --dry-run`
+# examples/run.sh - run an example offline: validate its settings with `siwo configure --dry-run`
 # and print the plans of the tools it uses. Writes nothing, contacts no server, needs no secrets.
 #
 #   examples/run.sh <example>      e.g. examples/run.sh split-web-db-vpc
@@ -9,14 +9,14 @@
 # example.conf format (no secrets, ever; every password is generated on the server at install time):
 #   PROFILE=<config/profiles name>
 #   set KEY=VALUE          -> configure --set KEY=VALUE
-#   plan <workbench args>  -> bin/workbench <args> (must be a read-only plan / --dry-run / --help)
+#   plan <siwo args>  -> bin/siwo <args> (must be a read-only plan / --dry-run / --help)
 #   appenv <stack>         -> examples/_shared/app-env.sh --self-test --stack <stack> (offline, throwaway files)
 #   selftest <file>        -> bash examples/<example>/<file> --self-test (the example's own script, offline)
 # A ploi-deploy.settings.sh is pasted into src/shell/deploy/ploi-deploy.sh and parsed (_shared/ploi-script.sh --check).
 # Every file in the example folder also goes through tests/security/no-hardcoded-secrets.py.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WB="$ROOT/bin/workbench"
+WB="$ROOT/bin/siwo"
 SECRETS="$ROOT/tests/security/no-hardcoded-secrets.py"
 CATALOG="$ROOT/examples/README.md"
 
@@ -43,7 +43,7 @@ run_one() {
   local p
   for p in ${plans[@]+"${plans[@]}"}; do
     case " $p " in *" plan "*|*" --dry-run "*|*" --help "*|*" show "*|*" diff "*) ;; *) echo "$conf: refusing non-plan command: $p" >&2; return 2 ;; esac
-    echo "== $name: workbench $p"
+    echo "== $name: siwo $p"
     # shellcheck disable=SC2086  # plan lines are word-split on purpose (no quoting in example.conf)
     "$WB" $p
   done

@@ -21,7 +21,7 @@ use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
 use Simtabi\ServerInfraWorkbench\Security\IssuedCredential;
 use Simtabi\ServerInfraWorkbench\Support\Item;
 
-/** `workbench do ...`: DigitalOcean API v2. */
+/** `siwo do ...`: DigitalOcean API v2. */
 final readonly class DigitalOceanCommand implements Command
 {
     public function __construct(private ProviderFactory $providers, private Runner $r) {}
@@ -40,17 +40,17 @@ final readonly class DigitalOceanCommand implements Command
             'droplet-create' => $r->write($in, $do()->droplets()->create(
                 $in->arg(1, 'name'),
                 $in->required('region', 'e.g. nyc3'),
-                $in->required('size', 'e.g. s-2vcpu-4gb; see: workbench do sizes'),
+                $in->required('size', 'e.g. s-2vcpu-4gb; see: siwo do sizes'),
                 $do()->droplets()->resolveImage($in->value('image') ?? $this->providers->credentials()->setting(Droplets::IMAGE_ENV)),
                 $in->list('ssh-keys'),
                 $in->value('vpc'),
                 $in->list('tag'),
                 $in->flag('backups'),
                 $r->readFile($in->value('user-data')),
-            ), fn (Droplet $d): int => $r->showOne($in, $d, 'droplet created (it boots in about a minute; see: workbench do droplet '.$d->id.')')),
+            ), fn (Droplet $d): int => $r->showOne($in, $d, 'droplet created (it boots in about a minute; see: siwo do droplet '.$d->id.')')),
             'droplet-delete' => $r->write($in, $do()->droplets()->delete($in->arg(1, 'droplet-id')), fn (bool $ok): int => $r->done($in, $ok, 'droplet deleted')),
             'power' => $r->write($in, $do()->droplets()->power($in->arg(1, 'droplet-id'), $in->arg(2, implode('|', Droplets::POWER))), fn (RunningAction $a): int => $this->action($in, $a, 'power action')),
-            'resize' => $r->write($in, $do()->droplets()->resize($in->arg(1, 'droplet-id'), $in->required('size', 'e.g. s-2vcpu-4gb; see: workbench do sizes'), $in->flag('disk'), $in->int('timeout', 1800)),
+            'resize' => $r->write($in, $do()->droplets()->resize($in->arg(1, 'droplet-id'), $in->required('size', 'e.g. s-2vcpu-4gb; see: siwo do sizes'), $in->flag('disk'), $in->int('timeout', 1800)),
                 fn (Droplet $d): int => $r->showOne($in, $d, 'droplet resized and powered on')),
             'snapshots' => $r->show($in, $in->optionalArg(1) === null ? $do()->snapshots()->list() : $do()->droplets()->snapshots($in->arg(1, 'droplet-id')), ['id' => 'ID', 'name' => 'NAME', 'resourceId' => 'DROPLET', 'sizeGb' => 'GB', 'createdAt' => 'CREATED']),
             'snapshot' => $r->write($in, $do()->droplets()->snapshot($in->arg(1, 'droplet-id'), $in->value('name')), fn (RunningAction $a): int => $this->action($in, $a, 'snapshot')),
@@ -77,7 +77,7 @@ final readonly class DigitalOceanCommand implements Command
             'firewall-delete' => $r->write($in, $do()->firewalls()->delete($in->arg(1, 'firewall-id')), fn (bool $ok): int => $r->done($in, $ok, 'firewall deleted')),
             'uptime' => $this->uptime($in, $do()),
             null, 'help' => $r->usage('do'),
-            default => throw new ValidationException(sprintf('unknown "do %s" (see: workbench do --help)', $in->arg(0, 'command'))),
+            default => throw new ValidationException(sprintf('unknown "do %s" (see: siwo do --help)', $in->arg(0, 'command'))),
         };
     }
 

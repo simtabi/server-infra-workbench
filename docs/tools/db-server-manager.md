@@ -62,8 +62,8 @@ That uploads the script and config to staging names in `~` (`.vsw-upload-*`, so 
 with `ABORT: this is <host>, not the db server` unless `<private-ip>` is on the host, then runs
 each command with sudo (one password prompt). Use `install` instead of `reset --yes` to keep
 existing data. For `upgrade` it first offers a droplet snapshot from your Mac: doctl if configured,
-otherwise `bin/workbench do snapshot` (token from the credentials file), otherwise the server's own token,
-otherwise you type `CONTINUE` on the server; `--snapshot-with doctl|workbench|server|none` forces one.
+otherwise `bin/siwo do snapshot` (token from the credentials file), otherwise the server's own token,
+otherwise you type `CONTINUE` on the server; `--snapshot-with doctl|siwo|server|none` forces one (`workbench` is the old name of `siwo`).
 The equivalent by hand:
 
 ```sh
@@ -384,7 +384,7 @@ From your workstation, without installing anything on the server (the login user
 passwordless sudo):
 
 ```bash
-bin/workbench db pg-log-errors --host <db-alias> --since 7d
+bin/siwo db pg-log-errors --host <db-alias> --since 7d
 ```
 
 A `shell-quoting` group means a client sent `\x27` literally: an ad-hoc `psql -c` over ssh with hand-escaped
@@ -462,7 +462,7 @@ traffic is unencrypted on the VPC.
 2. **Plan**: prints a diff of what would change; `--dry-run` stops here.
 3. **Snapshot**: `--snapshot` takes a DigitalOcean snapshot through the API (token from `DIGITALOCEAN_TOKEN`
    or `/root/.config/digitalocean-token`, chmod 600, never in the repo), `--snapshot-taken` records that you
-   took one (remote-run.sh does this with doctl or `bin/workbench do snapshot`), `--no-snapshot` skips with a warning. Without a flag it asks.
+   took one (remote-run.sh does this with doctl or `bin/siwo do snapshot`), `--no-snapshot` skips with a warning. Without a flag it asks.
 4. **Backup** and **verify** it (every engine present, gzip intact, dump trailer present).
 5. **Savepoint** in `/opt/db/upgrade-saves/<ts>` (chmod 700, newest 5 kept): the previous manager and config,
    compose file, `.env`, `stack.env`, Postgres files, PgBouncer config, image IDs (the Postgres image is pinned

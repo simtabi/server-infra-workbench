@@ -162,7 +162,7 @@ flowchart TD
   e --> f["upgrade (backup, savepoint, apply, verify, auto-rollback)"]
   f --> g["env-apply (databases, roles, pg_hba, idempotent)"]
   g --> h["env-creds &lt;env&gt; --out /root/&lt;env&gt;-db.env"]
-  h --> i["web: workbench env init / update-env-db.sh"]
+  h --> i["web: siwo env init / update-env-db.sh"]
 ```
 
 On the DB server, from a reviewed plan:

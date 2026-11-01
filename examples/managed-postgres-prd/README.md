@@ -11,7 +11,7 @@ must not keep files locally ([ADR 0008](../../docs/adr/0008-database-topology.md
 
 ```bash
 examples/run.sh managed-postgres-prd     # validate (offline): managed prd, alerts, monitoring hub
-bin/workbench configure --profile production-ha --client <you> --set APP=shop \
+bin/siwo configure --profile production-ha --client <you> --set APP=shop \
   --set ALERT_EMAIL=<you@example.com> --set VPC_CIDR=10.0.0.0/20
 ```
 

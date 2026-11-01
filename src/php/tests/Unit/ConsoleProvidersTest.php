@@ -66,11 +66,11 @@ final class ConsoleProvidersTest extends TestCase
     {
         foreach (['do', 'cf', 'gcp', 'github', 'gh', 'ploi'] as $area) {
             self::assertSame(Application::USAGE, $this->app()->run([$area]), $area);
-            self::assertStringContainsString('workbench ', $this->out());
+            self::assertStringContainsString('siwo ', $this->out());
             self::assertSame(0, $this->app()->run(['help', $area]), $area);
             self::assertSame(Application::USAGE, $this->app()->run([$area, 'no-such-command']), $area);
         }
-        self::assertStringContainsString('workbench github secrets set', Help::for('gh'));
+        self::assertStringContainsString('siwo github secrets set', Help::for('gh'));
         self::assertSame([], $this->http->requests);
     }
 

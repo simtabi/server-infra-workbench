@@ -3,7 +3,7 @@
 # Each "node" is its own ADDONS_DIR + compose project + port set on the Docker host's network namespace,
 # so this exercises: ADDON_NETWORK=host binding, GARAGE_REPLICATION=3, GARAGE_PEERS joins with a copied
 # secrets.env, staged layout applied by the third install, replication across nodes, a node down.
-# Not in `make ci` (Docker, ~2 min): run by `make it`. Names and ports follow SIW_IT_PREFIX (tests/shell/it-lib.sh).
+# Not in `make ci` (Docker, ~2 min): run by `make it`. Names and ports follow SIWO_IT_PREFIX (tests/shell/it-lib.sh).
 # shellcheck disable=SC2015
 set -euo pipefail
 cd "$(dirname "$0")/../.."

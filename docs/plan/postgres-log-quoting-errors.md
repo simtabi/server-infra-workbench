@@ -45,7 +45,7 @@ or a permissions error after a migration.
      are found.
    - `doctor` gains a warning when Postgres logged errors in the last 24 h, so the nightly `doctor --alert`
      cron surfaces them.
-   - Workstation checker `bin/workbench db pg-log-errors --host <db-alias>` reads the log over ssh with
+   - Workstation checker `bin/siwo db pg-log-errors --host <db-alias>` reads the log over ssh with
      `docker logs` and prints the same summary. It installs nothing, needs no sudo when the login user is in
      the docker group, and works before the manager upgrade.
 2. **Stop it recurring**
@@ -68,7 +68,7 @@ SQL
 Nothing to repair: no statement ran. The verification is read-only:
 
 ```bash
-bin/workbench db pg-log-errors --host <db-alias> --since 7d    # before or after the upgrade
+bin/siwo db pg-log-errors --host <db-alias> --since 7d    # before or after the upgrade
 sudo /root/docker-db-server-manager.sh log-errors --since 7d   # on the server, after the upgrade
 sudo /root/docker-db-server-manager.sh doctor                  # privilege model, settings, backups
 ```

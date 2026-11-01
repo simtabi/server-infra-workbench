@@ -1,6 +1,6 @@
 # Providers
 
-`bin/workbench` talks to five platforms over their public REST APIs, with no vendor SDKs and no CLIs required.
+`bin/siwo` talks to five platforms over their public REST APIs, with no vendor SDKs and no CLIs required.
 Each page explains why the area exists, the least-privilege token, every command, a checklist and the lessons
 that shaped the defaults.
 
@@ -41,16 +41,16 @@ One HTTP core (`Http\Transport`) is shared by every client, so these hold everyw
   checked before any request is made.
 
 Credentials come from the environment or `~/.config/server-infra-workbench/credentials` (mode 600); see
-[`config/credentials.env.example`](../../config/credentials.env.example) and `bin/workbench credentials`, which
+[`config/credentials.env.example`](../../config/credentials.env.example) and `bin/siwo credentials`, which
 reports which are set without printing them.
 
 ## Tests
 
 - Unit and contract tests (`make php`) use a mocked HTTP client: pagination, retries, `Retry-After`, error
   mapping, plans and redaction. No network, no real or credential-shaped values.
-- Live read-only tests (`src/php/tests/Live`) run only with `SIW_LIVE=1` and the provider's token, and go
+- Live read-only tests (`src/php/tests/Live`) run only with `SIWO_LIVE=1` and the provider's token, and go
   through a client that refuses anything but GET (plus the Google OAuth token exchange):
 
 ```bash
-cd src/php && SIW_LIVE=1 vendor/bin/phpunit --testsuite live           # skips any provider without a token
+cd src/php && SIWO_LIVE=1 vendor/bin/phpunit --testsuite live           # skips any provider without a token
 ```

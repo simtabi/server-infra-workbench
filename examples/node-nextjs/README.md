@@ -21,13 +21,13 @@ Made up: site `www.example.com` on Ploi web droplet `web-01` (`10.0.0.6`), Postg
 
 ```bash
 examples/run.sh node-nextjs       # validate (offline): profile, plan, app-env self-test
-bin/workbench configure --profile dev-budget --client <you> --set APP=web \
+bin/siwo configure --profile dev-budget --client <you> --set APP=web \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env   # DB server; copy to web, remove
 # web server: shared helpers once (examples/_shared/README.md), then as ploi:
 siw-app-env --stack nextjs --from ~/stg-db.env --out /home/ploi/www.example.com-shared
 shred -u ~/stg-db.env
-bin/workbench ploi daemon-create <server-id> --directory /home/ploi/www.example.com --dry-run \
+bin/siwo ploi daemon-create <server-id> --directory /home/ploi/www.example.com --dry-run \
   --command "/usr/local/bin/siw-with-env /home/ploi/www.example.com-shared/.env node .next/standalone/server.js"
 ```
 
@@ -45,7 +45,7 @@ Checklist:
 
 - [ ] an `app/api/health/route.ts` that returns 200 (and `SELECT 1` through the pool if you want DB in it)
 - [ ] the Ploi site's web directory is the repo root, not `/public` (Next serves `public/` itself)
-- [ ] a 2 GB droplet: `next build` peaks above 1 GB, so keep swap on (`bin/workbench server init` sets it)
+- [ ] a 2 GB droplet: `next build` peaks above 1 GB, so keep swap on (`bin/siwo server init` sets it)
 
 Lesson: Prisma and some ORMs want a `DATABASE_URL` with the password inside. If you use one, build the URL at
 runtime from `PG*` plus the pgpass file in a small wrapper, and never write it into `.env`. The password would

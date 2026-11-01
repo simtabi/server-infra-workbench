@@ -1,5 +1,5 @@
 """
-Ploi + DigitalOcean plan finder (`bin/workbench plans`).
+Ploi + DigitalOcean plan finder (`bin/siwo plans`).
 
 Lists which droplet plans you can create in each DigitalOcean region through
 Ploi. Ploi reports the plans and regions it offers for your DigitalOcean
@@ -25,7 +25,7 @@ Or from the command line. Every setting can come from a .env file, an
 environment variable, or a --flag (flags win over env, env wins over .env).
 Template: config/ploi-do-plan-finder.env.example (copy it outside the repo):
 
-    bin/workbench plans --env-file ~/.config/server-infra-workbench/plans.env \
+    bin/siwo plans --env-file ~/.config/server-infra-workbench/plans.env \
         --regions atl1,nyc3 --min-memory-mb 2048 --output-format markdown
 """
 
@@ -406,7 +406,7 @@ class Config:
     @classmethod
     def from_sources(cls, argv: list[str] | None = None) -> Config:
         parser = argparse.ArgumentParser(
-            prog="workbench plans",
+            prog="siwo plans",
             description="List DigitalOcean plans you can create per region through Ploi.",
         )
         for name, (default, typ, help_) in cls.SETTINGS.items():

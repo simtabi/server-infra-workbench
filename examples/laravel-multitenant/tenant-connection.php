@@ -4,7 +4,7 @@
 // The tenant database name is set at runtime (e.g. by a tenancy package or middleware):
 //   config(['database.connections.tenant.database' => sprintf('%s_%s_t_%d', 'shop', app()->environment('production') ? 'prd' : 'dev', $tenant->id)]);
 //   DB::purge('tenant');
-// Credentials come only from .env (written by `bin/workbench env init`, values generated, mode 600).
+// Credentials come only from .env (written by `bin/siwo env init`, values generated, mode 600).
 
 return [
     'driver' => 'pgsql',

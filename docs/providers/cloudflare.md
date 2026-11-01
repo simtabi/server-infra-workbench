@@ -1,4 +1,4 @@
-# Cloudflare (`workbench cf`)
+# Cloudflare (`siwo cf`)
 
 **Why:** Cloudflare fronts the sites: DNS, TLS between visitors and the edge and between the edge and the origin,
 cache and a first layer of blocking. The workbench manages that through the v4 REST API
@@ -28,27 +28,27 @@ workstation has a stable address, Client IP Address Filtering.
 A zone is its name or its 32-character id. All take `--json`; writes take `--dry-run` and `--yes`;
 destructive ones need `--force`.
 
-- `bin/workbench cf verify` checks the token; `bin/workbench cf zones`, `bin/workbench cf zone example.com`
-- `bin/workbench cf dns list example.com --type A`
-- `bin/workbench cf dns upsert example.com A app <ip> --ttl 1 --proxied --comment "app droplet"` creates, updates
+- `bin/siwo cf verify` checks the token; `bin/siwo cf zones`, `bin/siwo cf zone example.com`
+- `bin/siwo cf dns list example.com --type A`
+- `bin/siwo cf dns upsert example.com A app <ip> --ttl 1 --proxied --comment "app droplet"` creates, updates
   or no-ops; refuses to guess when several records match.
-- `bin/workbench cf dns delete example.com <record-id> --force`
-- `bin/workbench cf settings list example.com` shows ssl, always_use_https, automatic_https_rewrites,
+- `bin/siwo cf dns delete example.com <record-id> --force`
+- `bin/siwo cf settings list example.com` shows ssl, always_use_https, automatic_https_rewrites,
   min_tls_version, tls_1_3 and security_level.
-- `bin/workbench cf settings set example.com min_tls_version 1.2` (weakening a setting needs `--force`;
+- `bin/siwo cf settings set example.com min_tls_version 1.2` (weakening a setting needs `--force`;
   an unchanged value is a no-op)
-- `bin/workbench cf ssl example.com` shows the mode; `bin/workbench cf ssl example.com strict` sets it.
-- `bin/workbench cf origin-certs list example.com`
-- `bin/workbench cf origin-certs create example.com --hostnames example.com,*.example.com --validity 5475 --out ~/.config/server-infra-workbench/example.com.key`
+- `bin/siwo cf ssl example.com` shows the mode; `bin/siwo cf ssl example.com strict` sets it.
+- `bin/siwo cf origin-certs list example.com`
+- `bin/siwo cf origin-certs create example.com --hostnames example.com,*.example.com --validity 5475 --out ~/.config/server-infra-workbench/example.com.key`
   makes the private key and CSR locally (the key never leaves the machine), writes the key to the file (mode 600)
   and the certificate next to it as `FILE.crt`.
-- `bin/workbench cf origin-certs revoke example.com <cert-id> --force`
-- `bin/workbench cf purge example.com --files https://example.com/app.css` (1 to 30 URLs);
-  `bin/workbench cf purge example.com --everything --force`
-- `bin/workbench cf firewall rules example.com` lists IP access rules;
-  `bin/workbench cf firewall add example.com block <cidr> --target ip_range --comment "scanner"`;
-  `bin/workbench cf firewall delete example.com <rule-id> --force`
-- `bin/workbench cf firewall waf example.com` lists the custom WAF rules (read-only; edit them in the dashboard
+- `bin/siwo cf origin-certs revoke example.com <cert-id> --force`
+- `bin/siwo cf purge example.com --files https://example.com/app.css` (1 to 30 URLs);
+  `bin/siwo cf purge example.com --everything --force`
+- `bin/siwo cf firewall rules example.com` lists IP access rules;
+  `bin/siwo cf firewall add example.com block <cidr> --target ip_range --comment "scanner"`;
+  `bin/siwo cf firewall delete example.com <rule-id> --force`
+- `bin/siwo cf firewall waf example.com` lists the custom WAF rules (read-only; edit them in the dashboard
   or as code, where review happens).
 
 ## Checklist

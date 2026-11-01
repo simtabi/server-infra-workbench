@@ -9,13 +9,13 @@ droplet is the OOM killer's next target. `monitor plan` gates RAM (exit 3). See
 
 ```bash
 examples/run.sh monitoring                  # configure checks + `monitor plan` for the hub
-bin/workbench monitor plan --role hub --stacks prometheus    # the upgrade; refused on a small host
+bin/siwo monitor plan --role hub --stacks prometheus    # the upgrade; refused on a small host
 ```
 
 Admin passwords (Beszel, Grafana) are generated into `<unit>/secrets.env` (600) at install and never printed.
 
 Checklist:
 
-- [ ] Every node has an agent; the hub lists them (`bin/workbench monitor doctor`)
+- [ ] Every node has an agent; the hub lists them (`bin/siwo monitor doctor`)
 - [ ] One uptime check per public URL (`MONITOR_PROBE_URLS`)
 - [ ] Alert email or webhook tested once

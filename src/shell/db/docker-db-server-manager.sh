@@ -158,7 +158,7 @@ siw_path() { # a server-infra-workbench path, or the pre-rename vps-server-workb
   local old="${1/server-infra-workbench/vps-server-workbench}"
   if [ ! -e "$1" ] && [ -e "$old" ]; then printf '%s\n' "$old"; else printf '%s\n' "$1"; fi; }
 STATE_DIR="${STATE_DIR:-$(siw_path /var/lib/server-infra-workbench/db)}"   # status stamps for doctor/monitoring
-# ---- monitoring (workbench monitor; docs/tools/monitor.md) --
+# ---- monitoring (siwo monitor; docs/tools/monitor.md) --
 MONITOR_USER="${MONITOR_USER:-vsw_monitor}"          # pg_monitor login for the exporters (monitor-user); empty = none
 MONITOR_PASSWORD_FILE="${MONITOR_PASSWORD_FILE:-/etc/vsw-monitor/pg-monitor.pass}"  # 600, read by monitor.sh, never printed
 METRICS_TEXTFILE_DIR="${METRICS_TEXTFILE_DIR:-/var/lib/vsw-monitor/textfile}"     # node-exporter textfile dir; metrics written only when it exists
@@ -379,18 +379,18 @@ set_env_key() { # key value [file]: replace or append one line, file stays 600
 }
 
 # ---- progress (spinner, bar, ETA on stderr; same code as src/shell/lib/progress.sh) ----
-# SIW_PROGRESS=auto|tty|plain|off, --quiet (SIW_QUIET=1), NO_COLOR. Cron runs get plain lines.
+# SIWO_PROGRESS=auto|tty|plain|off, --quiet (SIWO_QUIET=1), NO_COLOR. Cron runs get plain lines.
 # >>> progress.sh
-# SIW_* was VSW_* before the rename (ADR 0014): an unset SIW_X takes VSW_X, with one notice per name
+# SIWO_* was VSW_* before the rename (ADR 0014): an unset SIWO_X takes VSW_X, with one notice per name
 for _v in $(compgen -e); do case "$_v" in VSW_*)
-  _n="SIW_${_v#VSW_}"; [ -n "${!_n+x}" ] || export "$_n=${!_v}"
-  case " ${SIW_COMPAT_NOTED:-} " in *" $_v "*) ;; *) export SIW_COMPAT_NOTED="${SIW_COMPAT_NOTED:-} $_v"
+  _n="SIWO_${_v#VSW_}"; [ -n "${!_n+x}" ] || export "$_n=${!_v}"
+  case " ${SIWO_COMPAT_NOTED:-} " in *" $_v "*) ;; *) export SIWO_COMPAT_NOTED="${SIWO_COMPAT_NOTED:-} $_v"
     printf 'note: %s is deprecated, use %s (the old name is still read for now)\n' "$_v" "$_n" >&2 ;; esac ;; esac; done
 PROGRESS_T0="${PROGRESS_T0:-$(date +%s)}" PROGRESS_N=0 PROGRESS_BAR_T0="" PROGRESS_BAR_DEC=-1
 progress_mode() {
-  [ "${SIW_QUIET:-0}" = 1 ] && { echo off; return; }
-  case "${SIW_PROGRESS:-auto}" in
-    tty|plain|off) echo "$SIW_PROGRESS" ;;
+  [ "${SIWO_QUIET:-0}" = 1 ] && { echo off; return; }
+  case "${SIWO_PROGRESS:-auto}" in
+    tty|plain|off) echo "$SIWO_PROGRESS" ;;
     *) if [ -t 2 ] && [ "${TERM:-dumb}" != dumb ]; then echo tty; else echo plain; fi ;;
   esac
 }
@@ -420,7 +420,7 @@ progress_run() {
   local e; e="$(progress_fmt $(($(date +%s) - t0)))"
   if [ "$rc" = 0 ]; then [ "$m" = off ] || printf '  %s  %s  (%s)\n' "$(progress_col 32 'done')" "$label" "$e" >&2
   else [ "$m" = off ] || printf '  %s  %s  (%s, exit %s)\n' "$(progress_col 31 'FAIL')" "$label" "$e" "$rc" >&2; fi
-  if [ -n "$log" ]; then { [ "$rc" != 0 ] || [ "${SIW_VERBOSE:-0}" = 1 ]; } && sed 's/^/        /' "$log" | tail -n 40 >&2; rm -f "$log"; fi
+  if [ -n "$log" ]; then { [ "$rc" != 0 ] || [ "${SIWO_VERBOSE:-0}" = 1 ]; } && sed 's/^/        /' "$log" | tail -n 40 >&2; rm -f "$log"; fi
   return "$rc"
 }
 progress_bar() {
@@ -2554,9 +2554,9 @@ offsite_env() { # export tool credentials for one command (values never printed)
   local OFFSITE_ACCESS_KEY="" OFFSITE_SECRET_KEY="" PITR_CIPHER_PASS=""
   offsite_creds || die "missing $OFFSITE_CREDS_FILE (chmod 600) with OFFSITE_ACCESS_KEY and OFFSITE_SECRET_KEY"
   [ -n "$OFFSITE_BUCKET" ] || die "OFFSITE_BUCKET is not set"
-  export RCLONE_CONFIG_SIW_TYPE=s3 RCLONE_CONFIG_SIW_PROVIDER=Other RCLONE_CONFIG_SIW_ENDPOINT="$OFFSITE_ENDPOINT" \
-    RCLONE_CONFIG_SIW_REGION="$OFFSITE_REGION" RCLONE_CONFIG_SIW_ACCESS_KEY_ID="$OFFSITE_ACCESS_KEY" \
-    RCLONE_CONFIG_SIW_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" RCLONE_CONFIG_SIW_NO_CHECK_BUCKET=true \
+  export RCLONE_CONFIG_SIWO_TYPE=s3 RCLONE_CONFIG_SIWO_PROVIDER=Other RCLONE_CONFIG_SIWO_ENDPOINT="$OFFSITE_ENDPOINT" \
+    RCLONE_CONFIG_SIWO_REGION="$OFFSITE_REGION" RCLONE_CONFIG_SIWO_ACCESS_KEY_ID="$OFFSITE_ACCESS_KEY" \
+    RCLONE_CONFIG_SIWO_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" RCLONE_CONFIG_SIWO_NO_CHECK_BUCKET=true \
     RCLONE_CONFIG=/dev/null   # remote from the env only; also silences "config file not found"
   # a private endpoint's CA (PITR_S3_CA_FILE) is trusted by the off-site tools too; TLS stays verified
   # (one variable per tool: rclone's S3 SDK refuses AWS_CA_BUNDLE with "unsupported transport")
@@ -2835,7 +2835,7 @@ doctor_exposure() {
       if [ -n "$x" ]; then d_bad "$p: listens on unexpected address(es)$x ($l)"; else d_ok "$p: $l"; fi
     fi
   done
-  for a in $(extra_binds); do ip_private "$a" || d_warn "$a is a public bind: Docker ports bypass ufw, so a DO cloud firewall must allow only the app servers (workbench do firewall-apply db ...)"; done
+  for a in $(extra_binds); do ip_private "$a" || d_warn "$a is a public bind: Docker ports bypass ufw, so a DO cloud firewall must allow only the app servers (siwo do firewall-apply db ...)"; done
   echo "  (Docker-published ports bypass ufw; binding to the private IP keeps them off the internet.)"
   if on "$ENABLE_ADMINER"; then
     l="$(listen_addrs "$ADMINER_PORT")"
@@ -2859,7 +2859,7 @@ doctor_network() { # region / VPC sanity: DO VPCs are per region (docs/cross-reg
     elif [ "$VPC_PEERING" = 1 ]; then d_ok "peer region $r: different region, VPC peering (private IPs; \$0.01/GiB between regions)"
     elif [ "$wg" = 1 ]; then d_ok "peer region $r: different region, reached over WireGuard (wg0)"
     elif tls_on && [ "$ALLOW_PUBLIC_BIND" = 1 ]; then d_warn "peer region $r: different region over a public address with TLS; check the cloud firewall allowlist"
-    else d_bad "peer region $r differs from $region: the app can't reach $PRIVATE_IP (VPCs are per region). Move the servers, peer the VPCs (then VPC_PEERING=1), or: workbench net wireguard setup (docs/cross-region.md)"; fi
+    else d_bad "peer region $r differs from $region: the app can't reach $PRIVATE_IP (VPCs are per region). Move the servers, peer the VPCs (then VPC_PEERING=1), or: siwo net wireguard setup (docs/cross-region.md)"; fi
   done
 }
 doctor_host() {
@@ -2879,7 +2879,7 @@ doctor_host() {
   if [ -n "$use" ]; then if [ "$use" -ge "$DOCTOR_DISK_BAD_PCT" ]; then d_bad "disk $use% used on $DB_DIR (limit $DOCTOR_DISK_BAD_PCT%)"; elif [ "$use" -ge "$DOCTOR_DISK_WARN_PCT" ]; then d_warn "disk $use% used on $DB_DIR"; else d_ok "disk $use% used"; fi; fi
   local need have; need="$(engine_ram_mb)"; have="$(host_ram_mb)"
   if [ "$have" -gt 0 ] && [ "$have" -lt "$((need * 90 / 100))" ]; then
-    d_warn "RAM ${have}MB < ${need}MB for the enabled engines. Resize: bin/workbench do resize <droplet> --size $(size_for_mb "$need")  (or disable an engine: engine disable mysql)"
+    d_warn "RAM ${have}MB < ${need}MB for the enabled engines. Resize: bin/siwo do resize <droplet> --size $(size_for_mb "$need")  (or disable an engine: engine disable mysql)"
   elif [ "$have" -gt 0 ]; then d_ok "RAM ${have}MB (engines need ~${need}MB)"; fi
   if [ -n "$(docker network ls --filter "name=^${DOCKER_NETWORK}\$" -q 2>/dev/null)" ]; then
     local sn; sn="$(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' "$DOCKER_NETWORK" 2>/dev/null)"
@@ -2888,7 +2888,7 @@ doctor_host() {
   docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep -E '(^| |,)0\.0\.0\.0:' | grep -v '^vsw-rt-' | while read -r l; do echo "  warn  another container publishes on all interfaces: $l"; done || true
   local dm; dm="$(docker_group_members)"
   [ -z "$dm" ] && d_ok "docker group: no non-root members" \
-    || d_warn "docker group has $dm (root-equivalent). Fix: bin/workbench server harden --host <db> --only dockergroup --fix-docker-group (or keep them: --docker-allow ${dm// /,} and DOCKER_GROUP_ALLOW in the manager config)"
+    || d_warn "docker group has $dm (root-equivalent). Fix: bin/siwo server harden --host <db> --only dockergroup --fix-docker-group (or keep them: --docker-allow ${dm// /,} and DOCKER_GROUP_ALLOW in the manager config)"
   return 0
 }
 docker_group_members() { # non-root, non-allowed members of the docker group, space-separated
@@ -3047,11 +3047,11 @@ cmd_monitor_user() { # [--rotate]
     echo "note: PgBouncer does not list $MONITOR_USER in stats_users yet: run 'upgrade' (or 'apply') once"
   fi
   echo "monitor-user ok: role $MONITOR_USER (pg_monitor), password in $f (600, not printed)"
-  echo "next: workbench monitor install (on this host) picks it up automatically"
+  echo "next: siwo monitor install (on this host) picks it up automatically"
 }
 
 cmd_metrics() { # write the textfile metrics now (cron jobs refresh them through stamp)
-  [ -d "$METRICS_TEXTFILE_DIR" ] || die "$METRICS_TEXTFILE_DIR does not exist (workbench monitor install creates it)"
+  [ -d "$METRICS_TEXTFILE_DIR" ] || die "$METRICS_TEXTFILE_DIR does not exist (siwo monitor install creates it)"
   write_metrics; cat "$METRICS_TEXTFILE_DIR/vsw_db.prom"
 }
 
@@ -3292,7 +3292,7 @@ cmd_engine() { # enable|disable <engine> [--delete-volume] [--dry-run]
       on "${!v}" && { echo "$e is already enabled"; return 0; }
       [ "$e" = pgbouncer ] && ! on "$ENABLE_POSTGRES" && die "enable postgres first"
       local need have; printf -v "$v" 1; need="$(engine_ram_mb)"; have="$(host_ram_mb)"; printf -v "$v" 0
-      [ "$have" = 0 ] || [ "$have" -ge "$((need * 90 / 100))" ] || warn "RAM ${have}MB < ${need}MB needed with $e on; consider: bin/workbench do resize <droplet> --size $(size_for_mb "$need")"
+      [ "$have" = 0 ] || [ "$have" -ge "$((need * 90 / 100))" ] || warn "RAM ${have}MB < ${need}MB needed with $e on; consider: bin/siwo do resize <droplet> --size $(size_for_mb "$need")"
       echo "plan: set $v=1 in $DBM_CONFIG, start $e (existing volume reused), converge, run doctor"
       [ "$dry" = 1 ] && return 0
       confirm ENABLE
@@ -3429,7 +3429,7 @@ for a in "$@"; do
     -y|--yes) FORCE=1 ;;
     --non-interactive) NONINTERACTIVE=1 ;;
     --config) skip_next=1 ;;
-    -q|--quiet) export SIW_QUIET=1 ;;
+    -q|--quiet) export SIWO_QUIET=1 ;;
     --version) echo "$TOOL_NAME $VERSION"; exit 0 ;;
     *) ARGS+=("$a") ;;
   esac

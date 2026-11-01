@@ -24,7 +24,7 @@
 #    --no-upload         use the manager already in /root (--config is still uploaded)
 #    --dry-run           print the remote commands, connect to nothing
 #
-#    --snapshot-with W   auto (default) | doctl | workbench | server | none
+#    --snapshot-with W   auto (default) | doctl | siwo | server | none  (workbench: old name of siwo)
 #    -h, --help
 #
 #  UPGRADE + SNAPSHOT
@@ -33,8 +33,8 @@
 #    list has `upgrade`/`apply`, a DigitalOcean snapshot is offered first, using
 #    the first of these that works (auto):
 #      1. doctl on this machine (doctl auth init)
-#      2. bin/workbench do snapshot (DIGITALOCEAN_TOKEN or the workbench
-#         credentials file, see: bin/workbench credentials)
+#      2. bin/siwo do snapshot (DIGITALOCEAN_TOKEN or the workbench
+#         credentials file, see: bin/siwo credentials)
 #      3. a token on the server (/root/.config/digitalocean-token): the manager asks
 #      4. none: the manager asks you to type CONTINUE to upgrade without one
 #    After 1 or 2 the manager gets --snapshot-taken. No token is ever sent to
@@ -46,7 +46,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HOST="" EXPECT="" CONFIG="" SCRIPT="$HERE/docker-db-server-manager.sh" UPLOAD=1 DRY=0 SNAPWITH=auto
-WORKBENCH="${WORKBENCH:-$HERE/../../../bin/workbench}"
+WORKBENCH="${WORKBENCH:-$HERE/../../../bin/siwo}"
 die() { printf '!! %s\n' "$*" >&2; exit 1; }
 # usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
 # title box, so --help printed one line; awk counts the rules instead.
@@ -61,7 +61,8 @@ while [ $# -gt 0 ]; do
     --no-upload) UPLOAD=0; shift ;;
     --dry-run)   DRY=1; shift ;;
     --snapshot-with) SNAPWITH="${2:?}"; shift 2
-                 case "$SNAPWITH" in auto|doctl|workbench|server|none) ;; *) die "--snapshot-with: auto, doctl, workbench, server or none" ;; esac ;;
+                 case "$SNAPWITH" in auto|doctl|siwo|workbench|server|none) ;; *) die "--snapshot-with: auto, doctl, siwo, server or none" ;; esac
+                 [ "$SNAPWITH" != siwo ] || SNAPWITH=workbench ;;   # one code path; siwo is the name users see
     -h|--help)   usage; exit 0 ;;
     --) shift; break ;;
     -*) die "unknown option: $1" ;;
@@ -126,7 +127,7 @@ snap_name() { echo "db-pre-upgrade-$(date +%Y%m%d-%H%M%S)"; }
 pick_snapshot_tool() {
   case "$SNAPWITH" in
     doctl)     have_doctl || die "--snapshot-with doctl: doctl is missing or not authenticated (doctl auth init)"; echo doctl ;;
-    workbench) have_workbench || die "--snapshot-with workbench: no DigitalOcean token for bin/workbench (see: bin/workbench credentials)"; echo workbench ;;
+    workbench) have_workbench || die "--snapshot-with siwo: no DigitalOcean token for bin/siwo (see: bin/siwo credentials)"; echo workbench ;;
     server|none) echo "$SNAPWITH" ;;
     auto) if have_doctl; then echo doctl; elif have_workbench; then echo workbench; else echo server; fi ;;
   esac
@@ -152,7 +153,7 @@ if [ "$UPG" = 1 ] && [ "$DRY" = 0 ]; then
         esac
       else echo "!! could not read the droplet id; the server will handle the snapshot question" >&2; fi ;;
     server)
-      echo "note: no doctl (doctl auth init) and no DigitalOcean token for bin/workbench (bin/workbench credentials) here;"
+      echo "note: no doctl (doctl auth init) and no DigitalOcean token for bin/siwo (bin/siwo credentials) here;"
       echo "      the server will use its own token, or ask you to type CONTINUE to upgrade without a snapshot" ;;
     none)
       ans=""; [ -t 0 ] && read -r -p "Upgrade WITHOUT a snapshot (rollback = saved files + verified backup)? Type 'skip': " ans

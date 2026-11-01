@@ -18,7 +18,7 @@ pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq >/dev/null && apt-get install -y -qq openssh-server tzdata openssl >/dev/null
 mkdir -p /run/sshd /root/.ssh; echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTestsOnly it@test' > /root/.ssh/authorized_keys
-S=/w/src/shell; echo yes > /tmp/tty; export SIW_TTY=/tmp/tty
+S=/w/src/shell; echo yes > /tmp/tty; export SIWO_TTY=/tmp/tty
 
 # init: plan, then apply (no swap in a container, harden runs as part of init)
 bash $S/server/init.sh --role base --swap 0 --dry-run > /tmp/o

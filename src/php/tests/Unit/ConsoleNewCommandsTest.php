@@ -281,11 +281,11 @@ final class ConsoleNewCommandsTest extends TestCase
         self::assertStringContainsString('"image":"'.Droplets::DEFAULT_IMAGE.'"', $this->out());
 
         $this->http->json(['droplets' => [], 'links' => []]);
-        self::assertSame(0, $this->app(['SIW_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--dry-run']));
+        self::assertSame(0, $this->app(['SIWO_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--dry-run']));
         self::assertStringContainsString('"image":"ubuntu-24-04-x64"', $this->out());
 
         $this->http->json(['images' => [['slug' => 'ubuntu-26-04-x64'], ['slug' => 'ubuntu-28-04-x64']], 'links' => []])->json(['droplets' => [], 'links' => []]);
-        self::assertSame(0, $this->app(['SIW_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--image', 'latest', '--dry-run']));
+        self::assertSame(0, $this->app(['SIWO_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--image', 'latest', '--dry-run']));
         self::assertStringContainsString('"image":"ubuntu-28-04-x64"', $this->out());
     }
 

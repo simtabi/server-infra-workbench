@@ -23,7 +23,7 @@ Made up: API `api.example.com` on Ploi web droplet `web-01` (`10.0.0.6`), Postgr
 
 ```bash
 examples/run.sh go-api            # validate (offline): profile, app-env self-test
-bin/workbench configure --profile dev-budget --client <you> --set APP=api \
+bin/siwo configure --profile dev-budget --client <you> --set APP=api \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env   # DB server; copy to web, remove
 # web server: shared helpers once (examples/_shared/README.md), then as ploi:

@@ -22,7 +22,7 @@ use Simtabi\ServerInfraWorkbench\Security\Credentials;
 use Simtabi\ServerInfraWorkbench\Support\Env;
 
 /**
- * `bin/workbench do|cf|gcp|github|ploi|keys|health|credentials ...`
+ * `bin/siwo do|cf|gcp|github|ploi|keys|health|credentials ...`
  *
  * Provider areas live in Console\Commands (one class each); this class parses, dispatches and maps
  * exceptions to exit codes. Output, the write path and secret-file handling are in Runner.
@@ -108,7 +108,7 @@ final class Application
                 'credentials', 'creds' => $this->credentials($input),
                 'help', '--help', '-h' => $this->help($input),
                 'version', '--version' => $this->version(),
-                default => throw new ValidationException(sprintf('unknown command "%s" (see: workbench help)', $area)),
+                default => throw new ValidationException(sprintf('unknown command "%s" (see: siwo help)', $area)),
             };
         } catch (ValidationException $e) {
             $this->out->error('error: '.$e->getMessage());
@@ -133,7 +133,7 @@ final class Application
         }
     }
 
-    /** `workbench health <url>...`: exit 0 only when every endpoint passes. */
+    /** `siwo health <url>...`: exit 0 only when every endpoint passes. */
     private function health(Input $in): int
     {
         $urls = $in->args();
@@ -163,7 +163,7 @@ final class Application
             'server' => $this->serverKeys($in),
             'fingerprint' => $this->runner->showOne($in, (static fn (PublicKey $k): array => ['type' => $k->type, 'comment' => $k->comment, 'sha256' => $k->fingerprint(), 'md5' => $k->md5()])(PublicKey::parse($this->publicKey($in)))),
             'help' => $this->runner->usage('keys'),
-            default => throw new ValidationException(sprintf('unknown "keys %s" (see: workbench keys --help)', $in->arg(0, 'command'))),
+            default => throw new ValidationException(sprintf('unknown "keys %s" (see: siwo keys --help)', $in->arg(0, 'command'))),
         };
     }
 
@@ -183,7 +183,7 @@ final class Application
 
     private function accountKeys(Input $in, ?string $config): int
     {
-        $keys = fn () => $this->providers->accountKeys($in->value('provider') ?? throw new ValidationException('--provider is required (see: workbench keys providers)'), $config);
+        $keys = fn () => $this->providers->accountKeys($in->value('provider') ?? throw new ValidationException('--provider is required (see: siwo keys providers)'), $config);
 
         return match ($in->optionalArg(1)) {
             'list', null => $this->runner->show($in, $keys()->list(), ['id' => 'ID', 'name' => 'NAME', 'fingerprint' => 'FINGERPRINT']),

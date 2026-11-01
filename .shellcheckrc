@@ -1,4 +1,4 @@
-# shellcheck settings for every script (make shellcheck runs shellcheck -x on all *.sh and bin/workbench).
+# shellcheck settings for every script (make shellcheck runs shellcheck -x on all *.sh and bin/siwo).
 # Follow `source` statements so sourced settings files are checked in context.
 external-sources=true
 # Warn on everything shellcheck knows; scripts silence a specific check inline, with a reason.

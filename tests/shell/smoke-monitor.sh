@@ -9,7 +9,7 @@ T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 pass=0
 ok()   { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
-unset NO_COLOR SIW_QUIET MONITOR_CONF
+unset NO_COLOR SIWO_QUIET MONITOR_CONF
 M="$PWD/src/shell/monitor/monitor.sh"
 mem() { printf 'MemTotal:       %d kB\nMemAvailable:   %d kB\n' $(( $1 * 1024 )) $(( $2 * 1024 )) > "$T/meminfo.$1"; echo "$T/meminfo.$1"; }
 MONITOR_MEMINFO="$(mem 8192 6000)"
@@ -101,11 +101,11 @@ printf '86400.5 1000\n' > "$R/proc/uptime"; printf '0.10 0.20 0.30 1/100 1\n' > 
 printf 'MemTotal: 4194304 kB\nMemAvailable: 2097152 kB\n' > "$R/proc/meminfo"; : > "$R/opt/vsw-monitor/beszel/stack.env"
 printf '#!/bin/sh\nexit 1\n' > "$T/bin/docker"; chmod +x "$T/bin/docker"
 now="$(date +%s)"; echo "$now" > "$R/var/lib/server-infra-workbench/db/backup"; echo "$now ok 0" > "$R/var/lib/server-infra-workbench/db/doctor"
-st() { env -u MONITOR_DIR PATH="$T/bin:$PATH" SIW_SYSROOT="$R" STATUS_DISK_WARN=100 bash src/shell/server/status.sh "$@"; }
+st() { env -u MONITOR_DIR PATH="$T/bin:$PATH" SIWO_SYSROOT="$R" STATUS_DISK_WARN=100 bash src/shell/server/status.sh "$@"; }
 st > "$T/o" && grep -q 'status: all fine' "$T/o" && grep -qE 'monitor +beszel' "$T/o" && grep -q 'uptime_days *1' "$T/o" && ok "status: healthy fake node -> exit 0" || { cat "$T/o"; fail "status ok"; }
 st --json > "$T/o" && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["ok"] is True and d["db_backup_age_h"]=="0"' "$T/o" && ok "status --json is valid JSON" || fail "status json"
 echo $((now - 30 * 3600)) > "$R/var/lib/server-infra-workbench/db/backup"; : > "$R/var/run/reboot-required"
 rc=0; st > "$T/o" || rc=$?; [ "$rc" = 1 ] && grep -q 'backup is 30 hours old' "$T/o" && grep -q 'reboot required' "$T/o" && ok "status: stale backup + reboot flag -> attention, exit 1" || { cat "$T/o"; fail "status attn"; }
 rc=0; st --url 'ftp://x' >/dev/null 2>&1 || rc=$?; [ "$rc" = 2 ] && ok "status: --url must be http(s)" || fail "status url"
-bin/workbench monitor version | grep -q '^monitor.sh ' && bin/workbench status --help | grep -q 'one-screen health' && ok "workbench monitor / status dispatch" || fail "dispatch"
+bin/siwo monitor version | grep -q '^monitor.sh ' && bin/siwo status --help | grep -q 'one-screen health' && ok "siwo monitor / status dispatch" || fail "dispatch"
 echo "smoke-monitor: all $pass checks passed"

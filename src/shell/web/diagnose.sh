@@ -80,7 +80,7 @@ say "diagnose ${SITE:-$SITE_PATH} (app $APP, owner $OWNER):"
 # -- files
 if [ ! -d "$APP" ]; then bad "site dir $APP missing"; why "deploy once in Ploi, or pass --path"; summary; exit 1; fi
 [ -f "$APP/artisan" ] && ok "Laravel app found" || warn "no artisan in $APP (not Laravel? wrong --path?)"
-if [ ! -f "$ENV_FILE" ]; then bad ".env missing ($ENV_FILE)"; why "Laravel boots with defaults and fails on DB/APP_KEY; create it: workbench env init"
+if [ ! -f "$ENV_FILE" ]; then bad ".env missing ($ENV_FILE)"; why "Laravel boots with defaults and fails on DB/APP_KEY; create it: siwo env init"
 else
   mode="$(stat_fmt %a "$ENV_FILE")"
   if [ "$mode" = 600 ] || [ "$mode" = 640 ] || [ "$mode" = 400 ]; then ok ".env mode $mode"
@@ -123,7 +123,7 @@ if [ -n "$rh" ]; then rp="$(envget REDIS_PORT)"; if tcp "$rh" "${rp:-6379}"; the
 qc="$(envget QUEUE_CONNECTION)"
 if [ -n "$qc" ] && [ "$qc" != sync ]; then
   if pgrep -f 'artisan (queue:work|horizon)' >/dev/null 2>&1; then ok "queue worker running ($qc)"
-  else warn "QUEUE_CONNECTION=$qc but no queue:work/horizon process"; why "jobs pile up silently; add a daemon: workbench ploi daemon-create"; fi
+  else warn "QUEUE_CONNECTION=$qc but no queue:work/horizon process"; why "jobs pile up silently; add a daemon: siwo ploi daemon-create"; fi
 fi
 if [ -f "$APP/artisan" ]; then
   if crontab -l -u "$OWNER" 2>/dev/null | grep 'schedule:run' >/dev/null; then ok "scheduler in $OWNER's crontab"

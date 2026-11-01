@@ -1,6 +1,6 @@
 # Configure a setup (profiles and the wizard)
 
-`bin/workbench configure` turns a **profile** (a tested starting point) plus your answers into the config files
+`bin/siwo configure` turns a **profile** (a tested starting point) plus your answers into the config files
 for one client, checks them, and prints the commands to roll them out. It runs on your workstation, writes only
 to the git-ignored `local/<client>/` folder, never writes secrets and never touches a server.
 
@@ -30,14 +30,14 @@ flowchart LR
 Every setting and what each profile changes: [profiles reference](reference/profiles.md).
 
 ```bash
-bin/workbench profile list
-bin/workbench profile diff dev-budget production-single
+bin/siwo profile list
+bin/siwo profile diff dev-budget production-single
 ```
 
 ## Run the wizard
 
 ```bash
-bin/workbench configure                     # asks: profile, client, app, cloud, region, envs, RAM, IP, storage, PDF, email
+bin/siwo configure                     # asks: profile, client, app, cloud, region, envs, RAM, IP, storage, PDF, email
 ```
 
 Press Enter to keep the value in brackets. At the end you can add any other `KEY=VALUE`, one per line.
@@ -45,7 +45,7 @@ Press Enter to keep the value in brackets. At the end you can add any other `KEY
 Without prompts (scripts, CI, or when you know the values):
 
 ```bash
-bin/workbench configure --non-interactive --profile dev-budget --client acme \
+bin/siwo configure --non-interactive --profile dev-budget --client acme \
   --set APP=shop --set DB_PRIVATE_IP=10.10.0.5 --set VPC_CIDR=10.10.0.0/16 --set OFFSITE_BUCKET=acme-backups \
   --dry-run                                  # checks and diffs only; drop --dry-run to write
 ```
@@ -53,7 +53,7 @@ bin/workbench configure --non-interactive --profile dev-budget --client acme \
 Change one thing later and keep the earlier answers:
 
 ```bash
-bin/workbench configure --non-interactive --client acme --keep --set RETENTION="daily=14 weekly=8" --yes
+bin/siwo configure --non-interactive --client acme --keep --set RETENTION="daily=14 weekly=8" --yes
 ```
 
 ## What it checks

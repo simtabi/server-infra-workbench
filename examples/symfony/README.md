@@ -23,14 +23,14 @@ Made up: shop `shop.example.com` on Ploi web droplet `web-01` (`10.0.0.6`), Post
 
 ```bash
 examples/run.sh symfony           # validate (offline): profile, plan, app-env self-test
-bin/workbench configure --profile dev-budget --client <you> --set APP=shop \
+bin/siwo configure --profile dev-budget --client <you> --set APP=shop \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env   # DB server; copy to web, remove
 # web server: shared helpers once (examples/_shared/README.md), then as ploi (the pgpass goes to ~/.pgpass):
 siw-app-env --stack symfony --from ~/stg-db.env --out /home/ploi/shop.example.com-shared \
   --set MESSENGER_TRANSPORT_DSN=doctrine://default?auto_setup=0
 shred -u ~/stg-db.env
-bin/workbench ploi daemon-create <server-id> --directory /home/ploi/shop.example.com --dry-run \
+bin/siwo ploi daemon-create <server-id> --directory /home/ploi/shop.example.com --dry-run \
   --command "php bin/console messenger:consume async --time-limit=3600 --memory-limit=128M"
 ```
 

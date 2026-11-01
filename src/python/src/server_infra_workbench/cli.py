@@ -1,4 +1,4 @@
-"""Command line: `python -m server_infra_workbench ping|plans|configure|profile ...` (or `bin/workbench py ...`)."""
+"""Command line: `python -m server_infra_workbench ping|plans|configure|profile ...` (or `bin/siwo py ...`)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from server_infra_workbench.probe import tcp_probe
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="workbench py", description="server-infra-workbench Python helpers")
+    p = argparse.ArgumentParser(prog="siwo py", description="server-infra-workbench Python helpers")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser(

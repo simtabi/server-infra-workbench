@@ -33,12 +33,12 @@ stack (Postgres + PgBouncer), environment `dev` of app `lab`, VPC `10.0.0.0/20`.
 
 ```bash
 examples/run.sh single-droplet-all-in-one      # validate (offline): profile checks with both roles on one IP
-bin/workbench configure --profile dev-budget --client <you> --set APP=lab --set ENVS=dev --set TENANT_ENVS= \
+bin/siwo configure --profile dev-budget --client <you> --set APP=lab --set ENVS=dev --set TENANT_ENVS= \
   --set PROTECTED_ENVS= --set SINGLE_DROPLET=1 --set DB_DROPLET_MB=4096 --set WEB_DROPLET_MB=4096 \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.5 --set VPC_CIDR=10.0.0.0/20
 # after Ploi provisioned the server (no database): swap + Docker only; Ploi owns ufw, nginx, PHP and SSH
-bin/workbench server init --host lab-01 --role db --only swap,docker
-bin/workbench do firewall-apply web --vpc 10.0.0.0/20 --droplet <droplet-id> --dry-run
+bin/siwo server init --host lab-01 --role db --only swap,docker
+bin/siwo do firewall-apply web --vpc 10.0.0.0/20 --droplet <droplet-id> --dry-run
 ```
 
 | File | Use |

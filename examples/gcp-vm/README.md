@@ -25,19 +25,19 @@ the DigitalOcean-only parts turned off.
   web *tag* to the DB tag, and SSH only from Google's IAP range.
 - **Tags, not addresses.** A rule "from tag `siw-web`" follows the web VM through a re-create. A CIDR also
   admits whatever else lands in the subnet later. The DB's own `VPC_CIDR` check stays as a second layer.
-- **Snapshots through the workbench, read-only by default.** `bin/workbench gcp snapshot <zone> <disk>`
+- **Snapshots through the workbench, read-only by default.** `bin/siwo gcp snapshot <zone> <disk>`
   takes the same pre-change snapshot as `do snapshot`.
 
 ```bash
 examples/run.sh gcp-vm      # validate (offline): profile checks, plans, gcp-firewall.sh self-test
-bin/workbench configure --profile production-single --client <you> --set CLOUD=gcp --set REGION=us-central1 \
+bin/siwo configure --profile production-single --client <you> --set CLOUD=gcp --set REGION=us-central1 \
   --set APP=shop --set ALERT_EMAIL=<you@example.com> --set DB_PRIVATE_IP=10.128.0.5 --set WEB_PRIVATE_IP=10.128.0.6 --set VPC_CIDR=10.128.0.0/20 \
   --set OFFSITE_BUCKET=shop-db-backups --set OFFSITE_ENDPOINT=https://storage.googleapis.com --set OFFSITE_REGION=auto \
   --set DO_ALERTS=0 --set UPTIME_CHECKS=0 --set STORAGE=none
 examples/gcp-vm/gcp-firewall.sh --network siw --project my-project            # the plan; --apply runs it
-bin/workbench gcp instances --zone us-central1-a                                 # read-only
-bin/workbench gcp firewalls                                                      # WORLD-OPEN marks 0.0.0.0/0 rules
-bin/workbench gcp snapshot us-central1-a db-01 --dry-run                         # before any change
+bin/siwo gcp instances --zone us-central1-a                                 # read-only
+bin/siwo gcp firewalls                                                      # WORLD-OPEN marks 0.0.0.0/0 rules
+bin/siwo gcp snapshot us-central1-a db-01 --dry-run                         # before any change
 ```
 
 | File | Use |
@@ -49,7 +49,7 @@ Checklist:
 
 - [ ] VMs created with `--network siw --subnet siw-us-central1 --tags siw-web` / `siw-db`; the DB VM with
       `--no-address` (no public IP; Cloud NAT for apt and image pulls)
-- [ ] `bin/workbench gcp firewalls` shows no `WORLD-OPEN` rule other than `siw-web-https`
+- [ ] `bin/siwo gcp firewalls` shows no `WORLD-OPEN` rule other than `siw-web-https`
 - [ ] `PRIVATE_IFACE=ens4` in the manager's config; `ss -ltn` on `db-01` shows Postgres on `10.128.0.5` only
 - [ ] `offsite verify` passes against GCS before you rely on it (the S3 interop path is less exercised than
       Spaces; `PITR_S3_URI_STYLE=path` if pgBackRest can't reach the bucket host)

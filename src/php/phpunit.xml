@@ -18,7 +18,7 @@
         <testsuite name="integration">
             <directory>tests/Integration</directory>
         </testsuite>
-        <!-- Real APIs, read-only, skipped unless SIW_LIVE=1 and the token is set. Not in the default run. -->
+        <!-- Real APIs, read-only, skipped unless SIWO_LIVE=1 and the token is set. Not in the default run. -->
         <testsuite name="live">
             <directory>tests/Live</directory>
         </testsuite>
@@ -29,8 +29,8 @@
         </include>
     </source>
     <php>
-        <env name="SIW_AUDIT_LOG" value="off" force="true"/>
-        <env name="SIW_PROGRESS" value="off" force="true"/>
-        <env name="SIW_CREDENTIALS_FILE" value="/nonexistent/vsw-credentials" force="true"/>
+        <env name="SIWO_AUDIT_LOG" value="off" force="true"/>
+        <env name="SIWO_PROGRESS" value="off" force="true"/>
+        <env name="SIWO_CREDENTIALS_FILE" value="/nonexistent/vsw-credentials" force="true"/>
     </php>
 </phpunit>

@@ -73,7 +73,7 @@ final readonly class ZoneSettings
             default => false,
         };
         $note = match (true) {
-            $name === 'ssl' && $value === 'flexible' => 'flexible = plain HTTP between Cloudflare and the origin; use full (strict) with an origin certificate (workbench cf origin-certs create)',
+            $name === 'ssl' && $value === 'flexible' => 'flexible = plain HTTP between Cloudflare and the origin; use full (strict) with an origin certificate (siwo cf origin-certs create)',
             $name === 'ssl' && $value === 'strict' => 'the origin must present a valid or Cloudflare Origin CA certificate, or visitors get 526 errors',
             $weaker => 'lowers the security of the zone',
             default => null,

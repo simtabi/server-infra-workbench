@@ -24,10 +24,10 @@ with a hand-edited deploy script, and a `.env` that someone once edited on the s
 ```bash
 examples/run.sh ploi-managed-site      # validate (offline): profile checks, the assembled script parses
 examples/_shared/ploi-script.sh examples/ploi-managed-site/ploi-deploy.settings.sh > /tmp/legacy-deploy.sh
-bin/workbench ploi deploy-script <server-id> <site-id> > ~/legacy-deploy.old.sh            # read-only backup
-bin/workbench ploi deploy-script-set <server-id> <site-id> --file /tmp/legacy-deploy.sh --dry-run
-bin/workbench ploi deploy-script-set <server-id> <site-id> --file /tmp/legacy-deploy.sh    # asks first
-bin/workbench ploi deploy <server-id> <site-id>
+bin/siwo ploi deploy-script <server-id> <site-id> > ~/legacy-deploy.old.sh            # read-only backup
+bin/siwo ploi deploy-script-set <server-id> <site-id> --file /tmp/legacy-deploy.sh --dry-run
+bin/siwo ploi deploy-script-set <server-id> <site-id> --file /tmp/legacy-deploy.sh    # asks first
+bin/siwo ploi deploy <server-id> <site-id>
 ```
 
 | File | Use |

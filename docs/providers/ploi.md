@@ -1,4 +1,4 @@
-# Ploi (`workbench ploi`)
+# Ploi (`siwo ploi`)
 
 **Why:** the app servers are provisioned and deployed with Ploi. The workbench drives the Ploi REST API
 (`https://ploi.io/api`) for servers, sites, deploys and deploy scripts, daemons (queue workers), cron jobs,
@@ -24,32 +24,32 @@ into a 403.
 
 All take `--json`; writes take `--dry-run`, `--yes`; destructive writes need `--force`.
 
-- `bin/workbench ploi servers`, `bin/workbench ploi server <server-id>`
-- `bin/workbench ploi sites <server-id>`, `bin/workbench ploi site <server-id> <site-id>`
-- `bin/workbench ploi site-create <server-id> app.example.com --web-directory /public --project-type laravel --user ploi`
-- `bin/workbench ploi site-delete <server-id> <site-id> --force`
-- `bin/workbench ploi deploy <server-id> <site-id>`
-- `bin/workbench ploi deploy-script <server-id> <site-id>`, `bin/workbench ploi deploy-script-set <server-id> <site-id> --file deploy.sh` (no-op if identical)
-- `bin/workbench ploi daemons <server-id>`,
-  `bin/workbench ploi daemon-create <server-id> --command "php artisan queue:work" --user ploi --processes 2 --directory /home/ploi/app.example.com`,
-  `bin/workbench ploi daemon-delete <server-id> <daemon-id> --force`
-- `bin/workbench ploi crons <server-id>`,
-  `bin/workbench ploi cron-create <server-id> --command "php /home/ploi/app.example.com/artisan schedule:run" --frequency "* * * * *" --user ploi`,
-  `bin/workbench ploi cron-delete <server-id> <cron-id> --force`
-- `bin/workbench ploi databases <server-id>`
-- `bin/workbench ploi database-create <server-id> app --user app --out ~/.config/server-infra-workbench/app-db.pass --site <site-id>`
+- `bin/siwo ploi servers`, `bin/siwo ploi server <server-id>`
+- `bin/siwo ploi sites <server-id>`, `bin/siwo ploi site <server-id> <site-id>`
+- `bin/siwo ploi site-create <server-id> app.example.com --web-directory /public --project-type laravel --user ploi`
+- `bin/siwo ploi site-delete <server-id> <site-id> --force`
+- `bin/siwo ploi deploy <server-id> <site-id>`
+- `bin/siwo ploi deploy-script <server-id> <site-id>`, `bin/siwo ploi deploy-script-set <server-id> <site-id> --file deploy.sh` (no-op if identical)
+- `bin/siwo ploi daemons <server-id>`,
+  `bin/siwo ploi daemon-create <server-id> --command "php artisan queue:work" --user ploi --processes 2 --directory /home/ploi/app.example.com`,
+  `bin/siwo ploi daemon-delete <server-id> <daemon-id> --force`
+- `bin/siwo ploi crons <server-id>`,
+  `bin/siwo ploi cron-create <server-id> --command "php /home/ploi/app.example.com/artisan schedule:run" --frequency "* * * * *" --user ploi`,
+  `bin/siwo ploi cron-delete <server-id> <cron-id> --force`
+- `bin/siwo ploi databases <server-id>`
+- `bin/siwo ploi database-create <server-id> app --user app --out ~/.config/server-infra-workbench/app-db.pass --site <site-id>`
   generates the password locally, writes it to the file (mode 600) and shows it as `***` in the plan; without
   `--user` only the database is created.
-- `bin/workbench ploi database-delete <server-id> <database-id> --force`
-- `bin/workbench ploi certs <server-id> <site-id>`,
-  `bin/workbench ploi cert-create <server-id> <site-id> --domain app.example.com,www.app.example.com`,
-  `bin/workbench ploi cert-delete <server-id> <site-id> <cert-id> --force`
-- `bin/workbench ploi server-restart <server-id> --force` (downtime)
+- `bin/siwo ploi database-delete <server-id> <database-id> --force`
+- `bin/siwo ploi certs <server-id> <site-id>`,
+  `bin/siwo ploi cert-create <server-id> <site-id> --domain app.example.com,www.app.example.com`,
+  `bin/siwo ploi cert-delete <server-id> <site-id> <cert-id> --force`
+- `bin/siwo ploi server-restart <server-id> --force` (downtime)
 
 ## Checklist
 
 - [ ] API key has read scopes plus only the create scopes you use; no server/site delete scope by default.
-- [ ] DNS for the site points at the server (check with `bin/workbench cf dns list <zone> --name app`) before
+- [ ] DNS for the site points at the server (check with `bin/siwo cf dns list <zone> --name app`) before
       `cert-create`.
 - [ ] Queue workers are daemons, not cron loops; the schedule is one `* * * * *` cron per site.
 - [ ] The deploy script in Ploi matches the repo's (`deploy-script` vs your file; `deploy-script-set` is a no-op

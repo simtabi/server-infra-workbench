@@ -1,4 +1,4 @@
-"""`workbench configure` (wizard or --non-interactive) and `workbench profile list|show|diff`.
+"""`siwo configure` (wizard or --non-interactive) and `siwo profile list|show|diff`.
 
 configure picks a profile, applies overrides, validates RAM/region/VPC/best practice, and writes the
 client's config into a git-ignored folder (default local/<client>/) with mode 600, a timestamped backup
@@ -117,8 +117,7 @@ def _same_ignoring_stamps(a: str, b: str) -> bool:
         return [
             ln
             for ln in t.splitlines()
-            if "written by `bin/workbench configure`" not in ln
-            and "added by `bin/workbench configure`" not in ln
+            if "written by `bin/siwo configure`" not in ln and "added by `bin/siwo configure`" not in ln
         ]
 
     return strip(a) == strip(b)
@@ -197,9 +196,7 @@ def next_commands(r: P.Resolved, out_dir: Path, turned_off: list[str] | None = N
             "# DO control panel: create the Spaces bucket(s) and a key limited to them (docs/tools/addons.md)"
         )
     if v["DO_ALERTS"] == "1" or v["UPTIME_CHECKS"] == "1":
-        cmds.append(
-            "bin/workbench do uptime --help   # alert policies and uptime checks (plan first, then --yes)"
-        )
+        cmds.append("bin/siwo do uptime --help   # alert policies and uptime checks (plan first, then --yes)")
     if v["DB_MODE"] != "managed":
         cmds.append(
             "ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh upgrade --dry-run'   # last: shows every change"
@@ -368,10 +365,10 @@ def run_profile(args: argparse.Namespace) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="workbench", description="profiles and the configurator")
+    p = argparse.ArgumentParser(prog="siwo", description="profiles and the configurator")
     sub = p.add_subparsers(dest="command", required=True)
     c = sub.add_parser("configure", help="pick a profile, override, validate, write local/<client>/")
-    c.add_argument("--profile", help="profile name (see: workbench profile list)")
+    c.add_argument("--profile", help="profile name (see: siwo profile list)")
     c.add_argument("--client", help="client name; files go to local/<client>/")
     c.add_argument("--set", action="append", metavar="KEY=VALUE", help="override a setting (repeatable)")
     c.add_argument(

@@ -6,8 +6,8 @@ node uses it as the `s3` disk. SeaweedFS is the alternative; RustFS is experimen
 
 ```bash
 examples/run.sh s3-storage                  # configure checks + `addon plan garage` / `seaweedfs`
-bin/workbench addon install garage --role db --bind 10.0.0.5 --data-dir /mnt/volume_nyc3_01/garage --yes   # on the DB node
-bin/workbench addon laravel-env garage --out /root/garage.laravel.env    # 600; then `env init --addons`
+bin/siwo addon install garage --role db --bind 10.0.0.5 --data-dir /mnt/volume_nyc3_01/garage --yes   # on the DB node
+bin/siwo addon laravel-env garage --out /root/garage.laravel.env    # 600; then `env init --addons`
 ```
 
 The RPC secret, admin token and app key are generated at install into `secrets.env` (600) and are never printed.

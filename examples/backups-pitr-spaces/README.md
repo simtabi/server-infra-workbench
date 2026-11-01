@@ -27,7 +27,7 @@ GFS retention `daily=14 weekly=8 monthly=12 yearly=2`. Full guide:
 
 ```bash
 examples/run.sh backups-pitr-spaces      # validate (offline): profile checks, offsite-creds.sh self-test
-bin/workbench configure --profile production-single --client <you> --set APP=shop --set ALERT_EMAIL=<you@example.com> \
+bin/siwo configure --profile production-single --client <you> --set APP=shop --set ALERT_EMAIL=<you@example.com> \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20 \
   --set OFFSITE_BUCKET=shop-db-backups --set OFFSITE_REGION=nyc3
 # DO control panel: bucket shop-db-backups in nyc3 (versioning on), an access key limited to that bucket

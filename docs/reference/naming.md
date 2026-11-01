@@ -51,9 +51,10 @@ them would be a migration on every live server (roles, metric history, container
 | Prometheus metrics, rules, Grafana dashboard uids | `vsw_*` series, `rules/vsw.yml`, `vsw-overview`, `vsw-backups`, `vsw-containers`, `vsw-postgres` |
 | Directories and files on servers | `/opt/vsw-monitor`, `/opt/vsw-addons`, `/etc/vsw-monitor.conf`, `/etc/vsw-addons.conf`, `/var/lib/vsw-monitor`, `/etc/ssl/certs/vsw-db-ca.crt`, `/etc/cron.d/vsw-inventory`, `/run/lock/vsw-<tool>.lock` |
 | Docker | network `vsw_db`, `vsw-*` add-on compose projects, `vsw-rt-*` restore-test containers, `/etc/postgresql/vsw` in the Postgres container |
-| Integration tests | container, network and volume prefix `vsw` (`SIW_IT_PREFIX`), matching what the code under test creates |
+| Integration tests | container, network and volume prefix `vsw` (`SIWO_IT_PREFIX`), matching what the code under test creates |
 
-New names use `siw` (temporary files, the `siw-livetest` tag) or the full `server-infra-workbench`
-(directories). Directories under `/etc`, `/var/lib`, `/var/log` and `/usr/local/lib` named
+The command is `siwo` and its settings are `SIWO_*`. New resource names use `siw` (temporary files, the
+`siw-livetest` tag) or the full `server-infra-workbench` (directories). Labels already written to cloud
+resources (`managed-by: workbench`, `managed by workbench`, `workbench: ...` alert descriptions) are kept. Directories under `/etc`, `/var/lib`, `/var/log` and `/usr/local/lib` named
 `vps-server-workbench` keep being used on a server where they already exist. `VSW_*` environment
-variables still work, with a deprecation notice; use `SIW_*`.
+variables still work, with a deprecation notice; use `SIWO_*`.

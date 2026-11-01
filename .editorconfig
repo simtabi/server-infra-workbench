@@ -23,7 +23,7 @@ indent_style = tab
 trim_trailing_whitespace = false
 
 # shfmt reads these (make fmt-check): 2-space indent, binary ops may start a line, indent case bodies.
-[{*.sh,bin/workbench}]
+[{*.sh,bin/siwo}]
 indent_size = 2
 shell_variant = bash
 binary_next_line = true

@@ -5,11 +5,11 @@ onto [`_defaults.conf`](../../config/profiles/_defaults.conf): profile keys win,
 No profile holds secrets. How to use them: [the configure guide](../configure.md).
 
 ```bash
-bin/workbench profile list                         # name, version, description
-bin/workbench profile show production-single       # resolved values; * = set by the profile
-bin/workbench profile show dev-budget --check --set APP=shop --set CLIENT=acme   # plus the checks
-bin/workbench profile diff dev-budget production-single
-bin/workbench profile table                        # regenerates the table below
+bin/siwo profile list                         # name, version, description
+bin/siwo profile show production-single       # resolved values; * = set by the profile
+bin/siwo profile show dev-budget --check --set APP=shop --set CLIENT=acme   # plus the checks
+bin/siwo profile diff dev-budget production-single
+bin/siwo profile table                        # regenerates the table below
 ```
 
 ## Profiles
@@ -85,7 +85,7 @@ commands), **db** = also `db-server.conf` (the manager's `/etc/docker-db-server-
 | `WIREGUARD` `WIREGUARD_CIDR` | plan | 0/1, CIDR | cross-region tunnel; `WIREGUARD_CIDR` must lie inside `VPC_CIDR` |
 | `MIN_DB_MB` | plan | MB | the profile's floor for `DB_DROPLET_MB` |
 | `STRICT` | plan | 0/1 | best-practice warnings become errors |
-| `HARDEN` | plan | 0/1 | run `bin/workbench server harden` after setup |
+| `HARDEN` | plan | 0/1 | run `bin/siwo server harden` after setup |
 | `DO_ALERTS` `UPTIME_CHECKS` | plan | 0/1 | DO monitoring alert policies and uptime checks |
 | `APP` `PG_USER` `PG_DB` | db | `a-z 0-9 _` | app name (databases `<app>_<env>`), default role and database |
 | `ENABLE_POSTGRES` `ENABLE_PGBOUNCER` `ENABLE_MYSQL` `ENABLE_MARIADB` `ENABLE_ADMINER` | db | 0/1 | engines (PgBouncer needs Postgres) |
@@ -119,5 +119,5 @@ and DB on one droplet (`SINGLE_DROPLET=1`) is checked as one node: the OS once, 
 
 1. Copy the closest profile, keep the header comment, and set `PROFILE_VERSION=1` (bump it on every change).
 2. Only use keys that exist in `_defaults.conf`; unknown keys are refused.
-3. Run `bin/workbench profile show <name> --check --set CLIENT=x --set APP=demo --set ALERT_EMAIL=ops@example.com`.
-4. Regenerate the table above with `bin/workbench profile table` and run `make ci`.
+3. Run `bin/siwo profile show <name> --check --set CLIENT=x --set APP=demo --set ALERT_EMAIL=ops@example.com`.
+4. Regenerate the table above with `bin/siwo profile table` and run `make ci`.

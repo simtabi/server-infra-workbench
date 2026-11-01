@@ -10,7 +10,7 @@ use Simtabi\ServerInfraWorkbench\Support\Env;
 /**
  * Spinner, bar, ETA and elapsed time on stderr, so stdout (tables, --json) stays parseable.
  * Same switches as the shell tools (src/shell/lib/progress.sh):
- *   SIW_PROGRESS=auto|tty|plain|off (auto: animate on a terminal, plain lines otherwise), SIW_QUIET=1, NO_COLOR.
+ *   SIWO_PROGRESS=auto|tty|plain|off (auto: animate on a terminal, plain lines otherwise), SIWO_QUIET=1, NO_COLOR.
  */
 final class Progress
 {
@@ -45,8 +45,8 @@ final class Progress
         $env = Env::withFallbacks($env ?? getenv());
         $tty = $isTty ?? stream_isatty($stream);
         $mode = match (true) {
-            ($env['SIW_QUIET'] ?? '') === '1' => self::OFF,
-            in_array($env['SIW_PROGRESS'] ?? '', [self::TTY, self::PLAIN, self::OFF], true) => $env['SIW_PROGRESS'],
+            ($env['SIWO_QUIET'] ?? '') === '1' => self::OFF,
+            in_array($env['SIWO_PROGRESS'] ?? '', [self::TTY, self::PLAIN, self::OFF], true) => $env['SIWO_PROGRESS'],
             $tty && ($env['TERM'] ?? 'dumb') !== 'dumb' => self::TTY,
             default => self::PLAIN,
         };

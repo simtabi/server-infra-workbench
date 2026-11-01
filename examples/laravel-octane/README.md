@@ -26,14 +26,14 @@ VPC `10.0.0.0/20`, environment `prd` of app `shop`. Profile
 
 ```bash
 examples/run.sh laravel-octane      # validate (offline): profile checks, plans, the assembled deploy script
-bin/workbench configure --profile production-single --client <you> --set APP=shop --set ALERT_EMAIL=<you@example.com> \
+bin/siwo configure --profile production-single --client <you> --set APP=shop --set ALERT_EMAIL=<you@example.com> \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20 \
   --set OFFSITE_BUCKET=<bucket> --set WEB_DROPLET_MB=4096
-bin/workbench env init --host web-01 --env prd --site app.example.com --from ~/prd-db.env --url https://app.example.com
+bin/siwo env init --host web-01 --env prd --site app.example.com --from ~/prd-db.env --url https://app.example.com
 # web server, as ploi, once: the app requires laravel/octane; this downloads the FrankenPHP binary
 cd /home/ploi/app.example.com && php artisan octane:install --server=frankenphp --no-interaction \
   && mv frankenphp /home/ploi/app.example.com-shared/frankenphp
-bin/workbench ploi daemon-create <server-id> --directory /home/ploi/app.example.com --dry-run \
+bin/siwo ploi daemon-create <server-id> --directory /home/ploi/app.example.com --dry-run \
   --command "php artisan octane:start --server=frankenphp --host=127.0.0.1 --port=8000 --workers=2 --max-requests=500"
 ```
 

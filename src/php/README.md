@@ -1,13 +1,13 @@
 # src/php — platform API library and CLI core
 
 Typed PHP 8.4 clients for DigitalOcean, Cloudflare, Ploi and Google Compute Engine on one PSR-18 core, plus
-the commands behind `bin/workbench do|cf|ploi|gcp`.
+the commands behind `bin/siwo do|cf|ploi|gcp`.
 
 ```bash
 composer install --working-dir=src/php
-bin/workbench credentials                 # which tokens are configured (never prints values)
-bin/workbench do droplets
-bin/workbench do snapshot 123456 --name db-pre-upgrade --dry-run
+bin/siwo credentials                 # which tokens are configured (never prints values)
+bin/siwo do droplets
+bin/siwo do snapshot 123456 --name db-pre-upgrade --dry-run
 make php                                  # pint --test, phpstan (max), phpunit
 ```
 

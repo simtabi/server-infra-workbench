@@ -594,7 +594,7 @@ main() {
       --yes|-y) OPT_YES=1 ;;
       --force) OPT_FORCE=1 ;;
       --delete-data) OPT_DELETE_DATA=1 ;;
-      -q|--quiet) export SIW_QUIET=1 ;;
+      -q|--quiet) export SIWO_QUIET=1 ;;
       -h|--help) usage; exit 0 ;;
       -*) CODE=2 die "unknown flag $1" ;;
       *) [ -z "$arg" ] || CODE=2 die "one argument at a time"; arg="$1" ;;

@@ -3,28 +3,28 @@
 # Embedded verbatim in the DB manager between the "progress.sh" markers (it is uploaded as one file);
 # tests/shell/smoke-progress.sh fails when the two copies drift.
 #
-#   SIW_PROGRESS  auto (default: animate when stderr is a terminal, plain lines otherwise) | tty | plain | off
-#   SIW_QUIET=1   no progress output at all (tools map --quiet to this); NO_COLOR=1 drops colour
+#   SIWO_PROGRESS  auto (default: animate when stderr is a terminal, plain lines otherwise) | tty | plain | off
+#   SIWO_QUIET=1   no progress output at all (tools map --quiet to this); NO_COLOR=1 drops colour
 #
 #   progress_step "label"                  "==> [3/7] label" when PROGRESS_TOTAL is set, plus total elapsed
 #   progress_run  "label" cmd [args...]    run cmd with a spinner + elapsed; returns cmd's exit code.
-#                                          tty: output is captured and shown only on failure (or SIW_VERBOSE=1);
+#                                          tty: output is captured and shown only on failure (or SIWO_VERBOSE=1);
 #                                          plain: output passes through (cron logs keep it). cmd runs in a
 #                                          background subshell so `set -e` still applies inside it; use it
 #                                          for work whose result is on disk or in containers, not in variables.
 #   progress_bar  i n "label"              bar + percent + elapsed + ETA (plain: one line per 10%)
 #   progress_wait "label" TIMEOUT_S INTERVAL_S cmd [args...]   poll cmd until it succeeds; 1 on timeout
 # >>> progress.sh
-# SIW_* was VSW_* before the rename (ADR 0014): an unset SIW_X takes VSW_X, with one notice per name
+# SIWO_* was VSW_* before the rename (ADR 0014): an unset SIWO_X takes VSW_X, with one notice per name
 for _v in $(compgen -e); do case "$_v" in VSW_*)
-  _n="SIW_${_v#VSW_}"; [ -n "${!_n+x}" ] || export "$_n=${!_v}"
-  case " ${SIW_COMPAT_NOTED:-} " in *" $_v "*) ;; *) export SIW_COMPAT_NOTED="${SIW_COMPAT_NOTED:-} $_v"
+  _n="SIWO_${_v#VSW_}"; [ -n "${!_n+x}" ] || export "$_n=${!_v}"
+  case " ${SIWO_COMPAT_NOTED:-} " in *" $_v "*) ;; *) export SIWO_COMPAT_NOTED="${SIWO_COMPAT_NOTED:-} $_v"
     printf 'note: %s is deprecated, use %s (the old name is still read for now)\n' "$_v" "$_n" >&2 ;; esac ;; esac; done
 PROGRESS_T0="${PROGRESS_T0:-$(date +%s)}" PROGRESS_N=0 PROGRESS_BAR_T0="" PROGRESS_BAR_DEC=-1
 progress_mode() {
-  [ "${SIW_QUIET:-0}" = 1 ] && { echo off; return; }
-  case "${SIW_PROGRESS:-auto}" in
-    tty|plain|off) echo "$SIW_PROGRESS" ;;
+  [ "${SIWO_QUIET:-0}" = 1 ] && { echo off; return; }
+  case "${SIWO_PROGRESS:-auto}" in
+    tty|plain|off) echo "$SIWO_PROGRESS" ;;
     *) if [ -t 2 ] && [ "${TERM:-dumb}" != dumb ]; then echo tty; else echo plain; fi ;;
   esac
 }
@@ -54,7 +54,7 @@ progress_run() {
   local e; e="$(progress_fmt $(($(date +%s) - t0)))"
   if [ "$rc" = 0 ]; then [ "$m" = off ] || printf '  %s  %s  (%s)\n' "$(progress_col 32 'done')" "$label" "$e" >&2
   else [ "$m" = off ] || printf '  %s  %s  (%s, exit %s)\n' "$(progress_col 31 'FAIL')" "$label" "$e" "$rc" >&2; fi
-  if [ -n "$log" ]; then { [ "$rc" != 0 ] || [ "${SIW_VERBOSE:-0}" = 1 ]; } && sed 's/^/        /' "$log" | tail -n 40 >&2; rm -f "$log"; fi
+  if [ -n "$log" ]; then { [ "$rc" != 0 ] || [ "${SIWO_VERBOSE:-0}" = 1 ]; } && sed 's/^/        /' "$log" | tail -n 40 >&2; rm -f "$log"; fi
   return "$rc"
 }
 progress_bar() {

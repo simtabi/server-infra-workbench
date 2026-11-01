@@ -105,7 +105,7 @@ final class ServerKeys
     public function remove(string $selector, bool $force = false): PendingAction
     {
         $text = $this->read();
-        $entry = AuthorizedKeys::select($text, $selector) ?? throw new ValidationException(sprintf('no single key matches "%s" (use the number from: workbench keys server list)', $selector));
+        $entry = AuthorizedKeys::select($text, $selector) ?? throw new ValidationException(sprintf('no single key matches "%s" (use the number from: siwo keys server list)', $selector));
         $key = $entry['key'];
         $session = $this->sessionFingerprint();
         if ($session !== null && $session === $key->fingerprint()) {

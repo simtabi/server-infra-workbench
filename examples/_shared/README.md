@@ -28,7 +28,7 @@ pattern, so it can't signal the wrong process.
 
 ## The DB settings
 
-**Why `app-env.sh`:** `bin/workbench env init` writes a *Laravel* `.env`. Other stacks name things differently
+**Why `app-env.sh`:** `bin/siwo env init` writes a *Laravel* `.env`. Other stacks name things differently
 (`DATABASE_URL`, `PGHOST`, `DB_NAME`), and the usual habit is a URL with the password in it. That shape leaks:
 it ends up in logs, error pages, `ps` output and crash reports. So for Postgres stacks the password goes into a
 pgpass file (mode 600) that libpq and the drivers built on it read by themselves (psycopg, node-postgres, pgx,

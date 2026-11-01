@@ -8,13 +8,13 @@ platform, not two.
 ## Run it
 
 ```bash
-bin/workbench py ping 10.0.0.5 6432                          # TCP check, exit 0 open / 1 closed / 2 bad input
-bin/workbench py ping --env /home/ploi/example.com/.env       # reads DB_HOST and DB_PORT from the file
-bin/workbench py ping 10.0.0.5 5432 --timeout 2 --json        # {"host": ..., "port": ..., "open": ..., "millis": ...}
+bin/siwo py ping 10.0.0.5 6432                          # TCP check, exit 0 open / 1 closed / 2 bad input
+bin/siwo py ping --env /home/ploi/example.com/.env       # reads DB_HOST and DB_PORT from the file
+bin/siwo py ping 10.0.0.5 5432 --timeout 2 --json        # {"host": ..., "port": ..., "open": ..., "millis": ...}
 ```
 
 Without the dispatcher: `PYTHONPATH=src/python/src python3 -m server_infra_workbench ping ...`, or
-`pip install -e src/python` and then `workbench-py ping ...`.
+`pip install -e src/python` and then `siwo-py ping ...` (`workbench-py` is the deprecated old name).
 
 `ping` only opens a TCP connection; it sends no credentials and reads nothing from the database. For a
 full check from a web server (DNS, firewall, the real client), use
@@ -47,7 +47,7 @@ are in `src/python/pyproject.toml`; CI installs ruff (pinned in `.github/workflo
 3. Add `tests/test_<module>.py`. Tests must not touch the network or a real server.
 4. Document it on this page.
 
-If the command needs a platform API, add it to the PHP core instead and call `bin/workbench do|cf|ploi|gcp`.
+If the command needs a platform API, add it to the PHP core instead and call `bin/siwo do|cf|ploi|gcp`.
 
 ## `plans`: droplet plans per region through Ploi
 
@@ -59,21 +59,21 @@ pairs both agree on are shown. Read-only (two GETs per API).
 mkdir -p ~/.config/server-infra-workbench
 cp config/ploi-do-plan-finder.env.example ~/.config/server-infra-workbench/plans.env
 chmod 600 ~/.config/server-infra-workbench/plans.env     # add PLOI_API_TOKEN and DO_API_TOKEN
-bin/workbench plans --env-file ~/.config/server-infra-workbench/plans.env \
+bin/siwo plans --env-file ~/.config/server-infra-workbench/plans.env \
   --regions atl1,nyc3 --min-memory-mb 2048 --output-format markdown
-bin/workbench plans --plan-filter s- --max-price 24 --sort-by memory --output-format json
+bin/siwo plans --plan-filter s- --max-price 24 --sort-by memory --output-format json
 ```
 
 Every setting comes from a flag, then an environment variable, then the `--env-file` (default `.env` in
 the current directory); flags win. Filters: `--regions`, `--exclude-regions`, `--plan-filter`,
 `--min/max-vcpus`, `--min/max-memory-mb`, `--max-price`; output: `--sort-by price|memory|vcpus|plan`,
 `--output-format table|markdown|csv|json`, `--output-file`. Exit 1 with a clear message when a token is
-missing. `bin/workbench plans --help` lists everything; library use is in the module docstring.
+missing. `bin/siwo plans --help` lists everything; library use is in the module docstring.
 Never keep the env file inside the repository.
 
 ## `configure` and `profile`
 
-`bin/workbench configure` and `bin/workbench profile list|show|diff|table` live in
+`bin/siwo configure` and `bin/siwo profile list|show|diff|table` live in
 `server_infra_workbench/configure.py` (CLI) and `profiles.py` (layering, checks, rendering). Guide:
 [configure.md](../configure.md); settings: [profiles reference](../reference/profiles.md). Tests:
 `src/python/tests/test_configure.py` (no network, temp folders only).

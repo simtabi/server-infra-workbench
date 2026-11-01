@@ -9,7 +9,7 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 |---|---|
 | [Installation](installation.md) | setting up a workstation: requirements, Composer, credentials check |
 | [Getting started](getting-started.md) | starting a new project: two droplets to a deployed app |
-| [Configure a setup](configure.md) | picking a profile and generating a client's config with `bin/workbench configure` |
+| [Configure a setup](configure.md) | picking a profile and generating a client's config with `bin/siwo configure` |
 | [Configuration](configuration.md) | config files, precedence, platform credentials, what is written where |
 | [Architecture](architecture.md) | droplets, VPC, `eth0` vs `eth1`, ports, where files live |
 | [Repository structure](structure.md) | where things are, where new things go, old to new paths |
@@ -36,12 +36,12 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | [DB server manager](tools/db-server-manager.md) | `src/shell/db/docker-db-server-manager.sh` and `remote-run.sh`: build, check, back up, upgrade the database droplet |
 | [Deploy script](tools/deploy-script.md) | `src/shell/deploy/ploi-deploy.sh`: zero-downtime Ploi deploys, presets, hooks, first run |
 | [Server tools](tools/server.md) | `src/shell/server/*` and `web/diagnose.sh`: harden, update with a reboot window, diagnose a Laravel site (plan, confirm, audit) |
-| [SSH keys](tools/ssh-keys.md) | `workbench keys` (provider accounts, servers) and `fixkeys.sh` console recovery; migration from vps-ssh-key-manager |
+| [SSH keys](tools/ssh-keys.md) | `siwo keys` (provider accounts, servers) and `fixkeys.sh` console recovery; migration from vps-ssh-key-manager |
 | [Networking](tools/net.md) | `src/shell/net/wireguard.sh`: WireGuard tunnel between two servers (keys stay on the servers, peer-only ufw) |
 | [Laravel .env](tools/env.md) | `src/shell/env/env.sh`: `env init` (defaults, APP_KEY, validation, key-only diff, 600) and `env check` |
 | [Add-ons](tools/addons.md) | `src/shell/addons/addon.sh` + `stacks/addons`: Gotenberg and one object store (Garage, SeaweedFS, RustFS) per node |
 | [Caddy stack](tools/caddy-stack.md) | `stacks/caddy`: the app in containers behind Caddy with automatic HTTPS |
-| [Command line](tools/cli.md) | `bin/workbench`: one entry point, platform commands, flags, exit codes |
+| [Command line](tools/cli.md) | `bin/siwo`: one entry point, platform commands, flags, exit codes |
 | [Platform API library](tools/platform-api.md) | `src/php`: DigitalOcean, Cloudflare, Ploi, GCP, GitHub clients, pending actions, audit log |
 | [Providers](providers/README.md) | Per provider: why, least-privilege token, every command, checklist, lessons learned |
 | [Python package](tools/python.md) | `src/python`: `ping` probe and the `plans` finder (DO plans per region via Ploi) |
@@ -99,7 +99,7 @@ Diagrams are [Mermaid](https://mermaid.js.org); GitHub renders them inline; `mak
 
 | Tool | Runs on | Main commands / flags |
 |---|---|---|
-| [`bin/workbench`](../bin/workbench) | workstation | `list`, `<area> <tool>`, `do`, `cf`, `ploi`, `gcp`, `keys`, `health`, `credentials`, `env`, `addon`, `monitor`, `status`, `configure`, `profile`, `plans`, `py`; `--dry-run --yes --force --json --verbose --quiet`, see [cli.md](tools/cli.md) |
+| [`bin/siwo`](../bin/siwo) | workstation | `list`, `<area> <tool>`, `do`, `cf`, `ploi`, `gcp`, `keys`, `health`, `credentials`, `env`, `addon`, `monitor`, `status`, `configure`, `profile`, `plans`, `py`; `--dry-run --yes --force --json --verbose --quiet`, see [cli.md](tools/cli.md) |
 | [`docker-db-server-manager.sh`](../src/shell/db/docker-db-server-manager.sh) | DB server (root) | `init install upgrade reset status verify doctor [--alert] env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user role-split env-init env-apply env-list env-sql env-creds purge-trash backup restore restore-test offsite pitr binlog-ship binlog-replay engine gfs-keep cron-install cron-remove logs monitor-user metrics tls-ca pg-major-upgrade migrate-managed uninstall help`; `--yes --dry-run --non-interactive --snapshot --snapshot-taken --no-snapshot --config --quiet --version`, see [db-server-manager.md](tools/db-server-manager.md) |
 | [`remote-run.sh`](../src/shell/db/remote-run.sh) | workstation | `--host --expect-ip --config --script --no-upload --snapshot-with --dry-run -- <cmd>, <cmd>` |
 | [`update-env-db.sh`](../src/shell/web/update-env-db.sh) | web server or workstation | `--env --site --from --set --remote --no-backup --dry-run` |

@@ -2,7 +2,7 @@
 
 Optional services that sit next to a Laravel app. Each one is a pinned Docker Compose template plus defaults
 (`addon.env.example`). [`src/shell/addons/addon.sh`](../../src/shell/addons/addon.sh) renders, starts, checks
-and removes them on the node you pick. `bin/workbench configure` and the
+and removes them on the node you pick. `bin/siwo configure` and the
 [profiles](../../config/profiles) choose which add-ons to use and where.
 
 | Add-on | What | Image (pinned, checked 2026-10) | Default role | RAM (estimate) | Status |
@@ -20,7 +20,7 @@ From your workstation (repo root). `DB_HOST` is your SSH alias for the node, and
 
 ```bash
 rsync -a src/shell/addons/addon.sh stacks/addons/ DB_HOST:/tmp/siw-addons-src/
-# optional settings (no secrets), e.g. written by `bin/workbench configure`
+# optional settings (no secrets), e.g. written by `bin/siwo configure`
 scp local/<client>/addons-db.conf DB_HOST:/tmp/addons.conf \
   && ssh DB_HOST 'sudo install -m 600 -o root -g root /tmp/addons.conf /etc/vsw-addons.conf && rm /tmp/addons.conf'
 

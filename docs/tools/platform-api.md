@@ -2,7 +2,7 @@
 
 Typed, fluent PHP clients for **DigitalOcean**, **Cloudflare**, **Ploi**, **Google Cloud** (Compute Engine, Cloud
 DNS, Cloud Storage) and **GitHub**, sharing one HTTP core. Per-provider guides (token scopes, every command,
-checklists, lessons learned) are in [docs/providers](../providers/README.md). The [`bin/workbench` CLI](cli.md) is a thin layer over this library; you can also use it from any
+checklists, lessons learned) are in [docs/providers](../providers/README.md). The [`bin/siwo` CLI](cli.md) is a thin layer over this library; you can also use it from any
 PHP 8.4+ project or script.
 
 - **Namespace** `Simtabi\ServerInfraWorkbench\` (PSR-4, `src/php/src/`), package `simtabi/server-infra-workbench`.
@@ -160,7 +160,7 @@ Resolved in this order; the first hit wins ([ADR 0005](../adr/0005-credentials-o
 
 1. A value passed to `make()` (string or `Security\Secret`).
 2. The environment variable.
-3. The credentials file: `$SIW_CREDENTIALS_FILE`, else `~/.config/server-infra-workbench/credentials`.
+3. The credentials file: `$SIWO_CREDENTIALS_FILE`, else `~/.config/server-infra-workbench/credentials`.
    `KEY=VALUE` lines; the file must be **mode 600, owned by you, and outside any git working tree**, or it is
    refused.
 
@@ -184,21 +184,21 @@ for the file format.
 ## Audit log
 
 Every `plan()` and `confirm()` appends one JSON line (time, provider, action, target, method, path, outcome,
-error) to `$SIW_AUDIT_LOG`, else `~/.local/state/server-infra-workbench/audit.log` (directory 700, file 600).
-Payloads and tokens are not written. `SIW_AUDIT_LOG=off` disables it.
+error) to `$SIWO_AUDIT_LOG`, else `~/.local/state/server-infra-workbench/audit.log` (directory 700, file 600).
+Payloads and tokens are not written. `SIWO_AUDIT_LOG=off` disables it.
 
 ## Testing
 
 `make php` runs Pint (`--test`), PHPStan and PHPUnit. Tests use a queued mock PSR-18 client and a recording
-sleeper: no network, no real waits, no credentials. `phpunit.xml` forces `SIW_AUDIT_LOG=off` and points the
+sleeper: no network, no real waits, no credentials. `phpunit.xml` forces `SIWO_AUDIT_LOG=off` and points the
 credentials file at a path that does not exist, so a developer's real file is never read. Contract tests cover
 each provider's pagination, retries, `Retry-After`, quota waits and error mapping.
 
-Live read-only tests (`tests/Live`, testsuite `live`, not in the default run) need `SIW_LIVE=1` and a token, and
+Live read-only tests (`tests/Live`, testsuite `live`, not in the default run) need `SIWO_LIVE=1` and a token, and
 use a client that refuses anything but GET (and the Google token exchange):
 
 ```bash
-cd src/php && SIW_LIVE=1 vendor/bin/phpunit --testsuite live    # providers without a token are skipped
+cd src/php && SIWO_LIVE=1 vendor/bin/phpunit --testsuite live    # providers without a token are skipped
 ```
 
 ## Adding a platform

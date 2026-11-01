@@ -26,13 +26,13 @@ brew install bash shellcheck shfmt jq php composer python doctl
 git clone <your remote or path> server-infra-workbench
 cd server-infra-workbench
 composer install --working-dir=src/php       # only for the platform APIs
-bin/workbench list                       # every tool and where it lives
+bin/siwo list                       # every tool and where it lives
 ```
 
-Optional, to type `workbench` anywhere:
+Optional, to type `siwo` anywhere:
 
 ```bash
-mkdir -p ~/.local/bin && ln -sf "$PWD/bin/workbench" ~/.local/bin/workbench
+mkdir -p ~/.local/bin && ln -sf "$PWD/bin/siwo" ~/.local/bin/siwo
 ```
 
 ## Credentials (platform APIs only)
@@ -42,7 +42,7 @@ environment or from a private file; set them up as described in [configuration](
 then check:
 
 ```bash
-bin/workbench credentials                # shows env / file / missing per key, never the values
+bin/siwo credentials                # shows env / file / missing per key, never the values
 ```
 
 If you use doctl for snapshots, run `doctl auth init` **on its own line**: it prompts for the token, and a pasted
