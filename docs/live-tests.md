@@ -13,6 +13,9 @@ have opt-in live tests that create throwaway DigitalOcean resources, check them,
 never run in `make ci`, `make it` or the GitHub workflow. Run them before a release that touches backups,
 server setup or the Garage add-on, and after a change to any of these code paths.
 
+**Last runs (2026-11-01, tor1, Spaces in nyc3):** `server-live` 18 checks, `pitr-spaces-live` 14 checks,
+`garage-live` passed; each run's teardown verified nothing left, about $0.05 in total.
+
 ## Run
 
 ```sh
