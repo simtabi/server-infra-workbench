@@ -15,6 +15,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   installed on the server.
 
 ### Fixed (final audit, 2026-11)
+- Confirm prompts and `init` wrote to `/dev/stderr` / `/dev/stdout` by path. On Linux that reopens the file, so a run redirected to a log (`> log 2>&1`, `>> log`) lost everything printed before the prompt. They now write to fd 2 / fd 1, and a smoke check refuses the pattern (caught by CI on Linux; macOS dup()s these paths so local runs passed).
 
 The rehearsal's "noted, not fixed" items and audit gaps:
 

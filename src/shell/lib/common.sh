@@ -50,12 +50,12 @@ confirm() { # confirm "<what>" [typed-word]; --yes skips the plain prompt, never
   # cron, CI): test that it opens, so a plan-only run ends with the clean message instead of a shell error
   { : < "$tty"; } 2>/dev/null || tty=/nonexistent
   if [ -n "$word" ]; then
-    { [ -r "$tty" ] && printf 'Type %s to %s: ' "$word" "$what" > /dev/stderr && IFS= read -r reply < "$tty"; } || true
+    { [ -r "$tty" ] && printf 'Type %s to %s: ' "$word" "$what" >&2 && IFS= read -r reply < "$tty"; } || true
     [ "$reply" = "$word" ] && return 0
     audit not-confirmed "$what"; CODE=3 die "not confirmed (expected the typed word '$word')"
   fi
   [ "$YES" = 1 ] && return 0
-  { [ -r "$tty" ] && printf '%s? Type yes: ' "$what" > /dev/stderr && IFS= read -r reply < "$tty"; } || true
+  { [ -r "$tty" ] && printf '%s? Type yes: ' "$what" >&2 && IFS= read -r reply < "$tty"; } || true
   [ "$reply" = yes ] && return 0
   audit not-confirmed "$what"; CODE=3 die "not confirmed (type yes, or pass --yes)"
 }

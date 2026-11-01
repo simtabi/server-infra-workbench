@@ -67,6 +67,8 @@ grep -q 'note  ufw is inactive and not managed without --firewall' "$T/o" && ! g
 bash "$H" --only firewall --firewall >"$T/o" 2>&1 || true
 ! grep -q 'note  ufw' "$T/o" && grep -q 'todo  firewall' "$T/o" && ok "harden --firewall: plans ufw, no note" || { cat "$T/o"; fail "ufw firewall plan"; }
 stub ufw
+# writing to /dev/stderr or /dev/stdout by path reopens the file on Linux and truncates a redirected log (lessons-learned)
+! grep -rnE '>[[:space:]]*"?/dev/std(err|out)' src/shell bin >/dev/null && ok "no script writes to /dev/stderr or /dev/stdout by path (use >&2 / fd 1)" || { grep -rnE '>[[:space:]]*"?/dev/std(err|out)' src/shell bin; fail "/dev/std* by path"; }
 
 # --- update -------------------------------------------------------------------------
 fresh

@@ -3176,7 +3176,8 @@ cmd_init() { # [file]: starter config for this host, no secrets
     IFS=. read -r a b c d <<<"$ip"; n=$(( (a<<24)|(b<<16)|(c<<8)|d )); m=$(( (0xFFFFFFFF << (32-bits)) & 0xFFFFFFFF ))
     n=$((n & m)); net="$((n>>24&255)).$((n>>16&255)).$((n>>8&255)).$((n&255))/$bits"
   fi
-  cat > "$out" <<EOF
+  # writing to the /dev/stdout path would reopen (and truncate) a redirected stdout on Linux: use fd 1
+  if [ "$out" = /dev/stdout ]; then cat; else cat > "$out"; fi <<EOF
 # $TOOL_NAME config for $(hostname) - written by init on $(date +%F). No secrets.
 # Install: sudo install -m 600 THIS_FILE $DBM_CONFIG
 EXPECTED_PRIVATE_IP=${ip}
