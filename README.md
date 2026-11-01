@@ -86,12 +86,13 @@ New project end to end: **[Getting started](docs/getting-started.md)** (about 10
 | Path | What |
 |---|---|
 | [`bin/siwo`](bin/siwo) | One entry point: `list`, `<area> <tool>` for shell tools, `do`/`cf`/`ploi`/`gcp` for platform APIs, `py` for Python helpers ([cli.md](docs/tools/cli.md)) |
-| [`src/shell/db/docker-db-server-manager.sh`](src/shell/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP, each engine optional. `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user logs backup restore tls-ca monitor-user metrics migrate-managed pg-major-upgrade cron-install cron-remove uninstall help` |
+| [`src/shell/db/docker-db-server-manager.sh`](src/shell/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP, each engine optional. `init install upgrade reset status verify doctor env engines create-db create-user grant rotate-password admin-creds list-dbs list-users drop-db drop-user logs backup restore tls-ca monitor-user metrics migrate-managed pg-major-upgrade cron-install cron-remove uninstall help` |
+| [`src/shell/db/engines.sh`](src/shell/db/engines.sh) | `bin/siwo db engines status\|plan\|apply`: switch DB engines on/off from the `SIWO_DB_ENABLE_*` toggles in `.env`; the other engines keep running ([users and privileges](docs/databases/users-and-privileges.md#turning-engines-on-and-off)) |
 | [`src/shell/db/remote-run.sh`](src/shell/db/remote-run.sh) | Run the manager on the DB server from your workstation, with a wrong-server guard |
 | [`src/shell/db/pg-log-errors.sh`](src/shell/db/pg-log-errors.sh) | Read-only: grouped, masked Postgres/PgBouncer log errors from your workstation (ssh + `docker logs`) |
 | [`src/shell/web/update-env-db.sh`](src/shell/web/update-env-db.sh) | Back up a shared Laravel `.env` and replace its `DB_*` keys idempotently (password masked in output); local or `--remote` |
 | [`src/shell/deploy/ploi-deploy.sh`](src/shell/deploy/ploi-deploy.sh) | Ploi deploy script for any PHP/Node app: `laravel` or `generic` preset, optional hooks (first install, migrations, post-deploy, health check), zero-downtime or in-place |
-| [`src/shell/tunnels/db-tunnel.sh`](src/shell/tunnels/db-tunnel.sh) | SSH tunnels from the Mac per engine (`postgres pgbouncer mysql mariadb adminer all`) for TablePlus, psql, Adminer |
+| [`src/shell/tunnels/db-tunnel.sh`](src/shell/tunnels/db-tunnel.sh) | SSH tunnels from the Mac per engine (`postgres pgbouncer mysql mariadb adminer all`) for TablePlus, DBeaver, DataGrip, psql, Adminer; reads `SIWO_DB_*` from `.env` ([clients](docs/databases/connecting-local-clients.md)) |
 | [`src/shell/web/check-db-reach.sh`](src/shell/web/check-db-reach.sh) | TCP check from the web server to every DB port (no passwords needed), with region and VPC warnings |
 | [`src/shell/server/`](docs/tools/server.md) | `server init`, `harden`, `update --reboot-window`, `inventory`, and `web diagnose` for a 500/503 |
 | [`src/shell/env/env.sh`](docs/tools/env.md) | Laravel `.env` per environment: `env init` / `env check` from the template, `--addons` merges add-on keys |
@@ -117,6 +118,10 @@ Start at the [docs index](docs/README.md) (diagrams and command reference includ
 [Repository structure](docs/structure.md) · [Security and operations](docs/security.md) ·
 [Troubleshooting](docs/troubleshooting.md) · [Status](docs/status.md) · [Releasing](docs/release.md)
 
+**Databases:** [Users and privileges](docs/databases/users-and-privileges.md) (master users, create-db, engine
+toggles) · [Connecting local DB clients](docs/databases/connecting-local-clients.md) (TablePlus, DBeaver,
+DataGrip, psql/mysql over SSH)
+
 **Reference:** [DB server manager](docs/tools/db-server-manager.md) · [Deploy script](docs/tools/deploy-script.md)
 (including the Ploi placeholder caveat) · [Caddy stack](docs/tools/caddy-stack.md) ·
 [Command line](docs/tools/cli.md) · [Platform API library](docs/tools/platform-api.md) ·
@@ -125,6 +130,7 @@ Start at the [docs index](docs/README.md) (diagrams and command reference includ
 **Recipes:** [Set up SSH access](docs/recipes/set-up-ssh-access.md) ·
 [Configure a Ploi web server](docs/recipes/configure-a-ploi-web-server.md) ·
 [Run daemons](docs/recipes/run-daemons.md) · [Connect to databases](docs/recipes/connect-to-databases.md) ·
+[Connecting local DB clients](docs/databases/connecting-local-clients.md) ·
 [Upgrade a legacy DB server](docs/recipes/upgrade-a-legacy-db-server.md) ·
 [Roll out a manager upgrade](docs/recipes/roll-out-a-manager-upgrade.md)
 

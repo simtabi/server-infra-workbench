@@ -185,4 +185,54 @@ printf '%s' "$out" | grep -q 'warn  postgres log: 4 error(s) in 3 group(s)' && p
   && ok "doctor warns (not fails) on Postgres log errors in the last 24 h" || fail "doctor_pg_log: $out"
 # regression: no SQL in the toolkit may carry a literal \x27 (the 2026-10-31 log errors); redact() is perl, not SQL
 if rg -n '(=|<>|\(|,)\s*\\x27[A-Za-z0-9_%]' src/shell bin 2>/dev/null | grep -v 'redact()' >&2; then fail "\\x27 in SQL"; else ok "no literal \\x27 in toolkit SQL"; fi
+
+# --- 1.6.0: master users, SIWO_DB_ prefix, privilege guards, engine toggles ----------------
+[ "$(SIWO_DB_ENABLE_MYSQL=0 L eval 'echo $ENABLE_MYSQL')" = 0 ] && [ "$(SIWO_DB_ENABLE_MYSQL=0 ENABLE_MYSQL=1 L eval 'echo $ENABLE_MYSQL')" = 1 ] \
+  && ok "SIWO_DB_<KEY> in the environment sets <KEY>; <KEY> wins" || fail "SIWO_DB_ env prefix"
+printf 'SIWO_DB_MYSQL_ADMIN_USER=ops_admin\nSIWO_DB_ENABLE_MARIADB=0   # off\n' > "$T/prefix.conf"
+[ "$(DBM_CONFIG="$T/prefix.conf" L eval 'echo "$MYSQL_ADMIN_USER $ENABLE_MARIADB $MARIADB_ADMIN_USER"')" = "ops_admin 0 siwo_admin" ] \
+  && ok "SIWO_DB_<KEY> in the config file sets <KEY>; master user defaults to siwo_admin" || fail "SIWO_DB_ config prefix"
+APW="$(gen 24)"
+L my_admin_sql mysql siwo_admin "$APW" > "$T/admin.sql"
+grep -qF "CREATE USER IF NOT EXISTS 'siwo_admin'@'172.30.88.0/255.255.255.0'" "$T/admin.sql" && grep -qF "'siwo_admin'@'10.0.0.0/255.255.240.0'" "$T/admin.sql" \
+  && grep -qF "GRANT ALL PRIVILEGES ON *.* TO 'siwo_admin'@'10.0.0.0/255.255.240.0' WITH GRANT OPTION;" "$T/admin.sql" && ! grep -q "@'%'" "$T/admin.sql" \
+  && grep -qF "ALTER USER 'siwo_admin'@'172.30.88.0/255.255.255.0' IDENTIFIED BY" "$T/admin.sql" \
+  && ok "MySQL master: docker net + VPC hosts only (never %), grant option, password re-synced from .env" || fail "my_admin_sql"
+MY_ADMIN_HOSTS=10.0.0.9/32 MY_ADMIN_GRANT_OPTION=0 L my_admin_sql mariadb ops "$APW" | grep -c "'ops'@'10.0.0.9'" | grep -qx 3 \
+  && ! MY_ADMIN_HOSTS=10.0.0.9/32 MY_ADMIN_GRANT_OPTION=0 L my_admin_sql mariadb ops "$APW" | grep -q 'GRANT OPTION' \
+  && ok "MY_ADMIN_HOSTS /32 -> one host; MY_ADMIN_GRANT_OPTION=0 drops the grant option" || fail "admin hosts"
+for bad in "MY_ADMIN_HOSTS=0.0.0.0/0" "MYSQL_ADMIN_USER=root" "MY_OWNER_PRIVS=ALL PRIVILEGES" "MY_RW_PRIVS=SELECT, FILE" "MY_RO_PRIVS=SELECT, GRANT OPTION" "DB_READONLY_USER=2"; do
+  if env "$bad" bash -c 'm="$1"; set --; DBM_SOURCE_ONLY=1 source "$m"; validate_config' _ "$M" >/dev/null 2>&1; then fail "validate_config accepted $bad"; fi
+done
+MY_OWNER_PRIVS="SELECT, INSERT" MYSQL_ADMIN_USER=none L validate_config >/dev/null && ok "config refuses master/app privilege mistakes (0.0.0.0/0, root, ALL, FILE, GRANT OPTION); none is allowed" || fail "validate_config good"
+L protected_user siwo_admin && ok "the master user is protected from create/drop/grant/rotate" || fail "protected master"
+WEAK1="short"; WEAK2="has space $(printf x)"   # weak seeds (too short; a space)
+[[ "$(PG_ADMIN_PASSWORD="" L secret_new PG_ADMIN_PASSWORD)" =~ ^[0-9a-f]{48}$ ]] && [ "$(PG_ADMIN_PASSWORD="$APW" L secret_new PG_ADMIN_PASSWORD)" = "$APW" ] \
+  && ! PG_ADMIN_PASSWORD="$WEAK1" L secret_new PG_ADMIN_PASSWORD >/dev/null 2>&1 && ! PG_ADMIN_PASSWORD="$WEAK2" L secret_new PG_ADMIN_PASSWORD >/dev/null 2>&1 \
+  && ok "secrets: generated when empty, a seed is used once only if strong, weak seeds refused" || fail "secret_new"
+mkdir -p "$T/db"; printf 'PRIVATE_IP=10.0.0.5\n' > "$T/db/.env"
+MYSQL_ADMIN_PASSWORD="$APW" DB_DIR="$T/db" L ensure_env_keys > "$T/ek.out"
+grep -q "^MYSQL_ADMIN_PASSWORD=$APW$" "$T/db/.env" && grep -Eq '^MARIADB_ADMIN_PASSWORD=[0-9a-f]{48}$' "$T/db/.env" && ! grep -q "$APW" "$T/ek.out" \
+  && [ "$(stat -c %a "$T/db/.env" 2>/dev/null || stat -f %Lp "$T/db/.env")" = 600 ] && grep -q 'not shown' "$T/ek.out" \
+  && ok "ensure_env_keys adds the master passwords (600, seed honoured, never printed)" || fail "ensure_env_keys"
+cp "$T/db/.env" "$T/env.before"; MYSQL_ADMIN_PASSWORD="$(gen 24)" DB_DIR="$T/db" L ensure_env_keys >/dev/null
+cmp -s "$T/db/.env" "$T/env.before" && ok "existing master passwords are never replaced by a seed" || fail "seed overwrote"
+for a in "--set FOO=1" "--set ENABLE_MYSQL=2" "--bogus" ; do
+  # shellcheck disable=SC2086  # word splitting of the test args is intended
+  if L cmd_engines apply $a >/dev/null 2>"$T/e"; then fail "engines apply $a accepted"; fi
+done; ok "engines apply: only ENABLE_*=0|1, unknown options refused"
+L usage | grep -q 'engines apply \[--set ENABLE_<ENGINE>=0|1\]' && L usage | grep -q 'admin-creds <postgres|mysql|mariadb> --out F' && ok "usage lists engines + admin-creds" || fail "usage"
+printf 'SIWO_DB_SSH_HOST=db-alias\nSIWO_DB_PRIVATE_IP=10.0.0.5\nSIWO_DB_ENABLE_POSTGRES=1\nSIWO_DB_ENABLE_MYSQL=0   # off\nSIWO_DB_ENABLE_MARIADB="0"\nSIWO_DB_MYSQL_ADMIN_PASSWORD=%s\nSIWO_DB_LOCAL_PG=25432\n' "$APW" > "$T/ws.env"
+src/shell/db/engines.sh apply --env-file "$T/ws.env" --print > "$T/eng.out"
+grep -qF -- '--host db-alias --expect-ip 10.0.0.5 -- engines\ apply\ --set\ ENABLE_POSTGRES=1\ --set\ ENABLE_MYSQL=0\ --set\ ENABLE_MARIADB=0' "$T/eng.out" && ! grep -q "$APW" "$T/eng.out" \
+  && src/shell/db/engines.sh plan --env-file "$T/ws.env" --print | grep -q 'dry-run$' && src/shell/db/engines.sh status --env-file "$T/ws.env" --print | grep -q 'engines\\ status$' \
+  && ok "siwo db engines: toggles from .env -> engines apply over remote-run; passwords never sent" || { cat "$T/eng.out"; fail "engines.sh"; }
+printf 'SIWO_DB_ENABLE_MYSQL=maybe\nSIWO_DB_SSH_HOST=h\nSIWO_DB_PRIVATE_IP=10.0.0.5\n' > "$T/bad.env"
+if src/shell/db/engines.sh plan --env-file "$T/bad.env" --print >/dev/null 2>&1; then fail "engines.sh bad toggle"; fi
+printf 'SIWO_DB_SSH_HOST=<db-ssh-alias>\nSIWO_DB_PRIVATE_IP=<db-private-ip>\n' > "$T/ph.env"
+if src/shell/db/engines.sh status --env-file "$T/ph.env" --print >/dev/null 2>&1; then fail "engines.sh placeholders"; fi
+ok "siwo db engines refuses bad toggles and unfilled <placeholders>"
+src/shell/tunnels/db-tunnel.sh --env-file "$T/ws.env" --print postgres mysql | grep -qF -- '-L 127.0.0.1:25432:10.0.0.5:5432 -L 127.0.0.1:13306:10.0.0.5:3306 db-alias' \
+  && ok "db-tunnel reads host, private IP and local ports from the .env" || fail "db-tunnel env-file"
+python3 tests/security/no-env-files.py --self-test >/dev/null && ok "no-env-files guard self-test" || fail "no-env-files"
 echo "smoke-db: all $pass checks passed"
