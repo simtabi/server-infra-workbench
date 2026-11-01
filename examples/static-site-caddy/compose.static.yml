@@ -1,0 +1,9 @@
+# Overlay for stacks/caddy/docker-compose.yml: only the caddy service, with this example's Caddyfile and the site.
+#   cd stacks/caddy && docker compose -f docker-compose.yml -f ../../examples/static-site-caddy/compose.static.yml \
+#     up -d --no-deps caddy
+# Paths are relative to stacks/caddy (the first file's folder). Same target path = this mount replaces the stack's.
+services:
+  caddy:
+    volumes:
+      - ../../examples/static-site-caddy/conf:/etc/caddy:ro
+      - ${SITE_PATH:?set SITE_PATH in .env}:/srv/site:ro

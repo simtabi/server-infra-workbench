@@ -35,6 +35,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   errors in the last 24 h ([plan](docs/plan/postgres-log-quoting-errors.md)).
 - `bin/workbench db pg-log-errors --host <db-alias>`: the same summary from the workstation over ssh, nothing
   installed on the server.
+- Examples: the 17 catalog entries still marked planned are now runnable examples, each mapped to a profile
+  and validated offline by `examples/run.sh`: laravel-horizon-reverb, laravel-octane, wordpress, symfony,
+  node-nextjs, nestjs, django, fastapi, rails, go-api, static-site-caddy, ploi-managed-site,
+  single-droplet-all-in-one, ha-two-web-lb, gcp-vm, backups-pitr-spaces, cloudflare-dns-proxy. Each has a
+  README with the reasons, `.env.example`-style settings (secrets generated on the server, never in the repo)
+  and its Ploi deploy settings, daemons and Nginx snippets where it needs them.
+- `examples/_shared`: `app-env.sh` (the DB block in each stack's own names, the password in a pgpass file, not
+  a URL; `--stack none` for app keys only), `with-env.sh`, `reload-daemon.sh` (restart by port after Ploi
+  activates the release, wait for health), `nginx-proxy.conf`, `ploi-script.sh` (the generic deploy script with
+  an example's settings; `--check`). `run.sh` runs `selftest` lines and checks every `ploi-deploy.settings.sh`.
 
 ### Changed
 

@@ -1,0 +1,43 @@
+# /etc/systemd/system/api-example.service - the Go API. Install as root:
+#   install -m 644 api-example.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now api-example
+# Restart=always: vsw-reload-daemon (Ploi's post-deploy section) sends TERM, systemd starts the new binary.
+[Unit]
+Description=api.example.com (Go API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ploi
+Group=ploi
+WorkingDirectory=/home/ploi/api.example.com
+EnvironmentFile=/home/ploi/api.example.com-shared/.env
+ExecStart=/home/ploi/api.example.com/bin/api
+Restart=always
+RestartSec=1
+TimeoutStopSec=30
+# hardening: the API only reads its release and its pgpass, and talks TCP
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
