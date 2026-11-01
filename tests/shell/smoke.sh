@@ -152,7 +152,7 @@ grep -q 'env-apply$' "$L" && grep -q 'upgrade --snapshot-taken' "$L" \
   && ok "the snapshot flag goes to the upgrade command, not the first match" || fail "flag placement: $(cat "$L")"
 printf '#!/usr/bin/env bash\necho "scp $*" >> "%s"\n' "$L" > "$SB/scp"; chmod +x "$SB/scp"
 : > "$T/c.conf"; rr --no-upload --config "$T/c.conf" -- verify
-grep -q "scp -q $T/c.conf h:docker-db-server-manager.conf" "$L" && ! grep -q 'docker-db-server-manager.sh h:' "$L" \
+grep -q "scp -q $T/c.conf h:.vsw-upload-docker-db-server-manager.conf" "$L" && ! grep -q 'docker-db-server-manager.sh h:' "$L" \
   && ok "--no-upload still uploads --config (no stale config installed)" || fail "--no-upload --config: $(cat "$L")"
 
 # --- deploy script: no Ploi placeholder collisions ---------------------------

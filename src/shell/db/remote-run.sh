@@ -92,14 +92,18 @@ add_flag() { # add_flag FLAG: append FLAG to every upgrade/apply command
   CMDS="$out"; IFS=',' read -r -a parts <<< "$CMDS"
 }
 [ -z "$CONFIG" ] || [ -f "$CONFIG" ] || die "config not found: $CONFIG"
+# staging names in the login home: hidden and distinct from $M, so a root login (home /root) does not
+# "install" a file onto itself (rehearsal finding: install refused, 'are the same file')
+STAGE_M=.vsw-upload-docker-db-server-manager.sh
+STAGE_C=.vsw-upload-docker-db-server-manager.conf
 if [ "$DRY" = 0 ]; then
   if [ "$UPLOAD" = 1 ]; then
     [ -f "$SCRIPT" ] || die "manager not found: $SCRIPT"
-    scp -q "$SCRIPT" "$HOST:docker-db-server-manager.sh"
+    scp -q "$SCRIPT" "$HOST:$STAGE_M"
   fi
   # the config goes up whenever it is given, also with --no-upload: installing the remote copy without
   # uploading it would silently install whatever stale file an earlier run left in the home directory
-  [ -z "$CONFIG" ] || scp -q "$CONFIG" "$HOST:docker-db-server-manager.conf"
+  [ -z "$CONFIG" ] || scp -q "$CONFIG" "$HOST:$STAGE_C"
 fi
 
 remote="set -e
@@ -109,11 +113,12 @@ fi
 echo \"OK: running on \$(hostname)\""
 [ "$UPLOAD" = 0 ] || remote+="
 if sudo test -f $M; then sudo cp -p $M $M.prev; fi
-sudo install -m 755 ~/docker-db-server-manager.sh $M"
+sudo install -m 755 ~/$STAGE_M $M
+rm -f ~/$STAGE_M"
 [ -z "$CONFIG" ] || remote+="
 if sudo test -f $C; then sudo cp -p $C $C.prev; fi
-sudo install -m 600 ~/docker-db-server-manager.conf $C
-rm -f ~/docker-db-server-manager.conf"
+sudo install -m 600 ~/$STAGE_C $C
+rm -f ~/$STAGE_C"
 # optional snapshot from the workstation, before anything changes (fallback chain: see --help)
 have_doctl()     { command -v doctl >/dev/null 2>&1 && doctl account get >/dev/null 2>&1; }
 have_workbench() { [ -x "$WORKBENCH" ] && "$WORKBENCH" digitalocean account --json >/dev/null 2>&1; }

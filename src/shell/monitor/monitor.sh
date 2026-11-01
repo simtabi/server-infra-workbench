@@ -199,6 +199,9 @@ cmd_plan() {
   local u img
   validate
   echo "monitor plan: role=$MONITOR_ROLE stacks=${MONITOR_STACKS:-none} node=$MONITOR_NODE_NAME"
+  # install needs Docker; say so in the plan (a Ploi web server has none: server init installs it for role db only)
+  { command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; } \
+    || echo "  needs    docker with the compose plugin on this node (install refuses without it; on a Ploi web server put the hub on another node)"
   [ -n "$(units)" ] || { echo "  nothing to install (MONITOR_STACKS=none or no unit for role $MONITOR_ROLE)"; return 0; }
   for u in $(units); do
     ( load_unit "$u"

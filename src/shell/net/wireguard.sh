@@ -60,6 +60,16 @@ run_on() { local h="$1"; shift
 conf_path() { echo "$R/etc/wireguard/$1.conf"; }
 key_path()  { echo "$R/etc/wireguard/$1.key"; }
 
+ip2int() { local a b c d; IFS=. read -r a b c d <<<"$1"; echo $(( (a << 24) + (b << 16) + (c << 8) + d )); }
+cidr_overlap() { # a.b.c.d/n e.f.g.h/m -> 0 when the two ranges share an address
+  local n1="${1#*/}" n2="${2#*/}" m i1 i2
+  [[ "$n1" =~ ^[0-9]+$ && "$n2" =~ ^[0-9]+$ ]] || return 1
+  is_ip "${1%/*}" && is_ip "${2%/*}" || return 1
+  m=$(( n1 < n2 ? n1 : n2 ))
+  [ "$m" -gt 0 ] || return 0
+  i1="$(ip2int "${1%/*}")"; i2="$(ip2int "${2%/*}")"
+  [ $(( (i1 ^ i2) >> (32 - m) )) -eq 0 ]
+}
 srv_info() { # key=value lines; read-only
   local ip region="" ;
   ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n1 || true)"
@@ -69,6 +79,8 @@ srv_info() { # key=value lines; read-only
   echo "wg=$(have wg && echo installed || echo missing)"
   echo "ploi=$(ploi_managed && echo 1 || echo 0)"
   echo "conf=$([ -f "$(conf_path "$IFACE")" ] && echo present || echo absent)"
+  # every IPv4 network on the host except the tunnel itself: setup refuses a tunnel /24 that overlaps one
+  echo "nets=$(ip -4 -o addr show 2>/dev/null | awk -v w="$IFACE" '$2 != w {print $4}' | tr '\n' ' ')"
 }
 
 srv_keygen() { # prints the PUBLIC key only
@@ -167,7 +179,14 @@ ws_setup() {
   [ -n "$HOST_EP" ] || HOST_EP="$(kv public_ip "$hi")"; [ -n "$PEER_EP" ] || PEER_EP="$(kv public_ip "$pi")"
   is_ip "$HOST_EP" || CODE=2 die "could not detect $HOST's public IP; pass --host-endpoint"
   is_ip "$PEER_EP" || CODE=2 die "could not detect $PEER's public IP; pass --peer-endpoint"
-  local hr pr; hr="$(kv region "$hi")"; pr="$(kv region "$pi")"
+  local hr pr n; hr="$(kv region "$hi")"; pr="$(kv region "$pi")"
+  # rehearsal finding: the default 10.200.0.0/24 was the VPC range of the test droplets; a tunnel on top of
+  # a network the host already has breaks both. Refuse it here, before anything changes.
+  for n in $(kv nets "$hi") $(kv nets "$pi"); do
+    if cidr_overlap "${HOST_IP%.*}.0/24" "$n"; then
+      CODE=2 die "tunnel ${HOST_IP%.*}.0/24 overlaps $n on one of the servers; pick another /24, e.g. --host-ip 10.250.0.1 --peer-ip 10.250.0.2"
+    fi
+  done
   say ""
   say "Plan: WireGuard $IFACE between $HOST and $PEER (UDP $PORT)"
   say "  $HOST  region $hr  endpoint $HOST_EP  tunnel $HOST_IP  wireguard-tools $(kv wg "$hi")  config $(kv conf "$hi")"

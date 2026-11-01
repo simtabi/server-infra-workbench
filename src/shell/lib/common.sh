@@ -46,6 +46,9 @@ lock() { # one run at a time per tool; mkdir is atomic everywhere (no flock on m
 
 confirm() { # confirm "<what>" [typed-word]; --yes skips the plain prompt, never the typed word
   local what="$1" word="${2:-}" tty="${VSW_TTY:-/dev/tty}" reply=""
+  # /dev/tty can exist and be readable yet fail to open without a controlling terminal (ssh without -t,
+  # cron, CI): test that it opens, so a plan-only run ends with the clean message instead of a shell error
+  { : < "$tty"; } 2>/dev/null || tty=/nonexistent
   if [ -n "$word" ]; then
     { [ -r "$tty" ] && printf 'Type %s to %s: ' "$word" "$what" > /dev/stderr && IFS= read -r reply < "$tty"; } || true
     [ "$reply" = "$word" ] && return 0
