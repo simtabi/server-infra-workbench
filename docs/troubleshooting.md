@@ -1,5 +1,9 @@
 # Troubleshooting log
 
+Ploi + DigitalOcean rollout problems (never-completed deploys, 522s from stale DNS, a Supervisor crash-loop,
+no scheduler, a superuser app login, a token in the deploy script) are in the
+[setup guide's troubleshooting](guides/ploi-digitalocean-setup.md#troubleshooting-real-findings).
+
 ## 503 after deploy / first install never finished
 
 The site returns 503 (often through Cloudflare) or Laravel's maintenance page
