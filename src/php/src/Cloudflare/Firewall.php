@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Cloudflare;
+namespace Simtabi\ServerInfraWorkbench\Cloudflare;
 
-use Simtabi\VpsServerWorkbench\Cloudflare\Data\Zone;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\Endpoint;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Support\Data;
-use Simtabi\VpsServerWorkbench\Support\Item;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Data\Zone;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\Endpoint;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 /**
  * Basic zone firewall: IP access rules (block / challenge / allow an IP, range, ASN or country) and a
@@ -85,7 +85,7 @@ final readonly class Firewall
     {
         try {
             $set = CloudflarePaginator::result($this->transport->get("/zones/{$this->zone->id}/rulesets/phases/http_request_firewall_custom/entrypoint")->json);
-        } catch (\Simtabi\VpsServerWorkbench\Exception\NotFoundException) {
+        } catch (\Simtabi\ServerInfraWorkbench\Exception\NotFoundException) {
             return [];
         }
 

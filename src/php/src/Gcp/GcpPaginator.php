@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp;
+namespace Simtabi\ServerInfraWorkbench\Gcp;
 
-use Simtabi\VpsServerWorkbench\Http\Paginator;
-use Simtabi\VpsServerWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Http\Paginator;
+use Simtabi\ServerInfraWorkbench\Support\Data;
 
 /**
  * Compute Engine: {items: [...], nextPageToken}. For aggregated lists items is a map of

@@ -16,9 +16,9 @@ cd "$(dirname "$0")/../.."
 . tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "wg-it skipped (no docker)"; exit 0; }
 IMG=vsw-test/wg-it:1 NET=vsw_wgit SUB=172.30.94 P=vsw-wgit DB_SSH=22922 WEB_SSH=22923
-W="$(mktemp -d /tmp/vsw-wgit.XXXX)"
+W="$(mktemp -d /tmp/siw-wgit.XXXX)"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
-cleanup() { rm -rf /tmp/vsw-wg-last; mkdir -p /tmp/vsw-wg-last; cp "$W"/*.out /tmp/vsw-wg-last/ 2>/dev/null || true
+cleanup() { rm -rf /tmp/siw-wg-last; mkdir -p /tmp/siw-wg-last; cp "$W"/*.out /tmp/siw-wg-last/ 2>/dev/null || true
   docker rm -f "$P-db" "$P-web" >/dev/null 2>&1 || true; it_rm_net "$NET"; rm -rf "$W"; }
 trap cleanup EXIT
 
@@ -73,7 +73,7 @@ grep -q 'ping 10.200.0.1 through the tunnel' "$W/setup.out" && grep -q 'last han
 docker exec "$P-db" ping -c 2 -W 2 10.200.0.2 >/dev/null && ok "ping db -> web through the tunnel" || fail "ping back"
 
 leak=0; for h in db web; do k="$(docker exec "$P-$h" cat /etc/wireguard/wg0.key)"; grep -qF "$k" "$W/plan.out" "$W/setup.out" && leak=1
-  docker exec "$P-$h" grep -rqF "$k" /etc/wireguard/wg0.conf /var/log/vps-server-workbench 2>/dev/null && leak=1; done; k=""
+  docker exec "$P-$h" grep -rqF "$k" /etc/wireguard/wg0.conf /var/log/server-infra-workbench 2>/dev/null && leak=1; done; k=""
 [ "$leak" = 0 ] && ok "private keys never printed, not in wg0.conf, not in the audit log" || fail "private key leaked"
 for h in db web; do [ "$(docker exec "$P-$h" stat -c %a /etc/wireguard/wg0.key /etc/wireguard/wg0.conf | tr '\n' ' ')" = "600 600 " ] || fail "$h modes"; done
 ok "wg0.key and wg0.conf are 600 on both servers"
@@ -101,5 +101,5 @@ bash $WG remove --host wgweb --yes > "$W/rm.out" 2>&1 || { cat "$W/rm.out"; fail
 ! docker exec "$P-web" ip link show wg0 >/dev/null 2>&1 && ! docker exec "$P-web" test -e /etc/wireguard/wg0.conf \
   && docker exec "$P-web" sh -c 'ls /etc/wireguard/wg0.conf.bak* >/dev/null 2>&1 && test -s /etc/wireguard/wg0.key' \
   && ok "remove: interface down, config backed up, key kept" || { cat "$W/rm.out"; docker exec "$P-web" ls -la /etc/wireguard; fail "removed state"; }
-docker exec "$P-db" grep -q 'tool=wireguard .*apply' /var/log/vps-server-workbench/audit.log && ok "audit log on the servers records keygen/apply" || fail "audit"
+docker exec "$P-db" grep -q 'tool=wireguard .*apply' /var/log/server-infra-workbench/audit.log && ok "audit log on the servers records keygen/apply" || fail "audit"
 echo "wg-it: all $pass checks passed"

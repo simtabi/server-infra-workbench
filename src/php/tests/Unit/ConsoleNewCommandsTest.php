@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
 use GuzzleHttp\Psr7\Response;
-use Simtabi\VpsServerWorkbench\Console\Application;
-use Simtabi\VpsServerWorkbench\Console\Output;
-use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Droplets;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\FakeKeys;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\FakeSshRunner;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Console\Application;
+use Simtabi\ServerInfraWorkbench\Console\Output;
+use Simtabi\ServerInfraWorkbench\Console\ProviderFactory;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Droplets;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\FakeKeys;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\FakeSshRunner;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 /** CLI wiring for firewalls, uptime, droplet-create, ploi sites/daemons/scripts, health and keys. */
 final class ConsoleNewCommandsTest extends TestCase
@@ -281,11 +281,11 @@ final class ConsoleNewCommandsTest extends TestCase
         self::assertStringContainsString('"image":"'.Droplets::DEFAULT_IMAGE.'"', $this->out());
 
         $this->http->json(['droplets' => [], 'links' => []]);
-        self::assertSame(0, $this->app(['VSW_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--dry-run']));
+        self::assertSame(0, $this->app(['SIW_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--dry-run']));
         self::assertStringContainsString('"image":"ubuntu-24-04-x64"', $this->out());
 
         $this->http->json(['images' => [['slug' => 'ubuntu-26-04-x64'], ['slug' => 'ubuntu-28-04-x64']], 'links' => []])->json(['droplets' => [], 'links' => []]);
-        self::assertSame(0, $this->app(['VSW_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--image', 'latest', '--dry-run']));
+        self::assertSame(0, $this->app(['SIW_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--image', 'latest', '--dry-run']));
         self::assertStringContainsString('"image":"ubuntu-28-04-x64"', $this->out());
     }
 

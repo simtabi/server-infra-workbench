@@ -14,9 +14,9 @@ cd "$(dirname "$0")/../.."
 . tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "mysql-pitr-it skipped (no docker)"; exit 0; }
 M="$PWD/src/shell/db/docker-db-server-manager.sh"
-W="$(mktemp -d /tmp/vsw-mypitr.XXXX)"
+W="$(mktemp -d /tmp/siw-mypitr.XXXX)"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
-cleanup() { rm -rf /tmp/vsw-mypitr-last; mkdir -p /tmp/vsw-mypitr-last; cp "$W"/*/*.out /tmp/vsw-mypitr-last/ 2>/dev/null || true
+cleanup() { rm -rf /tmp/siw-mypitr-last; mkdir -p /tmp/siw-mypitr-last; cp "$W"/*/*.out /tmp/siw-mypitr-last/ 2>/dev/null || true
   local d; for d in "$W"/*/vswmypitr*; do [ -d "$d" ] && (cd "$d" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true; done
   docker ps -aq --filter name=vsw-mybl-build- | xargs -r docker rm -f >/dev/null 2>&1 || true
   it_purge vswmypitrmysql vswmypitrmariadb; rm -rf "$W"; }

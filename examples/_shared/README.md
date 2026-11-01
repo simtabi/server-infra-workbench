@@ -14,11 +14,11 @@ once here so a fix lands everywhere.
 ## Install on a web server (once)
 
 ```bash
-scp examples/_shared/*.sh examples/_shared/nginx-proxy.conf web-01:/tmp/vsw/
-ssh -t web-01 'cd /tmp/vsw && sudo install -m 755 app-env.sh /usr/local/bin/vsw-app-env \
-  && sudo install -m 755 with-env.sh /usr/local/bin/vsw-with-env \
-  && sudo install -m 755 reload-daemon.sh /usr/local/bin/vsw-reload-daemon \
-  && sudo install -m 644 nginx-proxy.conf /etc/nginx/snippets/vsw-proxy.conf && sudo nginx -t && rm -rf /tmp/vsw'
+scp examples/_shared/*.sh examples/_shared/nginx-proxy.conf web-01:/tmp/siw/
+ssh -t web-01 'cd /tmp/siw && sudo install -m 755 app-env.sh /usr/local/bin/siw-app-env \
+  && sudo install -m 755 with-env.sh /usr/local/bin/siw-with-env \
+  && sudo install -m 755 reload-daemon.sh /usr/local/bin/siw-reload-daemon \
+  && sudo install -m 644 nginx-proxy.conf /etc/nginx/snippets/siw-proxy.conf && sudo nginx -t && rm -rf /tmp/siw'
 ```
 
 **Why restart after activation (`reload-daemon.sh`):** on a zero-downtime Ploi site the deploy script runs in the

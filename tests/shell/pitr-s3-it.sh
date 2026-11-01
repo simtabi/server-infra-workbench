@@ -15,9 +15,9 @@ cd "$(dirname "$0")/../.."
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "pitr-s3-it skipped (no docker)"; exit 0; }
 M="$PWD/src/shell/db/docker-db-server-manager.sh"; A="$PWD/src/shell/addons/addon.sh"
 CADDY_IMAGE="$(sed -n 's/.*CADDY_IMAGE:-\([^}]*\)}.*/\1/p' stacks/caddy/docker-compose.yml | head -1)"
-W="$(mktemp -d /tmp/vsw-pitrs3.XXXX)"; D="$W/vswpitrs3"; S3NET=vsw_pitrs3_s3; FRONT=vsw-pitrs3-tls; HOSTNAME_S3=s3.vsw.test
+W="$(mktemp -d /tmp/siw-pitrs3.XXXX)"; D="$W/vswpitrs3"; S3NET=vsw_pitrs3_s3; FRONT=vsw-pitrs3-tls; HOSTNAME_S3=s3.vsw.test
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
-cleanup() { rm -rf /tmp/vsw-pitrs3-last; mkdir -p /tmp/vsw-pitrs3-last; cp "$W"/*.out "$W/run.log" /tmp/vsw-pitrs3-last/ 2>/dev/null || true
+cleanup() { rm -rf /tmp/siw-pitrs3-last; mkdir -p /tmp/siw-pitrs3-last; cp "$W"/*.out "$W/run.log" /tmp/siw-pitrs3-last/ 2>/dev/null || true
   [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true
   docker rm -f "$FRONT" >/dev/null 2>&1 || true; docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true
   it_purge vswpitrs3 vsw-garage; it_rm_net "$S3NET"; rm -rf "$W"; }

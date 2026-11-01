@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\DigitalOcean\Data;
+namespace Simtabi\ServerInfraWorkbench\DigitalOcean\Data;
 
 enum ActionStatus: string
 {

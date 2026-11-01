@@ -1,4 +1,4 @@
-"""Command line: `python -m vps_server_workbench ping|plans|configure|profile ...` (or `bin/workbench py ...`)."""
+"""Command line: `python -m server_infra_workbench ping|plans|configure|profile ...` (or `bin/workbench py ...`)."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ import argparse
 import json
 import sys
 
-from vps_server_workbench import __version__, envfile
-from vps_server_workbench.probe import tcp_probe
+from server_infra_workbench import __version__, compat, envfile
+from server_infra_workbench.probe import tcp_probe
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="workbench py", description="vps-server-workbench Python helpers")
+    p = argparse.ArgumentParser(prog="workbench py", description="server-infra-workbench Python helpers")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser(
@@ -28,12 +28,14 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    for note in compat.notices():
+        print(note, file=sys.stderr)
     if argv[:1] == ["plans"]:
-        from vps_server_workbench import plan_finder
+        from server_infra_workbench import plan_finder
 
         return plan_finder.main(argv[1:])
     if argv[:1] in (["configure"], ["profile"]):
-        from vps_server_workbench import configure
+        from server_infra_workbench import configure
 
         return configure.main(argv)
     args = _parser().parse_args(argv)

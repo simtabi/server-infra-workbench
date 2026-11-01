@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console\Commands;
+namespace Simtabi\ServerInfraWorkbench\Console\Commands;
 
-use Simtabi\VpsServerWorkbench\Console\Input;
+use Simtabi\ServerInfraWorkbench\Console\Input;
 
 /** One `workbench <area>` command. Returns the process exit code. */
 interface Command

@@ -1,6 +1,6 @@
 # Python package (`src/python`)
 
-A deliberately small, standard-library-only package (`vps_server_workbench`, `src/` layout, Python 3.12+).
+A deliberately small, standard-library-only package (`server_infra_workbench`, `src/` layout, Python 3.12+).
 It gives Python automation a home with lint and tests already wired. **Platform APIs are not here**:
 DigitalOcean, Cloudflare, Ploi and GCP live in the [PHP core](platform-api.md) so there is one client per
 platform, not two.
@@ -13,7 +13,7 @@ bin/workbench py ping --env /home/ploi/example.com/.env       # reads DB_HOST an
 bin/workbench py ping 10.0.0.5 5432 --timeout 2 --json        # {"host": ..., "port": ..., "open": ..., "millis": ...}
 ```
 
-Without the dispatcher: `PYTHONPATH=src/python/src python3 -m vps_server_workbench ping ...`, or
+Without the dispatcher: `PYTHONPATH=src/python/src python3 -m server_infra_workbench ping ...`, or
 `pip install -e src/python` and then `workbench-py ping ...`.
 
 `ping` only opens a TCP connection; it sends no credentials and reads nothing from the database. For a
@@ -24,10 +24,10 @@ full check from a web server (DNS, firewall, the real client), use
 
 | Path | What |
 |---|---|
-| `src/python/src/vps_server_workbench/cli.py` | argparse entry point (`ping`, `plans`) |
-| `src/python/src/vps_server_workbench/probe.py` | `tcp_probe(host, port, timeout)` returning a small result object |
-| `src/python/src/vps_server_workbench/envfile.py` | strict `KEY=VALUE` reader (quotes, comments; never `source`s or executes) |
-| `src/python/src/vps_server_workbench/plan_finder.py` | `PloiDoPlanFinder` (fluent library) and the `plans` command |
+| `src/python/src/server_infra_workbench/cli.py` | argparse entry point (`ping`, `plans`) |
+| `src/python/src/server_infra_workbench/probe.py` | `tcp_probe(host, port, timeout)` returning a small result object |
+| `src/python/src/server_infra_workbench/envfile.py` | strict `KEY=VALUE` reader (quotes, comments; never `source`s or executes) |
+| `src/python/src/server_infra_workbench/plan_finder.py` | `PloiDoPlanFinder` (fluent library) and the `plans` command |
 | `src/python/tests/` | `unittest` tests, offline (a local listening socket stands in for a server) |
 
 ## Checks
@@ -42,7 +42,7 @@ are in `src/python/pyproject.toml`; CI installs ruff (pinned in `.github/workflo
 
 ## Adding a command
 
-1. Put the logic in a new module under `src/vps_server_workbench/` with no I/O at import time.
+1. Put the logic in a new module under `src/server_infra_workbench/` with no I/O at import time.
 2. Add a subparser in `cli.py`; validate input there and return exit code 2 on bad input.
 3. Add `tests/test_<module>.py`. Tests must not touch the network or a real server.
 4. Document it on this page.
@@ -56,10 +56,10 @@ plans and regions for your DO credentials, DigitalOcean's `/v2/sizes` reports wh
 pairs both agree on are shown. Read-only (two GETs per API).
 
 ```bash
-mkdir -p ~/.config/vps-server-workbench
-cp config/ploi-do-plan-finder.env.example ~/.config/vps-server-workbench/plans.env
-chmod 600 ~/.config/vps-server-workbench/plans.env     # add PLOI_API_TOKEN and DO_API_TOKEN
-bin/workbench plans --env-file ~/.config/vps-server-workbench/plans.env \
+mkdir -p ~/.config/server-infra-workbench
+cp config/ploi-do-plan-finder.env.example ~/.config/server-infra-workbench/plans.env
+chmod 600 ~/.config/server-infra-workbench/plans.env     # add PLOI_API_TOKEN and DO_API_TOKEN
+bin/workbench plans --env-file ~/.config/server-infra-workbench/plans.env \
   --regions atl1,nyc3 --min-memory-mb 2048 --output-format markdown
 bin/workbench plans --plan-filter s- --max-price 24 --sort-by memory --output-format json
 ```
@@ -74,6 +74,6 @@ Never keep the env file inside the repository.
 ## `configure` and `profile`
 
 `bin/workbench configure` and `bin/workbench profile list|show|diff|table` live in
-`vps_server_workbench/configure.py` (CLI) and `profiles.py` (layering, checks, rendering). Guide:
+`server_infra_workbench/configure.py` (CLI) and `profiles.py` (layering, checks, rendering). Guide:
 [configure.md](../configure.md); settings: [profiles reference](../reference/profiles.md). Tests:
 `src/python/tests/test_configure.py` (no network, temp folders only).

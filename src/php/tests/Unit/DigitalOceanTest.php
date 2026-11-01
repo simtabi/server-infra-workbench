@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\ActionStatus;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\DropletStatus;
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
-use Simtabi\VpsServerWorkbench\Exception\ActionFailedException;
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
-use Simtabi\VpsServerWorkbench\Exception\TimeoutException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\ActionStatus;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\DropletStatus;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\Exception\ActionFailedException;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Exception\TimeoutException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class DigitalOceanTest extends TestCase
 {
@@ -117,7 +117,7 @@ final class DigitalOceanTest extends TestCase
         try {
             $this->do()->droplets()->snapshot(5, 'x')->confirm();
             self::fail('expected exception');
-        } catch (\Simtabi\VpsServerWorkbench\Exception\AuthenticationException) {
+        } catch (\Simtabi\ServerInfraWorkbench\Exception\AuthenticationException) {
         }
         self::assertSame(['confirmed', 'failed'], $this->audit->outcomes());
         self::assertStringContainsString('403', (string) $this->audit->entries[1]->error);

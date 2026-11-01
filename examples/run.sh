@@ -88,8 +88,8 @@ case "${1:-}" in
     fails=0
     for c in "$ROOT"/examples/*/example.conf; do
       n="$(basename "$(dirname "$c")")"
-      if run_one "$n" > "/tmp/vsw-example-$n.log" 2>&1; then echo "ok   example $n"
-      else echo "FAIL example $n (log: /tmp/vsw-example-$n.log)"; fails=$((fails + 1)); fi
+      if run_one "$n" > "/tmp/siw-example-$n.log" 2>&1; then echo "ok   example $n"
+      else echo "FAIL example $n (log: /tmp/siw-example-$n.log)"; fails=$((fails + 1)); fi
     done
     catalog_check || fails=$((fails + 1))
     exit $((fails > 0)) ;;

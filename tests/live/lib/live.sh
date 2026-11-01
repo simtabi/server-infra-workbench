@@ -2,8 +2,8 @@
 #
 # A live test spends real money on DigitalOcean, so every one of them follows the same rules:
 #   * dry run by default: prints the plan and the worst-case cost, creates nothing; --yes spends
-#   * everything it creates carries the tag vsw-livetest plus a per-run tag vsw-livetest-<run>, and a
-#     name starting vswlt-<run>-; teardown deletes only what carries BOTH (never by name match alone)
+#   * everything it creates carries the tag siw-livetest plus a per-run tag siw-livetest-<run>, and a
+#     name starting siwlt-<run>-; teardown deletes only what carries BOTH (never by name match alone)
 #   * teardown runs from an EXIT/INT/TERM trap, and a watchdog sends TERM after --timeout minutes, so
 #     a hung step still ends in teardown; teardown then lists the account again and fails loudly on leftovers
 #   * cost guard: hourly price of what it will create x the timeout must stay under --max-usd
@@ -11,13 +11,14 @@
 #     made per run, a cloud firewall that allows ssh only from this machine's public address
 #   * a region without any VPC is refused: the first VPC in a region becomes its default, and a
 #     default VPC cannot be deleted. --create-default-vpc creates default-<region> first (free, kept)
-#   * a cost log line per run in ~/.local/state/vsw-livetest/cost.log (outside the repo)
+#   * a cost log line per run in ~/.local/state/siw-livetest/cost.log (outside the repo)
 # Nothing secret is printed: keys and tokens go to 600 files in the run's temp dir, removed at the end.
 # Public addresses of the throwaway droplets are not printed either (ssh goes through a generated config).
 # shellcheck disable=SC2015
-LIVE_TAG=vsw-livetest
-LIVE_PREFIX=vswlt
-LIVE_STATE="${LIVE_STATE:-$HOME/.local/state/vsw-livetest}"
+LIVE_TAG=siw-livetest
+LIVE_PREFIX=siwlt
+LIVE_STATE="${LIVE_STATE:-$HOME/.local/state/siw-livetest}"
+[ -d "$LIVE_STATE" ] || [ ! -d "$HOME/.local/state/vsw-livetest" ] || LIVE_STATE="$HOME/.local/state/vsw-livetest"   # cost log from before the rename
 LIVE_YES=0 LIVE_REGION="${LIVE_REGION:-tor1}" LIVE_MAX_USD="${LIVE_MAX_USD:-1.00}" LIVE_TIMEOUT_MIN="${LIVE_TIMEOUT_MIN:-45}"
 LIVE_CREATE_DEFAULT_VPC=0 LIVE_SIZE="${LIVE_SIZE:-s-1vcpu-1gb}" LIVE_IMAGE="${LIVE_IMAGE:-ubuntu-24-04-x64}"
 LIVE_TORN=0 LIVE_PASS=0 LIVE_WATCHDOG="" LIVE_VPC_ID="" LIVE_KEY_ID="" LIVE_FW_ID="" LIVE_T0=0 LIVE_HOURLY=0 LIVE_FIXED_USD=0
@@ -96,7 +97,7 @@ live_begin() {
   live_gt "$worst" "$LIVE_MAX_USD" && live_die "worst case \$$(live_usd "$worst") is above --max-usd $LIVE_MAX_USD"
   if [ "$n" -gt 0 ]; then live_vpc_region_check; fi
   if [ "$LIVE_YES" != 1 ]; then echo "   dry run: nothing created. Add --yes to run it (and spend up to the worst case)."; exit 0; fi
-  LIVE_W="$(mktemp -d "${TMPDIR:-/tmp}/vswlt.XXXXXX")"; chmod 700 "$LIVE_W"
+  LIVE_W="$(mktemp -d "${TMPDIR:-/tmp}/siwlt.XXXXXX")"; chmod 700 "$LIVE_W"
   mkdir -p "$LIVE_STATE"; chmod 700 "$LIVE_STATE"
   LIVE_T0="$(date +%s)"; LIVE_MTD0="$(live_mtd)"
   printf '%s start %s run=%s region=%s droplets=%s size=%s hourly=%s fixed=%s mtd=%s\n' "$(date -u +%FT%TZ)" "$LIVE_NAME" "$LIVE_RUN" "$LIVE_REGION" "$n" "$LIVE_SIZE" "$LIVE_HOURLY" "$fixed" "$LIVE_MTD0" >> "$LIVE_STATE/cost.log"
@@ -117,7 +118,7 @@ live_vpc_region_check() {
   if [ "$nd" = 0 ]; then
     [ "$LIVE_CREATE_DEFAULT_VPC" = 1 ] || live_die "$LIVE_REGION has no VPC yet: the first one becomes the region's default and cannot be deleted. Re-run with --create-default-vpc (creates default-$LIVE_REGION, free, kept) or pick a region that has one"
     if [ "$LIVE_YES" = 1 ]; then
-      doctl vpcs create --name "default-$LIVE_REGION" --region "$LIVE_REGION" --description "region default (created before a vsw live test)" -o json >/dev/null \
+      doctl vpcs create --name "default-$LIVE_REGION" --region "$LIVE_REGION" --description "region default (created before a live test)" -o json >/dev/null \
         || live_die "could not create default-$LIVE_REGION"
       echo "   created VPC default-$LIVE_REGION (the region default; kept, VPCs are free)"
     else echo "   would create VPC default-$LIVE_REGION first (--create-default-vpc)"; fi
@@ -178,7 +179,7 @@ live_firewall_create() { # ssh from this machine only; everything inside the tes
   echo "$LIVE_FW_ID" > "$LIVE_W/fw.id"
   live_ok "cloud firewall $LIVE_NP-fw: ssh from this machine only, all traffic inside the VPC"
 }
-# live_droplets_create n1 n2 ...: names become vswlt-<run>-n1 ...; ssh aliases are the short names
+# live_droplets_create n1 n2 ...: names become siwlt-<run>-n1 ...; ssh aliases are the short names
 live_droplets_create() {
   local names=() s; for s in "$@"; do names+=("$LIVE_NP-$s"); done
   doctl compute droplet create "${names[@]}" --region "$LIVE_REGION" --size "$LIVE_SIZE" --image "$LIVE_IMAGE" \

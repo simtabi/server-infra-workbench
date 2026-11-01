@@ -2,34 +2,34 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\DigitalOcean;
+namespace Simtabi\ServerInfraWorkbench\DigitalOcean;
 
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Action;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Droplet;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\DropletStatus;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Snapshot;
-use Simtabi\VpsServerWorkbench\Exception\ActionFailedException;
-use Simtabi\VpsServerWorkbench\Exception\TimeoutException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Support\Data;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\Action;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\Droplet;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\DropletStatus;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\Snapshot;
+use Simtabi\ServerInfraWorkbench\Exception\ActionFailedException;
+use Simtabi\ServerInfraWorkbench\Exception\TimeoutException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 final readonly class Droplets
 {
     /**
      * The image a new droplet gets when nothing else is asked for: the newest Ubuntu LTS DigitalOcean offers.
      * The one place to bump when a new LTS ships (every April of an even year). Override per run with
-     * --image, per workstation with VSW_DROPLET_IMAGE, or pass "latest" to ask the API at create time.
+     * --image, per workstation with SIW_DROPLET_IMAGE, or pass "latest" to ask the API at create time.
      */
     public const string DEFAULT_IMAGE = 'ubuntu-26-04-x64';
 
-    /** The --image / VSW_DROPLET_IMAGE value that resolves the newest Ubuntu LTS from the API. */
+    /** The --image / SIW_DROPLET_IMAGE value that resolves the newest Ubuntu LTS from the API. */
     public const string LATEST = 'latest';
 
     /** Workstation setting (environment or credentials file; not a secret) for the default image. */
-    public const string IMAGE_ENV = 'VSW_DROPLET_IMAGE';
+    public const string IMAGE_ENV = 'SIW_DROPLET_IMAGE';
 
     public function __construct(private Transport $transport, private Actions $actions) {}
 

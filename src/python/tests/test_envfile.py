@@ -1,6 +1,6 @@
 import unittest
 
-from vps_server_workbench.envfile import parse
+from server_infra_workbench.envfile import parse
 
 
 class EnvFileTest(unittest.TestCase):

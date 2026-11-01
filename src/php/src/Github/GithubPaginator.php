@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Github;
+namespace Simtabi\ServerInfraWorkbench\Github;
 
-use Simtabi\VpsServerWorkbench\Http\ApiResponse;
-use Simtabi\VpsServerWorkbench\Http\ResponsePaginator;
-use Simtabi\VpsServerWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Http\ApiResponse;
+use Simtabi\ServerInfraWorkbench\Http\ResponsePaginator;
+use Simtabi\ServerInfraWorkbench\Support\Data;
 
 /**
  * GitHub REST: the page is a JSON array (or an object with a named list, e.g. "workflow_runs") and the

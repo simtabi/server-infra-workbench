@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\DigitalOcean;
+namespace Simtabi\ServerInfraWorkbench\DigitalOcean;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\Endpoint;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Security\IssuedCredential;
-use Simtabi\VpsServerWorkbench\Security\Secret;
-use Simtabi\VpsServerWorkbench\Support\Data;
-use Simtabi\VpsServerWorkbench\Support\Item;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\Endpoint;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Security\IssuedCredential;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 /**
  * Spaces (S3-compatible) access keys, scoped per bucket. The secret is returned once, at creation:

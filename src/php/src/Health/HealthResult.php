@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Health;
+namespace Simtabi\ServerInfraWorkbench\Health;
 
-use Simtabi\VpsServerWorkbench\Support\ExportsProperties;
+use Simtabi\ServerInfraWorkbench\Support\ExportsProperties;
 
 final readonly class HealthResult implements \JsonSerializable
 {

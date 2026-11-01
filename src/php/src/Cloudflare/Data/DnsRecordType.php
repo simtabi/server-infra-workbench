@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Cloudflare\Data;
+namespace Simtabi\ServerInfraWorkbench\Cloudflare\Data;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
 
 enum DnsRecordType: string
 {

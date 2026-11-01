@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from vps_server_workbench import configure
-from vps_server_workbench import profiles as P
+from server_infra_workbench import configure
+from server_infra_workbench import profiles as P
 
 BASE = {"CLIENT": "acme", "APP": "demo"}
 

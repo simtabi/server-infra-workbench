@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Fixtures;
+namespace Simtabi\ServerInfraWorkbench\Tests\Fixtures;
 
 use GuzzleHttp\Client;
 use Psr\Http\Client\ClientInterface;

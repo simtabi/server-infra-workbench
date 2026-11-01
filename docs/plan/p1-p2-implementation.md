@@ -37,13 +37,13 @@ runbook row that a human runs.
 - **Design.** One contract, three implementations: `spinner` (unknown length), `bar` (known total, with ETA),
   `step` (`[3/9] label ... 12s`). TTY-aware: on a terminal it redraws one line; otherwise (CI, cron, a pipe,
   `TERM=dumb`) it prints one plain line per start/finish, never control codes. `NO_COLOR` disables colour,
-  `--quiet`/`VSW_QUIET=1` silences progress (errors still print). Output goes to stderr so stdout stays
+  `--quiet`/`SIW_QUIET=1` silences progress (errors still print). Output goes to stderr so stdout stays
   parseable.
 - **Shell:** `src/shell/lib/progress.sh` (`progress_step`, `progress_run "label" cmd...`, `progress_bar i n`,
   `progress_done`). The DB manager is a single uploaded file, so it carries a copy between
   `# >>> progress.sh` markers; a smoke test fails when the copy drifts from the library (DRY by test).
 - **PHP:** `Console\Progress` (spinner/bar/ETA, same rules) used by the action waits (snapshot, resize, power).
-- **Python:** `vps_server_workbench.progress` used by the plan finder and the configurator.
+- **Python:** `server_infra_workbench.progress` used by the plan finder and the configurator.
 - **Wired into:** manager `upgrade` (numbered steps), `backup` (per engine), `offsite` (upload/verify),
   `restore-test`, PITR, the DO resize/snapshot waits, and `make it` (per suite, ETA from the last run).
 - **Risk:** control codes in logs. Mitigation: the manager logs through `tee`; progress writes to the

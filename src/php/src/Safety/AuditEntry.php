@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Safety;
+namespace Simtabi\ServerInfraWorkbench\Safety;
 
-use Simtabi\VpsServerWorkbench\Support\ExportsProperties;
+use Simtabi\ServerInfraWorkbench\Support\ExportsProperties;
 
 final readonly class AuditEntry implements \JsonSerializable
 {

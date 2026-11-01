@@ -6,7 +6,7 @@
 # DB exporters, the manager's textfile metrics, alert rules, Grafana provisioning and auth, Beszel
 # registration, probes, idempotent re-install, remove keeps data. Netdata is covered by smoke-monitor
 # (plan/RAM gate) only: it needs host /proc and /sys that a desktop VM does not mirror faithfully.
-# Leaves nothing behind (trap). Last outputs are copied to /tmp/vsw-mon-last on exit.
+# Leaves nothing behind (trap). Last outputs are copied to /tmp/siw-mon-last on exit.
 # shellcheck disable=SC2015  # test one-liners
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -15,9 +15,9 @@ cd "$(dirname "$0")/../.."
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "monitor-it skipped (no docker)"; exit 0; }
 unset NO_COLOR
 M="$PWD/src/shell/db/docker-db-server-manager.sh" MON="$PWD/src/shell/monitor/monitor.sh"
-W="$(mktemp -d /tmp/vsw-mon.XXXX)"; D="$W/vswmon"
+W="$(mktemp -d /tmp/siw-mon.XXXX)"; D="$W/vswmon"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
-cleanup() { rm -rf /tmp/vsw-mon-last; mkdir -p /tmp/vsw-mon-last; cp "$W"/*.out "$W/audit.log" /tmp/vsw-mon-last/ 2>/dev/null || true
+cleanup() { rm -rf /tmp/siw-mon-last; mkdir -p /tmp/siw-mon-last; cp "$W"/*.out "$W/audit.log" /tmp/siw-mon-last/ 2>/dev/null || true
   local u; for u in prometheus exporters kuma beszel-agent beszel; do for d in "$W/mon/$u" "$W"/mon/.removed-"$u"-*; do
     [ -f "$d/stack.env" ] && (cd "$d" && docker compose --env-file stack.env --env-file secrets.env down -v --remove-orphans >/dev/null 2>&1) || true; done; done
   [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true

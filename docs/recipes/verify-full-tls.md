@@ -13,7 +13,7 @@ reissued when an IP is missing from the SAN or the certificate expires within 30
 1. In the server config set `TLS_MODE=verify-full` (and optionally `TLS_CA_WEB_PATH`, the CA's path on the
    web hosts). Run `upgrade --dry-run`, then `upgrade`, through `remote-run.sh`.
 2. Copy the **public** CA to each web host:
-   `sudo /root/docker-db-server-manager.sh tls-ca --out /tmp/vsw-db-ca.crt`, then put it at `/etc/ssl/certs/vsw-db-ca.crt` (644) on the web host.
+   `sudo /root/docker-db-server-manager.sh tls-ca --out /tmp/siw-db-ca.crt`, then put it at `/etc/ssl/certs/vsw-db-ca.crt` (644) on the web host.
 3. `sudo /root/docker-db-server-manager.sh env` now prints `DB_SSLMODE=verify-full` and `DB_SSLROOTCERT=...`. Put both in the Laravel `.env`
    (Laravel reads `DB_SSLMODE` as `sslmode`; add `'sslrootcert' => env('DB_SSLROOTCERT')` to the `pgsql` connection in
    `config/database.php` if it is not there), then deploy.

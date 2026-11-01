@@ -28,7 +28,7 @@ bin/workbench configure --profile mysql-app --client <you> --set APP=blog --set 
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 sudo /root/docker-db-server-manager.sh env-creds stg mysql --out /root/stg-db.env   # DB server; copy, remove
 # web server: shared helpers once (examples/_shared/README.md), then as ploi:
-vsw-app-env --stack wordpress --from ~/stg-db.env --out /home/ploi/blog.example.com-shared \
+siw-app-env --stack wordpress --from ~/stg-db.env --out /home/ploi/blog.example.com-shared \
   --set WP_HOME=https://blog.example.com --set WP_SITEURL=https://blog.example.com/wp
 shred -u ~/stg-db.env
 ```

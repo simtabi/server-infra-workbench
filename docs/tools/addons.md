@@ -58,7 +58,7 @@ Flags: `--accept-experimental` (RustFS), `--force`, `-h`. Exit codes: 0 ok, 1 re
   key (policy `vsw-app-<bucket>`, created through the RustFS admin API), put/get with the app key, the app key
   refused on bucket create/delete and the admin API, anonymous denied, an idempotent re-install, the console
   on 127.0.0.1, doctor's app-key check, and `laravel-env` writing the app key but never the root key.
-- Both suites take their compose project names and ports from `VSW_IT_PREFIX` / `VSW_IT_PORT_OFFSET`
+- Both suites take their compose project names and ports from `SIW_IT_PREFIX` / `SIW_IT_PORT_OFFSET`
   ([parallel runs](../../tests/README.md#parallel-runs)); `ADDON_PROJECT_PREFIX` is the add-on key that makes this work.
 - `tests/shell/garage-cluster-it.sh` (Docker, in `make it`, about 1 minute): three Garage nodes in **host
   networking** mode (S3, RPC and admin on 127.0.0.1 only, no published ports), `GARAGE_REPLICATION=3`, joins

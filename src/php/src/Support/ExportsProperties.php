@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Support;
+namespace Simtabi\ServerInfraWorkbench\Support;
 
 /** JSON form of a readonly DTO: its public properties, enums as their values. */
 trait ExportsProperties

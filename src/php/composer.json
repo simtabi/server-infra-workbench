@@ -1,6 +1,6 @@
 {
-    "name": "simtabi/vps-server-workbench",
-    "description": "PHP core of vps-server-workbench: safe, fluent clients for DigitalOcean, Ploi, Cloudflare, Google Cloud and GitHub, plus the workbench CLI.",
+    "name": "simtabi/server-infra-workbench",
+    "description": "PHP core of server-infra-workbench: safe, fluent clients for DigitalOcean, Ploi, Cloudflare, Google Cloud and GitHub, plus the workbench CLI.",
     "type": "library",
     "license": "MIT",
     "keywords": ["digitalocean", "ploi", "cloudflare", "gcp", "github", "vps", "devops", "psr-18"],
@@ -28,10 +28,10 @@
         "phpunit/phpunit": "^12.0 || ^13.0"
     },
     "autoload": {
-        "psr-4": {"Simtabi\\VpsServerWorkbench\\": "src/"}
+        "psr-4": {"Simtabi\\ServerInfraWorkbench\\": "src/"}
     },
     "autoload-dev": {
-        "psr-4": {"Simtabi\\VpsServerWorkbench\\Tests\\": "tests/"}
+        "psr-4": {"Simtabi\\ServerInfraWorkbench\\Tests\\": "tests/"}
     },
     "bin": ["bin/workbench-php"],
     "scripts": {

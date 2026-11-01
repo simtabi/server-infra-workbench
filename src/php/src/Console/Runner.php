@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console;
+namespace Simtabi\ServerInfraWorkbench\Console;
 
-use Simtabi\VpsServerWorkbench\Exception\ActionFailedException;
-use Simtabi\VpsServerWorkbench\Exception\ConfirmationRequiredException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Security\IssuedCredential;
-use Simtabi\VpsServerWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Exception\ActionFailedException;
+use Simtabi\ServerInfraWorkbench\Exception\ConfirmationRequiredException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Security\IssuedCredential;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
 
 /**
  * What every command shares: printing tables / one object / JSON, the single write path

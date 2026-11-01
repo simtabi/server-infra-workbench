@@ -27,11 +27,11 @@ bin/workbench configure --profile dev-budget --client <you> --set APP=api \
 # DB server: the stg block into a 600 file; copy it to the web server, then remove it there
 sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env
 # web server: the shared helpers once (examples/_shared/README.md), then as ploi the .env + .pgpass
-vsw-app-env --stack django --from ~/stg-db.env --out /home/ploi/api.example.com-shared \
+siw-app-env --stack django --from ~/stg-db.env --out /home/ploi/api.example.com-shared \
   --set DJANGO_ALLOWED_HOSTS=api.example.com --set DJANGO_SETTINGS_MODULE=config.settings.production
 shred -u ~/stg-db.env
 bin/workbench ploi daemon-create <server-id> --directory /home/ploi/api.example.com --dry-run \
-  --command "/usr/local/bin/vsw-with-env /home/ploi/api.example.com-shared/.env .venv/bin/gunicorn -c gunicorn.conf.py config.wsgi"
+  --command "/usr/local/bin/siw-with-env /home/ploi/api.example.com-shared/.env .venv/bin/gunicorn -c gunicorn.conf.py config.wsgi"
 ```
 
 | File | Use |
@@ -52,5 +52,5 @@ Checklist:
 - [ ] the DB block file is shredded on both servers
 
 Lesson: one Gunicorn daemon restarts with a gap of a second or two (Nginx answers 502 meanwhile). Run a second
-daemon with `PORT=8001` and the second `server` line in the upstream. `vsw-reload-daemon 8000 /healthz 8001
+daemon with `PORT=8001` and the second `server` line in the upstream. `siw-reload-daemon 8000 /healthz 8001
 /healthz` restarts one at a time, and the site stays up.

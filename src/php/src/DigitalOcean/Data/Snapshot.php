@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\DigitalOcean\Data;
+namespace Simtabi\ServerInfraWorkbench\DigitalOcean\Data;
 
-use Simtabi\VpsServerWorkbench\Support\Data;
-use Simtabi\VpsServerWorkbench\Support\ExportsProperties;
+use Simtabi\ServerInfraWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Support\ExportsProperties;
 
 final readonly class Snapshot implements \JsonSerializable
 {

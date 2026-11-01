@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp;
+namespace Simtabi\ServerInfraWorkbench\Gcp;
 
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\GcloudTokenProvider;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\GoogleOAuth;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\ServiceAccountTokenProvider;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\TokenProvider;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\GcloudTokenProvider;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\GoogleOAuth;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\ServiceAccountTokenProvider;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\TokenProvider;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
 
 /**
  * Google Cloud: Compute Engine v1 (instances, snapshots, firewalls), Cloud DNS v1 and Cloud Storage JSON v1.

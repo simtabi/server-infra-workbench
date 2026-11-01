@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (project renamed: server-infra-workbench)
+
+- The project is now `server-infra-workbench` (was `vps-server-workbench`); it covers far more than one VPS
+  ([ADR 0014](docs/adr/0014-rename-to-server-infra-workbench.md)). GitHub redirects the old URLs.
+  - Composer package `simtabi/server-infra-workbench`, PHP namespace `Simtabi\ServerInfraWorkbench`, Python
+    package `server_infra_workbench` (console script still `workbench-py`). `bin/workbench` is unchanged.
+  - Environment variables are `SIW_*`. An unset `SIW_X` falls back to `VSW_X` and prints one deprecation note.
+  - Credentials, `keys.json` and the audit log live under `~/.config|~/.local/state/server-infra-workbench/`;
+    an existing `vps-server-workbench` directory keeps being used while the new one does not exist. Server
+    directories (`/etc`, `/var/lib`, `/var/log`, `/usr/local/lib`) follow the same rule (`siw_path`).
+  - Temporary files use `siw-`; live tests tag `siw-livetest` with prefix `siwlt-`, and `tests/live/sweep.sh`
+    still sweeps the old `vsw-livetest` / `vswlt-` names.
+  - Short `vsw` names already on servers are kept (database roles, `vsw_*` metrics and dashboards,
+    `/opt/vsw-*`, `/etc/vsw-*.conf`, the `vsw_db` network); see
+    [naming](docs/reference/naming.md#frozen-identifiers). `# Managed by` headers get the new name on the
+    next re-run.
+
 ### Added
 
 - Platform APIs (P3 provider audit): full REST coverage for five providers on the shared transport, each with a

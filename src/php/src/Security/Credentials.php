@@ -2,19 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Security;
+namespace Simtabi\ServerInfraWorkbench\Security;
 
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Support\Env;
 
 /**
  * Where credentials come from, in order: an explicit value, an environment variable, then a
- * KEY=VALUE file (default ~/.config/vps-server-workbench/credentials, or $VSW_CREDENTIALS_FILE).
+ * KEY=VALUE file (default ~/.config/server-infra-workbench/credentials, or $SIW_CREDENTIALS_FILE).
+ * Pre-rename names still work: $VSW_* settings and a file under ~/.config/vps-server-workbench (Env).
  * The file must be owned by you, mode 0600 (no group/other bits) and must not sit inside a git
  * working tree. Values are never logged; errors name the key and the places looked, never the value.
  */
 final class Credentials
 {
-    public const string FILE_ENV = 'VSW_CREDENTIALS_FILE';
+    public const string FILE_ENV = 'SIW_CREDENTIALS_FILE';
 
     /** Every key the workbench understands, with what it is for. */
     public const array KEYS = [
@@ -44,13 +46,13 @@ final class Credentials
 
     public static function defaultFile(): ?string
     {
-        $file = getenv(self::FILE_ENV);
-        if (is_string($file) && $file !== '') {
+        $file = Env::get(self::FILE_ENV);
+        if ($file !== null) {
             return $file;
         }
         $home = getenv('HOME');
 
-        return is_string($home) && $home !== '' ? $home.'/.config/vps-server-workbench/credentials' : null;
+        return is_string($home) && $home !== '' ? Env::userPath($home, '.config/{name}/credentials') : null;
     }
 
     /** Resolve a credential: an explicit value wins, otherwise look the key up. */
@@ -78,18 +80,18 @@ final class Credentials
             return 'env';
         }
 
-        return isset($this->fileValues()[$key]) ? 'file' : null;
+        return $this->fromFile($key) !== null ? 'file' : null;
     }
 
     public function get(string $key): Secret
     {
-        $value = $this->fromEnv($key) ?? $this->fileValues()[$key] ?? null;
+        $value = $this->fromEnv($key) ?? $this->fromFile($key);
         if ($value === null || $value === '') {
             throw new CredentialException(sprintf(
                 '%s is not set. Export it, or put a %s line in %s (chmod 600, outside any git repo). Check with: bin/workbench credentials',
                 $key,
                 $key,
-                $this->file ?? '~/.config/vps-server-workbench/credentials',
+                $this->file ?? '~/.config/server-infra-workbench/credentials',
             ));
         }
 
@@ -97,12 +99,12 @@ final class Credentials
     }
 
     /**
-     * A plain, non-secret setting (e.g. VSW_DROPLET_IMAGE) from the environment or the credentials file;
+     * A plain, non-secret setting (e.g. SIW_DROPLET_IMAGE) from the environment or the credentials file;
      * null when unset or empty. Never use this for tokens: get() wraps those in a Secret.
      */
     public function setting(string $key): ?string
     {
-        $value = $this->fromEnv($key) ?? $this->fileValues()[$key] ?? null;
+        $value = $this->fromEnv($key) ?? $this->fromFile($key);
 
         return $value === null || $value === '' ? null : $value;
     }
@@ -157,9 +159,15 @@ final class Credentials
 
     private function fromEnv(string $key): ?string
     {
-        $value = $this->env !== null ? ($this->env[$key] ?? null) : getenv($key);
+        return Env::get($key, $this->env);
+    }
 
-        return is_string($value) && $value !== '' ? $value : null;
+    /** The file's value for $key; a SIW_* setting also matches its pre-rename VSW_* line. */
+    private function fromFile(string $key): ?string
+    {
+        $values = $this->fileValues();
+
+        return $values[$key] ?? $values[Env::legacyName($key)] ?? null;
     }
 
     /** @return array<string, string> */

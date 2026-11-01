@@ -76,11 +76,11 @@ grep -q '^backup|fail|' "$T/alerts" && ! grep -q "$NPW" "$T/alerts" && ! grep -q
 mkdir -p "$T/bin" "$T/bucket" "$T/b/20261031-031500" "$T/etc"
 cat > "$T/bin/rclone" <<'EOF'
 #!/usr/bin/env bash
-# stub: vsw:bucket/prefix/name -> $STUB_BUCKET/prefix/name ; records that creds came from env
-[ -n "${RCLONE_CONFIG_VSW_ACCESS_KEY_ID:-}" ] || { echo "no creds" >&2; exit 1; }
-map() { local p="${1#vsw:}"; echo "$STUB_BUCKET/${p#*/}"; }
+# stub: siw:bucket/prefix/name -> $STUB_BUCKET/prefix/name ; records that creds came from env
+[ -n "${RCLONE_CONFIG_SIW_ACCESS_KEY_ID:-}" ] || { echo "no creds" >&2; exit 1; }
+map() { local p="${1#siw:}"; echo "$STUB_BUCKET/${p#*/}"; }
 case "$1" in
-  copyto) shift; [ "$1" = --s3-no-check-bucket ] && shift; if [[ "$1" == vsw:* ]]; then cp "$(map "$1")" "$2"; else mkdir -p "$(dirname "$(map "$2")")"; cp "$1" "$(map "$2")"; fi ;;
+  copyto) shift; [ "$1" = --s3-no-check-bucket ] && shift; if [[ "$1" == siw:* ]]; then cp "$(map "$1")" "$2"; else mkdir -p "$(dirname "$(map "$2")")"; cp "$1" "$(map "$2")"; fi ;;
   lsf) ls "$(map "$2")" ;;
   delete) exit 0 ;;
 esac

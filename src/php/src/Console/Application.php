@@ -2,23 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console;
+namespace Simtabi\ServerInfraWorkbench\Console;
 
-use Simtabi\VpsServerWorkbench\Console\Commands\CloudflareCommand;
-use Simtabi\VpsServerWorkbench\Console\Commands\DigitalOceanCommand;
-use Simtabi\VpsServerWorkbench\Console\Commands\GcpCommand;
-use Simtabi\VpsServerWorkbench\Console\Commands\GithubCommand;
-use Simtabi\VpsServerWorkbench\Console\Commands\PloiCommand;
-use Simtabi\VpsServerWorkbench\Exception\ApiException;
-use Simtabi\VpsServerWorkbench\Exception\ConfirmationRequiredException;
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Exception\WorkbenchException;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Keys\PublicKey;
-use Simtabi\VpsServerWorkbench\Keys\SshKey;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Console\Commands\CloudflareCommand;
+use Simtabi\ServerInfraWorkbench\Console\Commands\DigitalOceanCommand;
+use Simtabi\ServerInfraWorkbench\Console\Commands\GcpCommand;
+use Simtabi\ServerInfraWorkbench\Console\Commands\GithubCommand;
+use Simtabi\ServerInfraWorkbench\Console\Commands\PloiCommand;
+use Simtabi\ServerInfraWorkbench\Exception\ApiException;
+use Simtabi\ServerInfraWorkbench\Exception\ConfirmationRequiredException;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Exception\WorkbenchException;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Keys\PublicKey;
+use Simtabi\ServerInfraWorkbench\Keys\SshKey;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Support\Env;
 
 /**
  * `bin/workbench do|cf|gcp|github|ploi|keys|health|credentials ...`
@@ -73,6 +74,9 @@ final class Application
     public function run(array $argv): int
     {
         try {
+            foreach (Env::legacyInUse() as $legacy) {
+                $this->out->error(sprintf('note: %s is deprecated, use %s%s (the old name is still read for now)', $legacy, Env::PREFIX, substr($legacy, strlen(Env::LEGACY_PREFIX))));
+            }
             $area = $argv[0] ?? 'help';
             if (in_array($area, ['do', 'digitalocean'], true) && ($argv[1] ?? null) === 'ssh-keys') {
                 // DigitalOcean account SSH keys are the keys module with --provider digitalocean (one implementation).
@@ -204,7 +208,7 @@ final class Application
         };
     }
 
-    private function serverKeyList(Input $in, \Simtabi\VpsServerWorkbench\Keys\ServerKeys $server): int
+    private function serverKeyList(Input $in, \Simtabi\ServerInfraWorkbench\Keys\ServerKeys $server): int
     {
         $session = $server->sessionFingerprint();
         $rows = [];
@@ -427,7 +431,7 @@ final class Application
 
     private function version(): int
     {
-        $this->out->line('vps-server-workbench '.ClientOptions::VERSION.' (PHP '.PHP_VERSION.')');
+        $this->out->line('server-infra-workbench '.ClientOptions::VERSION.' (PHP '.PHP_VERSION.')');
 
         return self::OK;
     }

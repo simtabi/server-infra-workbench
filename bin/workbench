@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# workbench - vps-server-workbench front door: one entry point for every tool in the repo.
+# workbench - server-infra-workbench front door: one entry point for every tool in the repo.
 #
 #   bin/workbench list                       every tool and where it lives
 #   bin/workbench <area> <tool> [args...]    run src/shell/<area>/<tool>.sh    e.g. bin/workbench db remote-run --help
@@ -75,11 +75,11 @@ case "${1:-}" in
   monitor) shift; exec "$ROOT/src/shell/monitor/monitor.sh" "$@" ;;
   status) shift; exec "$ROOT/src/shell/server/status.sh" "$@" ;;
   configure|profile) command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"
-       VSW_ROOT="$ROOT" PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vps_server_workbench "$@" ;;
+       SIW_ROOT="$ROOT" PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m server_infra_workbench "$@" ;;
   plans) shift; command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"
-       PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vps_server_workbench plans "$@" ;;
+       PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m server_infra_workbench plans "$@" ;;
   py|python) shift; command -v python3 >/dev/null 2>&1 || CODE=127 die "python3 is not installed"
-       PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m vps_server_workbench "$@" ;;
+       PYTHONPATH="$ROOT/src/python/src${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m server_infra_workbench "$@" ;;
   *) area="$1"; tool="${2:-}"
      [[ "$area" =~ ^[a-z0-9-]+$ && "$tool" =~ ^[a-z0-9-]+$ && "$area" != lib ]] || die "usage: bin/workbench <area> <tool> [args] (see: bin/workbench list)"
      f="$ROOT/src/shell/$area/$tool.sh"

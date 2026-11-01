@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Exception;
+namespace Simtabi\ServerInfraWorkbench\Exception;
 
-use Simtabi\VpsServerWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Support\Data;
 
 /** The provider answered with an error. Subclasses narrow it by status; the message is already redacted. */
 class ApiException extends \RuntimeException implements WorkbenchException

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Fixtures;
+namespace Simtabi\ServerInfraWorkbench\Tests\Fixtures;
 
 /** Structurally valid, made-up public keys (random-looking bytes from a seed; no private half exists). */
 final class FakeKeys

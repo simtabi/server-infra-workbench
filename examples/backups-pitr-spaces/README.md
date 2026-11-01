@@ -15,7 +15,7 @@ GFS retention `daily=14 weekly=8 monthly=12 yearly=2`. Full guide:
   with ransomware on the host. Dumps are encrypted with `backup.key` (AES-256) and the pgBackRest repo with
   `PITR_CIPHER_PASS`, on the server, so Spaces only ever holds ciphertext.
 - **The keys are generated here, and escrowed by you.** [`offsite-creds.sh`](offsite-creds.sh) writes both to
-  `/etc/vps-server-workbench` (600). The Spaces key pair is typed at a hidden prompt, never in argv or shell
+  `/etc/server-infra-workbench` (600). The Spaces key pair is typed at a hidden prompt, never in argv or shell
   history. Losing the droplet *and* the keys means the backups are noise. Copy the folder into the password
   manager the same day.
 - **Same region, separate bucket.** `nyc3` keeps WAL pushes fast (`archive_command` waits on each one). The
@@ -66,7 +66,7 @@ sudo /root/docker-db-server-manager.sh restore /opt/db/backups/<ts> postgres    
 
 Checklist:
 
-- [ ] `/etc/vps-server-workbench` (both files) is in the password manager, checked by opening it there
+- [ ] `/etc/server-infra-workbench` (both files) is in the password manager, checked by opening it there
 - [ ] `pitr status` shows a full backup and a recent WAL archive; `offsite verify` passes
 - [ ] the first `restore-test` alert email arrived (proves the alert path, not just the test)
 - [ ] a monthly drill restores to a scratch droplet from the bucket alone, with the escrowed keys

@@ -1,4 +1,4 @@
-# vps-server-workbench - dev front door. Run from the repo root:  make <target>
+# server-infra-workbench - dev front door. Run from the repo root:  make <target>
 #
 # SCRIPTS is every shell script in the repo, found by extension, so a new script
 # is linted without editing this file. PHP and Python targets skip (exit 0) with
@@ -76,17 +76,17 @@ compose-check: ## docker compose config for stacks/caddy, stacks/addons, stacks/
 	@command -v docker >/dev/null 2>&1 || { echo "docker not installed - skipping"; exit 0; }
 	cd stacks/caddy && SITE_DOMAIN=example.com docker compose config -q && echo "compose ok  stacks/caddy"
 	@for d in stacks/addons/*/; do n=$$(basename $$d); \
-	  { cat $$d/addon.env.example; printf 'ADDON_BIND=127.0.0.1\nADDON_DATA_DIR=/tmp/vsw-cc\nRUSTFS_ACCESS_KEY=x\nRUSTFS_SECRET_KEY=%s\nSEAWEED_ADMIN_PASSWORD=%s\n' $$(openssl rand -hex 12) $$(openssl rand -hex 12); } \
-	    | sed 's/[[:space:]]*#.*//' > /tmp/vsw-cc-$$n.env; \
-	  (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env config -q) && echo "compose ok  stacks/addons/$$n" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; \
-	  if [ -f $$d/compose.bridge.yml ]; then (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env -f docker-compose.yml -f compose.bridge.yml config -q) \
-	    && echo "compose ok  stacks/addons/$$n (bridge)" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; fi; rm -f /tmp/vsw-cc-$$n.env; done
+	  { cat $$d/addon.env.example; printf 'ADDON_BIND=127.0.0.1\nADDON_DATA_DIR=/tmp/siw-cc\nRUSTFS_ACCESS_KEY=x\nRUSTFS_SECRET_KEY=%s\nSEAWEED_ADMIN_PASSWORD=%s\n' $$(openssl rand -hex 12) $$(openssl rand -hex 12); } \
+	    | sed 's/[[:space:]]*#.*//' > /tmp/siw-cc-$$n.env; \
+	  (cd $$d && docker compose --env-file /tmp/siw-cc-$$n.env config -q) && echo "compose ok  stacks/addons/$$n" || { rm -f /tmp/siw-cc-$$n.env; exit 1; }; \
+	  if [ -f $$d/compose.bridge.yml ]; then (cd $$d && docker compose --env-file /tmp/siw-cc-$$n.env -f docker-compose.yml -f compose.bridge.yml config -q) \
+	    && echo "compose ok  stacks/addons/$$n (bridge)" || { rm -f /tmp/siw-cc-$$n.env; exit 1; }; fi; rm -f /tmp/siw-cc-$$n.env; done
 	@for d in stacks/monitor/*/; do n=$$(basename $$d); \
-	  { cat $$d/monitor.env.example; printf 'MONITOR_BIND=127.0.0.1\nMONITOR_AGENT_BIND=10.0.0.2\nMONITOR_TEXTFILE_DIR=/tmp/vsw-cc\nBESZEL_AGENT_LISTEN=10.0.0.2:45876\nNODE_EXPORTER_LISTEN=10.0.0.2:9100\nBESZEL_ADMIN_EMAIL=a@example.com\nBESZEL_ADMIN_PASSWORD=%s\nGRAFANA_ADMIN_PASSWORD=%s\nBESZEL_KEY=k\n' $$(openssl rand -hex 12) $$(openssl rand -hex 12); } \
-	    | sed 's/[[:space:]]*#.*//' > /tmp/vsw-cc-m-$$n.env; \
-	  (cd $$d && docker compose --env-file /tmp/vsw-cc-m-$$n.env config -q) && echo "compose ok  stacks/monitor/$$n" || { rm -f /tmp/vsw-cc-m-$$n.env; exit 1; }; \
-	  if [ -f $$d/compose.host.yml ]; then (cd $$d && docker compose --env-file /tmp/vsw-cc-m-$$n.env -f docker-compose.yml -f compose.host.yml config -q) \
-	    && echo "compose ok  stacks/monitor/$$n (host network)" || { rm -f /tmp/vsw-cc-m-$$n.env; exit 1; }; fi; rm -f /tmp/vsw-cc-m-$$n.env; done
+	  { cat $$d/monitor.env.example; printf 'MONITOR_BIND=127.0.0.1\nMONITOR_AGENT_BIND=10.0.0.2\nMONITOR_TEXTFILE_DIR=/tmp/siw-cc\nBESZEL_AGENT_LISTEN=10.0.0.2:45876\nNODE_EXPORTER_LISTEN=10.0.0.2:9100\nBESZEL_ADMIN_EMAIL=a@example.com\nBESZEL_ADMIN_PASSWORD=%s\nGRAFANA_ADMIN_PASSWORD=%s\nBESZEL_KEY=k\n' $$(openssl rand -hex 12) $$(openssl rand -hex 12); } \
+	    | sed 's/[[:space:]]*#.*//' > /tmp/siw-cc-m-$$n.env; \
+	  (cd $$d && docker compose --env-file /tmp/siw-cc-m-$$n.env config -q) && echo "compose ok  stacks/monitor/$$n" || { rm -f /tmp/siw-cc-m-$$n.env; exit 1; }; \
+	  if [ -f $$d/compose.host.yml ]; then (cd $$d && docker compose --env-file /tmp/siw-cc-m-$$n.env -f docker-compose.yml -f compose.host.yml config -q) \
+	    && echo "compose ok  stacks/monitor/$$n (host network)" || { rm -f /tmp/siw-cc-m-$$n.env; exit 1; }; fi; rm -f /tmp/siw-cc-m-$$n.env; done
 	@docker run --rm --entrypoint promtool -v "$$PWD/stacks/monitor/prometheus/rules:/r:ro" $$(sed -n "s/^PROMETHEUS_IMAGE=//p" stacks/monitor/prometheus/monitor.env.example) \
 	  check rules /r/vsw.yml >/dev/null && echo "promtool ok stacks/monitor/prometheus/rules" || { echo "promtool check rules FAILED"; exit 1; }
 	@for f in stacks/caddy/conf/Caddyfile stacks/caddy/variants/*.Caddyfile; do \
@@ -103,7 +103,7 @@ docs-commands: php-install ## every documented command/subcommand/--flag exists 
 	python3 tests/docs/check-commands.py .
 	python3 tests/docs/check-tables.py .
 
-mermaid: ## render every Mermaid block to /tmp/vsw-mermaid (needs node; downloads mermaid-cli)
+mermaid: ## render every Mermaid block to /tmp/siw-mermaid (needs node; downloads mermaid-cli)
 	bash tests/docs/render-mermaid.sh
 
 test: ## offline smoke tests (no servers touched)

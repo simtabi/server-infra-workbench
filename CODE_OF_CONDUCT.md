@@ -1,6 +1,6 @@
 # Code of conduct
 
-`simtabi/vps-server-workbench` follows the
+`simtabi/server-infra-workbench` follows the
 [Contributor Covenant, version 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
 In short: be respectful and constructive, assume good faith, and keep discussion about the work. Harassment
 of any kind is not tolerated, in issues, pull requests, reviews or any other project space.

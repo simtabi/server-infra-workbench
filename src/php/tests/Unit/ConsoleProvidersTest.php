@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Console\Application;
-use Simtabi\VpsServerWorkbench\Console\Help;
-use Simtabi\VpsServerWorkbench\Console\Output;
-use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\StaticTokenProvider;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Console\Application;
+use Simtabi\ServerInfraWorkbench\Console\Help;
+use Simtabi\ServerInfraWorkbench\Console\Output;
+use Simtabi\ServerInfraWorkbench\Console\ProviderFactory;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\StaticTokenProvider;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 /** CLI wiring for the provider areas: --dry-run, confirmation, --force, and one-time secrets kept off stdout. */
 final class ConsoleProvidersTest extends TestCase

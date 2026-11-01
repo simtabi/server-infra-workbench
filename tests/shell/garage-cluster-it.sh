@@ -3,7 +3,7 @@
 # Each "node" is its own ADDONS_DIR + compose project + port set on the Docker host's network namespace,
 # so this exercises: ADDON_NETWORK=host binding, GARAGE_REPLICATION=3, GARAGE_PEERS joins with a copied
 # secrets.env, staged layout applied by the third install, replication across nodes, a node down.
-# Not in `make ci` (Docker, ~2 min): run by `make it`. Names and ports follow VSW_IT_PREFIX (tests/shell/it-lib.sh).
+# Not in `make ci` (Docker, ~2 min): run by `make it`. Names and ports follow SIW_IT_PREFIX (tests/shell/it-lib.sh).
 # shellcheck disable=SC2015
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -11,7 +11,7 @@ cd "$(dirname "$0")/../.."
 . tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "garage-cluster-it skipped (no docker)"; exit 0; }
 A="$PWD/src/shell/addons/addon.sh"
-W="$(mktemp -d /tmp/vsw-gcl.XXXX)"; P="$(it_name -gcl)"; LAST="/tmp/$P-last"
+W="$(mktemp -d /tmp/siw-gcl.XXXX)"; P="$(it_name -gcl)"; LAST="/tmp/$P-last"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 cleanup() {
   it_purge "$P-n1-garage" "$P-n2-garage" "$P-n3-garage"

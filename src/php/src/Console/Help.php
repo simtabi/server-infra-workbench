@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console;
+namespace Simtabi\ServerInfraWorkbench\Console;
 
 final class Help
 {
@@ -12,8 +12,8 @@ final class Help
         Flags: --json  machine-readable output     --dry-run, -n  show the plan, send nothing
                --yes, -y  skip the prompt on writes --force  also required for destructive writes
                --verbose  log requests (redacted) to stderr
-               --quiet, -q  no progress on long waits (VSW_PROGRESS=auto|tty|plain|off, NO_COLOR)
-        Credentials: env vars or ~/.config/vps-server-workbench/credentials (chmod 600). See: workbench credentials
+               --quiet, -q  no progress on long waits (SIW_PROGRESS=auto|tty|plain|off, NO_COLOR)
+        Credentials: env vars or ~/.config/server-infra-workbench/credentials (chmod 600). See: workbench credentials
         TXT;
 
     public static function for(string $area): string
@@ -36,7 +36,7 @@ final class Help
                 workbench do alerts delete <uuid> --force       (destructive)
                 workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I|latest]
                         [--vpc UUID] [--tag T[,T]] [--backups] [--user-data FILE]   create a droplet (write; idempotent by name;
-                        image: --image, else VSW_DROPLET_IMAGE, else ubuntu-26-04-x64, the newest Ubuntu LTS;
+                        image: --image, else SIW_DROPLET_IMAGE, else ubuntu-26-04-x64, the newest Ubuntu LTS;
                         "latest" asks the API for the newest Ubuntu LTS)
                 workbench do firewalls                          cloud firewalls (WORLD-OPEN marks non-web ports open to all)
                 workbench do firewall-apply db|web --vpc VPC_ID|CIDR [--name N] [--ssh-from CIDR[,CIDR]]
@@ -179,7 +179,7 @@ final class Help
                 workbench keys server fix-perms --host user@host   (write)
 
                 Providers: digitalocean, vultr, hetzner, linode, scaleway, plus "extra_providers" from
-                --config FILE, $VSW_KEYS_CONFIG, $VPSKEYS_CONFIG or ~/.config/vps-server-workbench/keys.json.
+                --config FILE, $SIW_KEYS_CONFIG, $VPSKEYS_CONFIG or ~/.config/server-infra-workbench/keys.json.
                 The key file defaults to ~/.ssh/id_ed25519.pub; private keys are never read.
                 Server edits: the current session's key can't be removed; the last key, your own local keys,
                 or an unknown session key need --force; the file is backed up, written atomically, read back,
@@ -192,7 +192,7 @@ final class Help
                 Exit 0 when all pass, 1 when any fails. Use it after a deploy or from cron.
                 TXT.self::COMMON,
             default => <<<'TXT'
-                workbench — VPS and platform tooling (vps-server-workbench)
+                workbench — server infrastructure and platform tooling (server-infra-workbench)
 
                 Platform APIs (PHP core):
                   workbench do ...           DigitalOcean: droplets, volumes, VPCs, firewalls, DNS, Spaces keys, IPs, projects, alerts

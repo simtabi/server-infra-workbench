@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline tests for src/shell/net/wireguard.sh: two fake servers (VSW_WG_LOCAL dirs) and stub
+# Offline tests for src/shell/net/wireguard.sh: two fake servers (SIW_WG_LOCAL dirs) and stub
 # wg/ufw/systemctl/ip/curl; nothing touches this machine's network or /etc.
 # shellcheck disable=SC2015,SC2016  # `check && ok || fail`; stub bodies are literal shell
 set -euo pipefail
@@ -8,26 +8,26 @@ T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 pass=0
 ok()   { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
-stub() { printf '#!/bin/sh\necho "%s $* [${VSW_SYSROOT##*/}]" >> "%s/calls"\n%s\n' "$1" "$T" "${2:-}" > "$T/bin/$1"; chmod +x "$T/bin/$1"; }
+stub() { printf '#!/bin/sh\necho "%s $* [${SIW_SYSROOT##*/}]" >> "%s/calls"\n%s\n' "$1" "$T" "${2:-}" > "$T/bin/$1"; chmod +x "$T/bin/$1"; }
 mkdir -p "$T/bin"
 for c in systemctl apt-get docker ping; do stub "$c"; done
 stub ufw 'case "$1" in
-  status) cat "$VSW_SYSROOT/ufw.status" 2>/dev/null || true;;
-  allow) echo "$*" >> "$VSW_SYSROOT/ufw"
-    if [ "$2" = in ]; then echo "${12}/tcp on $4    ALLOW IN    $8" >> "$VSW_SYSROOT/ufw.status"
-    else echo "${9}/udp    ALLOW IN    $5    # vsw" >> "$VSW_SYSROOT/ufw.status"; fi;;
+  status) cat "$SIW_SYSROOT/ufw.status" 2>/dev/null || true;;
+  allow) echo "$*" >> "$SIW_SYSROOT/ufw"
+    if [ "$2" = in ]; then echo "${12}/tcp on $4    ALLOW IN    $8" >> "$SIW_SYSROOT/ufw.status"
+    else echo "${9}/udp    ALLOW IN    $5    # vsw" >> "$SIW_SYSROOT/ufw.status"; fi;;
 esac'
-stub ip 'echo "1.1.1.1 via 192.0.2.254 dev eth0 src $(cat "$VSW_SYSROOT/pubip") uid 0"'
-stub curl 'cat "$VSW_SYSROOT/region"'
+stub ip 'echo "1.1.1.1 via 192.0.2.254 dev eth0 src $(cat "$SIW_SYSROOT/pubip") uid 0"'
+stub curl 'cat "$SIW_SYSROOT/region"'
 stub wg 'case "$1" in
-  genkey) echo "PRIVATE-$(cat "$VSW_SYSROOT/pubip")-SECRET";;
+  genkey) echo "PRIVATE-$(cat "$SIW_SYSROOT/pubip")-SECRET";;
   pubkey) printf "%sA=\n" "$( (shasum -a 256 2>/dev/null || sha256sum) | cut -c1-42)";;
   show) [ "$3" = latest-handshakes ] && echo "KEY $(date +%s)"; [ "$3" = transfer ] && echo "KEY 10 20";;
 esac'
 fresh() { rm -rf "$T/srv" "$T/calls"; mkdir -p "$T/srv/db" "$T/srv/web"; : > "$T/calls"
   echo 203.0.113.10 > "$T/srv/db/pubip"; echo ams3 > "$T/srv/db/region"
   echo 198.51.100.20 > "$T/srv/web/pubip"; echo nyc1 > "$T/srv/web/region"; }
-export PATH="$T/bin:$PATH" VSW_WG_LOCAL="$T/srv" VSW_TTY="$T/tty" VSW_LOG_DIR="$T/log" VSW_LOCK_DIR="$T/lock"
+export PATH="$T/bin:$PATH" SIW_WG_LOCAL="$T/srv" SIW_TTY="$T/tty" SIW_LOG_DIR="$T/log" SIW_LOCK_DIR="$T/lock"
 G=src/shell/net/wireguard.sh
 : > "$T/tty"
 
@@ -67,6 +67,6 @@ bash "$G" setup --host db --peer db >/dev/null 2>&1 && fail "same host" || ok "s
 bash "$G" setup --host db --peer web --host-ip 10.200.0.1 --peer-ip 10.201.0.2 >/dev/null 2>&1 && fail "/24" || ok "tunnel IPs must share a /24"
 bash "$G" apply --self-ip 10.200.0.1 --peer-ip 10.200.0.2 --peer-endpoint 192.0.2.1 --peer-pubkey 'not-a-key' >/dev/null 2>&1 && fail "bad key" || ok "apply rejects a malformed public key"
 bash "$G" setup --host db --peer web --port 99999 >/dev/null 2>&1 && fail "port" || ok "validates --port"
-VSW_SYSROOT="$T/srv/db" bash "$G" remove --yes >/dev/null 2>&1; [ ! -f "$T/srv/db/etc/wireguard/wg0.conf" ] && ls "$T/srv/db/etc/wireguard/"wg0.conf.bak.* >/dev/null 2>&1 \
+SIW_SYSROOT="$T/srv/db" bash "$G" remove --yes >/dev/null 2>&1; [ ! -f "$T/srv/db/etc/wireguard/wg0.conf" ] && ls "$T/srv/db/etc/wireguard/"wg0.conf.bak.* >/dev/null 2>&1 \
   && ok "remove: disabled, config backed up" || fail "remove"
 echo "smoke-net: $pass passed, 0 failed"

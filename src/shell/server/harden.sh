@@ -63,7 +63,7 @@ while [ $# -gt 0 ]; do
     --root-login) ROOT_LOGIN="${2:?}"; shift 2 ;;
     --check) CHECK=1; DRY=1; shift ;;
     --dry-run|-n) DRY=1; shift ;;
-    --quiet|-q) export VSW_QUIET=1; shift ;;
+    --quiet|-q) export SIW_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -89,7 +89,7 @@ want() { local i="$1"
 
 # ---- desired state -----------------------------------------------------------
 ssh_conf() { cat <<CONF
-# Managed by vps-server-workbench harden.sh - edit there, not here.
+# Managed by server-infra-workbench harden.sh - edit there, not here.
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PubkeyAuthentication yes
@@ -104,9 +104,9 @@ ClientAliveCountMax 2
 CONF
 }
 auto_conf() { printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\nAPT::Periodic::AutocleanInterval "7";\n'; }
-f2b_conf() { printf '# Managed by vps-server-workbench harden.sh\n[sshd]\nenabled = true\nbackend = systemd\nmaxretry = 5\nfindtime = 10m\nbantime = 1h\n'; }
+f2b_conf() { printf '# Managed by server-infra-workbench harden.sh\n[sshd]\nenabled = true\nbackend = systemd\nmaxretry = 5\nfindtime = 10m\nbantime = 1h\n'; }
 sysctl_conf() { cat <<'CONF'
-# Managed by vps-server-workbench harden.sh
+# Managed by server-infra-workbench harden.sh
 net.ipv4.tcp_syncookies = 1
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
@@ -121,7 +121,7 @@ kernel.kptr_restrict = 2
 kernel.dmesg_restrict = 1
 CONF
 }
-journal_conf() { printf '# Managed by vps-server-workbench harden.sh\n[Journal]\nSystemMaxUse=500M\nMaxRetentionSec=1month\n'; }
+journal_conf() { printf '# Managed by server-infra-workbench harden.sh\n[Journal]\nSystemMaxUse=500M\nMaxRetentionSec=1month\n'; }
 
 F_SSH="$R/etc/ssh/sshd_config.d/10-workbench.conf"
 F_AUTO="$R/etc/apt/apt.conf.d/20auto-upgrades"

@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console\Commands;
+namespace Simtabi\ServerInfraWorkbench\Console\Commands;
 
-use Simtabi\VpsServerWorkbench\Console\Input;
-use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
-use Simtabi\VpsServerWorkbench\Console\Runner;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Ploi\Data\Daemon;
-use Simtabi\VpsServerWorkbench\Ploi\Data\Site;
-use Simtabi\VpsServerWorkbench\Ploi\ServerResource;
-use Simtabi\VpsServerWorkbench\Security\IssuedCredential;
-use Simtabi\VpsServerWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Console\Input;
+use Simtabi\ServerInfraWorkbench\Console\ProviderFactory;
+use Simtabi\ServerInfraWorkbench\Console\Runner;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Ploi\Data\Daemon;
+use Simtabi\ServerInfraWorkbench\Ploi\Data\Site;
+use Simtabi\ServerInfraWorkbench\Ploi\ServerResource;
+use Simtabi\ServerInfraWorkbench\Security\IssuedCredential;
+use Simtabi\ServerInfraWorkbench\Support\Item;
 
 /** `workbench ploi ...`: Ploi API v1. */
 final readonly class PloiCommand implements Command

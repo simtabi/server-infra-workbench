@@ -61,10 +61,10 @@ ls -1r /opt/db/backups | sudo /root/docker-db-server-manager.sh gfs-keep "daily=
 
 ```sh
 # on the DB server, as root
-install -d -m 700 /etc/vps-server-workbench
-openssl rand -base64 48 > /etc/vps-server-workbench/backup.key && chmod 600 /etc/vps-server-workbench/backup.key
+install -d -m 700 /etc/server-infra-workbench
+openssl rand -base64 48 > /etc/server-infra-workbench/backup.key && chmod 600 /etc/server-infra-workbench/backup.key
 # copy the key somewhere safe OFF this server (password manager); without it the off-site copies are useless
-(umask 077; cat > /etc/vps-server-workbench/offsite.env) <<'CREDS'
+(umask 077; cat > /etc/server-infra-workbench/offsite.env) <<'CREDS'
 OFFSITE_ACCESS_KEY=<spaces key scoped to the bucket>
 OFFSITE_SECRET_KEY=<secret>
 CREDS

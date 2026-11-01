@@ -3,9 +3,9 @@ requires = ["setuptools>=80"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vps-server-workbench"
+name = "server-infra-workbench"
 version = "0.1.0"
-description = "Python helpers for vps-server-workbench (small server checks; platform APIs live in the PHP core)."
+description = "Python helpers for server-infra-workbench (small server checks; platform APIs live in the PHP core)."
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Simtabi LLC", email = "opensource@simtabi.com" }]
@@ -13,7 +13,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
-workbench-py = "vps_server_workbench.cli:main"
+workbench-py = "server_infra_workbench.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

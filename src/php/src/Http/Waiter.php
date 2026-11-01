@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Http;
+namespace Simtabi\ServerInfraWorkbench\Http;
 
-use Simtabi\VpsServerWorkbench\Exception\TimeoutException;
+use Simtabi\ServerInfraWorkbench\Exception\TimeoutException;
 
 /**
  * Polls until a condition holds. Time is counted in slept intervals, so tests with a fake Sleeper are exact.

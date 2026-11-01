@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp\Auth;
+namespace Simtabi\ServerInfraWorkbench\Gcp\Auth;
 
-use Simtabi\VpsServerWorkbench\Exception\ApiException;
-use Simtabi\VpsServerWorkbench\Exception\AuthenticationException;
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
-use Simtabi\VpsServerWorkbench\Exception\TransportException;
-use Simtabi\VpsServerWorkbench\Http\ApiResponse;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Security\Redactor;
-use Simtabi\VpsServerWorkbench\Security\Secret;
-use Simtabi\VpsServerWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Exception\ApiException;
+use Simtabi\ServerInfraWorkbench\Exception\AuthenticationException;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Exception\TransportException;
+use Simtabi\ServerInfraWorkbench\Http\ApiResponse;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Security\Redactor;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Support\Data;
 
 /**
  * OAuth 2.0 for service accounts (RFC 7523 JWT bearer grant, RS256), one token per scope, cached

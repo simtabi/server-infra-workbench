@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Http;
+namespace Simtabi\ServerInfraWorkbench\Http;
 
 /**
  * Told about each poll of a long wait (a resize, a snapshot). A Sleeper may implement it too: Waiter

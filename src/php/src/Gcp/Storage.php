@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp;
+namespace Simtabi\ServerInfraWorkbench\Gcp;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\Endpoint;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\Endpoint;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Support\Item;
 
 /**
  * Cloud Storage buckets, created private by construction: uniform bucket-level access, public access

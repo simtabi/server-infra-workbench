@@ -20,3 +20,4 @@ reverse. Number them in order; never rewrite an accepted record, supersede it wi
 | [0011](0011-cross-region-connectivity.md) | Cross-region connectivity: same region first, then peering, then WireGuard | Accepted |
 | [0012](0012-monitoring-stack.md) | Monitoring: configurable self-hosted stacks, loopback UIs, textfile metrics | Accepted |
 | [0013](0013-dev-on-2gb-postgres-only.md) | Development and staging stay on 2 GB droplets with Postgres only | Accepted |
+| [0014](0014-rename-to-server-infra-workbench.md) | Rename to server-infra-workbench; frozen on-server identifiers; time-boxed fallbacks | Accepted |

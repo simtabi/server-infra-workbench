@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Security;
+namespace Simtabi\ServerInfraWorkbench\Security;
 
 use Psr\Log\AbstractLogger;
 use Psr\Log\LoggerInterface;

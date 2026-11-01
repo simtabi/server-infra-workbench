@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Integration;
+namespace Simtabi\ServerInfraWorkbench\Tests\Integration;
 
-use Simtabi\VpsServerWorkbench\Cloudflare\Cloudflare;
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
-use Simtabi\VpsServerWorkbench\Exception\ApiException;
-use Simtabi\VpsServerWorkbench\Exception\AuthenticationException;
-use Simtabi\VpsServerWorkbench\Exception\NotFoundException;
-use Simtabi\VpsServerWorkbench\Exception\TransportException;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\ServiceAccountTokenProvider;
-use Simtabi\VpsServerWorkbench\Gcp\Gcp;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Ploi\Ploi;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\LoopbackHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Cloudflare;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\Exception\ApiException;
+use Simtabi\ServerInfraWorkbench\Exception\AuthenticationException;
+use Simtabi\ServerInfraWorkbench\Exception\NotFoundException;
+use Simtabi\ServerInfraWorkbench\Exception\TransportException;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\ServiceAccountTokenProvider;
+use Simtabi\ServerInfraWorkbench\Gcp\Gcp;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Ploi\Ploi;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\LoopbackHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 /**
  * The four clients against a real HTTP server (php -S + tests/Fixtures/MockApi/router.php) through the
@@ -34,7 +34,7 @@ final class MockServerTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        self::$state = sys_get_temp_dir().'/vsw-mockapi-'.bin2hex(random_bytes(6));
+        self::$state = sys_get_temp_dir().'/siw-mockapi-'.bin2hex(random_bytes(6));
         mkdir(self::$state, 0o700, true);
         $sock = stream_socket_server('tcp://127.0.0.1:0');
         self::assertNotFalse($sock);
@@ -122,7 +122,7 @@ final class MockServerTest extends TestCase
         $req = $this->requests();
         self::assertCount(2, $req);
         self::assertSame('Bearer '.self::token(), $req[1]['auth']);
-        self::assertStringStartsWith('vps-server-workbench/', $req[1]['ua']);
+        self::assertStringStartsWith('server-infra-workbench/', $req[1]['ua']);
         self::assertSame('application/json', $req[1]['accept']);
     }
 

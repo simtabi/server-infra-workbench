@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp;
+namespace Simtabi\ServerInfraWorkbench\Gcp;
 
-use Simtabi\VpsServerWorkbench\Cloudflare\Data\DnsRecordType;
-use Simtabi\VpsServerWorkbench\Exception\NotFoundException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\Endpoint;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Support\Item;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Data\DnsRecordType;
+use Simtabi\ServerInfraWorkbench\Exception\NotFoundException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\Endpoint;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 /**
  * Cloud DNS v1: managed zones and record sets. Every write is one atomic Change (deletions then

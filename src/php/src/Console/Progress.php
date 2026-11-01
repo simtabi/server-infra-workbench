@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console;
+namespace Simtabi\ServerInfraWorkbench\Console;
 
-use Simtabi\VpsServerWorkbench\Security\Redactor;
+use Simtabi\ServerInfraWorkbench\Security\Redactor;
+use Simtabi\ServerInfraWorkbench\Support\Env;
 
 /**
  * Spinner, bar, ETA and elapsed time on stderr, so stdout (tables, --json) stays parseable.
  * Same switches as the shell tools (src/shell/lib/progress.sh):
- *   VSW_PROGRESS=auto|tty|plain|off (auto: animate on a terminal, plain lines otherwise), VSW_QUIET=1, NO_COLOR.
+ *   SIW_PROGRESS=auto|tty|plain|off (auto: animate on a terminal, plain lines otherwise), SIW_QUIET=1, NO_COLOR.
  */
 final class Progress
 {
@@ -41,11 +42,11 @@ final class Progress
     public static function detect($stream = null, ?array $env = null, ?bool $isTty = null): self
     {
         $stream ??= STDERR;
-        $env ??= getenv();
+        $env = Env::withFallbacks($env ?? getenv());
         $tty = $isTty ?? stream_isatty($stream);
         $mode = match (true) {
-            ($env['VSW_QUIET'] ?? '') === '1' => self::OFF,
-            in_array($env['VSW_PROGRESS'] ?? '', [self::TTY, self::PLAIN, self::OFF], true) => $env['VSW_PROGRESS'],
+            ($env['SIW_QUIET'] ?? '') === '1' => self::OFF,
+            in_array($env['SIW_PROGRESS'] ?? '', [self::TTY, self::PLAIN, self::OFF], true) => $env['SIW_PROGRESS'],
             $tty && ($env['TERM'] ?? 'dumb') !== 'dumb' => self::TTY,
             default => self::PLAIN,
         };

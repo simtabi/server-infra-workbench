@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
 use GuzzleHttp\Psr7\Response;
 use Psr\Http\Message\RequestInterface;
-use Simtabi\VpsServerWorkbench\Exception\ActionFailedException;
-use Simtabi\VpsServerWorkbench\Exception\AuthenticationException;
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\GoogleOAuth;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\ServiceAccountTokenProvider;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\StaticTokenProvider;
-use Simtabi\VpsServerWorkbench\Gcp\Data\InstanceStatus;
-use Simtabi\VpsServerWorkbench\Gcp\Gcp;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Exception\ActionFailedException;
+use Simtabi\ServerInfraWorkbench\Exception\AuthenticationException;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\GoogleOAuth;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\ServiceAccountTokenProvider;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\StaticTokenProvider;
+use Simtabi\ServerInfraWorkbench\Gcp\Data\InstanceStatus;
+use Simtabi\ServerInfraWorkbench\Gcp\Gcp;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class GcpTest extends TestCase
 {

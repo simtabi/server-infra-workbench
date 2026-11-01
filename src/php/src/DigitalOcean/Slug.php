@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\DigitalOcean;
+namespace Simtabi\ServerInfraWorkbench\DigitalOcean;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
 
 /** DigitalOcean slugs: regions (nyc3), sizes (s-2vcpu-4gb), images (ubuntu-26-04-x64). */
 final class Slug

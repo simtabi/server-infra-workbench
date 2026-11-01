@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp;
+namespace Simtabi\ServerInfraWorkbench\Gcp;
 
-use Simtabi\VpsServerWorkbench\Exception\ActionFailedException;
-use Simtabi\VpsServerWorkbench\Gcp\Data\Operation;
-use Simtabi\VpsServerWorkbench\Http\Sleeper;
-use Simtabi\VpsServerWorkbench\Http\Waiter;
+use Simtabi\ServerInfraWorkbench\Exception\ActionFailedException;
+use Simtabi\ServerInfraWorkbench\Gcp\Data\Operation;
+use Simtabi\ServerInfraWorkbench\Http\Sleeper;
+use Simtabi\ServerInfraWorkbench\Http\Waiter;
 
 final readonly class RunningOperation implements \JsonSerializable
 {

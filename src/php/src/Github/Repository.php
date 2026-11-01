@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Github;
+namespace Simtabi\ServerInfraWorkbench\Github;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
 
 /** owner/name, validated once so every path built from it is safe. */
 final readonly class Repository implements \Stringable

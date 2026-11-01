@@ -67,7 +67,7 @@ Exit 1 on an error, so it fits a deploy hook or cron.
   what this stack uses (`DB_SSLMODE`, `AWS_ENDPOINT` for Spaces/Garage, `GOTENBERG_URL`,
   `SESSION_SECURE_COOKIE`, `LOG_STACK=daily`).
 - [`config/credentials.env.example`](../../config/credentials.env.example): the workstation credentials file
-  for the platform commands (`~/.config/vps-server-workbench/credentials`, mode 600).
+  for the platform commands (`~/.config/server-infra-workbench/credentials`, mode 600).
 
 ## Add-on keys (`--addons`)
 

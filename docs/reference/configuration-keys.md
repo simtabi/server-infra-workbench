@@ -102,7 +102,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `MARIADB_ED25519` | `0` | 1 = new MariaDB users use ed25519 (PHP mysqlnd cannot) |
 | `MY_APP_HOST` | `%` | host part of MySQL/MariaDB app users (ports are VPC-only) |
 | `BINLOG_DAYS` | `7` | MySQL/MariaDB binlog retention on the server |
-| `STATE_DIR` | `/var/lib/vps-server-workbench/db` | status stamps for doctor/monitoring |
+| `STATE_DIR` | `/var/lib/server-infra-workbench/db` | status stamps for doctor/monitoring |
 | `DOCKER_GROUP_ALLOW` | (empty) | users allowed in the docker group; doctor warns about any other non-root member |
 
 ## monitoring
@@ -123,7 +123,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `PROTECTED_ENVS` | `stg prd` |  |
 | `PRD_LOCATION` | `local` | local \| droplet \| managed (prd not on this host) |
 | `ENV_MIGRATOR` | `0` | 1 = separate <app>_<env>_migrator for DDL |
-| `ENV_SECRETS_DIR` | `/etc/vps-server-workbench/secrets` |  |
+| `ENV_SECRETS_DIR` | `/etc/server-infra-workbench/secrets` |  |
 | `FRESH_BACKUP_MIN` | `15` | protected envs: destructive ops need a backup this fresh |
 | `TRASH_DAYS` | `7` | soft-dropped Postgres DBs are purged after this |
 | `DROPPED_DUMP_DAYS` | `30` | MySQL/MariaDB: dumps of dropped DBs kept this long |
@@ -150,8 +150,8 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `OFFSITE_BUCKET` | (empty) |  |
 | `OFFSITE_PREFIX` | `db/<hostname>` |  |
 | `OFFSITE_ENCRYPTION` | `openssl` | openssl (AES-256, key file) \| age (recipients file) |
-| `OFFSITE_KEY_FILE` | `/etc/vps-server-workbench/backup.key` | chmod 600 |
-| `OFFSITE_CREDS_FILE` | `/etc/vps-server-workbench/offsite.env` | chmod 600: OFFSITE_ACCESS_KEY / OFFSITE_SECRET_KEY |
+| `OFFSITE_KEY_FILE` | `/etc/server-infra-workbench/backup.key` | chmod 600 |
+| `OFFSITE_CREDS_FILE` | `/etc/server-infra-workbench/offsite.env` | chmod 600: OFFSITE_ACCESS_KEY / OFFSITE_SECRET_KEY |
 | `OFFSITE_TOOL` | `rclone` | rclone \| aws |
 | `OFFSITE_KEEP_DAYS` | `400` |  |
 | `BINLOG_SHIP_CRON` | `*/5 * * * *` |  |

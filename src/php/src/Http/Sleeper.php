@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Http;
+namespace Simtabi\ServerInfraWorkbench\Http;
 
 /** Injectable so tests never actually sleep. */
 interface Sleeper

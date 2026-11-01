@@ -18,7 +18,7 @@ pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq >/dev/null && apt-get install -y -qq openssh-server tzdata openssl >/dev/null
 mkdir -p /run/sshd /root/.ssh; echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTestsOnly it@test' > /root/.ssh/authorized_keys
-S=/w/src/shell; echo yes > /tmp/tty; export VSW_TTY=/tmp/tty
+S=/w/src/shell; echo yes > /tmp/tty; export SIW_TTY=/tmp/tty
 
 # init: plan, then apply (no swap in a container, harden runs as part of init)
 bash $S/server/init.sh --role base --swap 0 --dry-run > /tmp/o
@@ -31,7 +31,7 @@ sshd -t && T="$(sshd -T 2>/dev/null)" && grep -qx 'passwordauthentication no' <<
   && ok "init -> harden: real sshd -T shows keys only, root by key" \
   || { echo "--- sshd -t:"; sshd -t || true; echo "--- sshd -T (auth lines):"; sshd -T 2>&1 | grep -iE "passwordauth|permitroot|error|fatal|bad|unsupported" || true; ls -la /etc/ssh/sshd_config.d/ /etc/ssh/ | grep -E "key|conf"; fail "sshd -T"; }
 [ -f /etc/fail2ban/jail.d/workbench-sshd.local ] && dpkg -s fail2ban unattended-upgrades >/dev/null 2>&1 && ok "harden: fail2ban + unattended-upgrades installed for real" || fail "harden pkgs"
-grep -q 'tool=init .*outcome=succeeded' /var/log/vps-server-workbench/audit.log && grep -q 'tool=harden .*outcome=succeeded' /var/log/vps-server-workbench/audit.log && ok "audit: init and harden logged" || fail "audit"
+grep -q 'tool=init .*outcome=succeeded' /var/log/server-infra-workbench/audit.log && grep -q 'tool=harden .*outcome=succeeded' /var/log/server-infra-workbench/audit.log && ok "audit: init and harden logged" || fail "audit"
 bash $S/server/init.sh --role base --swap 0 --timezone Europe/London > /tmp/o 2>&1; grep -q 'nothing to change' /tmp/o && ok "init: rerun is a no-op" || { cat /tmp/o; fail "init rerun"; }
 bash $S/server/harden.sh --check >/dev/null && ok "harden --check: clean after init" || fail "harden check"
 
@@ -44,9 +44,9 @@ rm /etc/ssh/sshd_config.d/00-broken.conf; bash $S/server/harden.sh --only ssh --
 # inventory
 bash $S/server/inventory.sh --json > /tmp/inv.json; jq -e --arg v "Ubuntu $OS_VER" '.facts["os.name"] | startswith($v)' /tmp/inv.json >/dev/null \
   && jq -e '.facts["sec.ssh_dropin"] == "yes" and .facts["sec.fail2ban"] == "installed"' /tmp/inv.json >/dev/null && ok "inventory --json: real facts, valid JSON" || { cat /tmp/inv.json; fail "inventory"; }
-bash $S/server/inventory.sh --out /var/lib/vps-server-workbench/inventory >/dev/null; apt-get install -y -qq htop >/dev/null 2>&1 || true
-bash $S/server/inventory.sh --install-cron --yes >/dev/null && [ -f /etc/cron.d/vsw-inventory ] && /usr/local/lib/vps-server-workbench/server/inventory.sh --out /var/lib/vps-server-workbench/inventory >/dev/null \
-  && [ -f /var/lib/vps-server-workbench/inventory/inventory.md ] && ok "inventory: cron install, installed copy runs" || fail "inventory cron"
+bash $S/server/inventory.sh --out /var/lib/server-infra-workbench/inventory >/dev/null; apt-get install -y -qq htop >/dev/null 2>&1 || true
+bash $S/server/inventory.sh --install-cron --yes >/dev/null && [ -f /etc/cron.d/vsw-inventory ] && /usr/local/lib/server-infra-workbench/server/inventory.sh --out /var/lib/server-infra-workbench/inventory >/dev/null \
+  && [ -f /var/lib/server-infra-workbench/inventory/inventory.md ] && ok "inventory: cron install, installed copy runs" || fail "inventory cron"
 
 # update: plan only (an upgrade run would take minutes)
 bash $S/server/update.sh --dry-run > /tmp/o 2>&1 && grep -qE 'upgradable|up to date' /tmp/o && ok "update --dry-run: real apt plan" || { cat /tmp/o; fail "update plan"; }

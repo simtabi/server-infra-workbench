@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Security;
+namespace Simtabi\ServerInfraWorkbench\Security;
 
-use Simtabi\VpsServerWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Support\Item;
 
 /**
  * A credential a provider shows exactly once (a Spaces secret key). The public part is an Item that is

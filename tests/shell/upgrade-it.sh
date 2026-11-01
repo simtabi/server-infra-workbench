@@ -13,7 +13,7 @@ cd "$(dirname "$0")/../.."
 . tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "upgrade-it skipped (no docker)"; exit 0; }
 M="$PWD/src/shell/db/docker-db-server-manager.sh"
-W="$(mktemp -d /tmp/vsw-up.XXXX)"; D="$W/vswitdb"
+W="$(mktemp -d /tmp/siw-up.XXXX)"; D="$W/vswitdb"
 # the newest commit whose manager is 1.3.0 (override: OLD_REF=<commit>)
 if [ -z "${OLD_REF:-}" ]; then
   for c in $(git log --format=%h -- src/shell/db/docker-db-server-manager.sh); do
@@ -24,8 +24,8 @@ fi
 [ -n "$OLD_REF" ] || { echo "no 1.3.0 manager in history"; exit 1; }
 git show "$OLD_REF:src/shell/db/docker-db-server-manager.sh" > "$W/old.sh"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
-# outputs of a failed run are kept in /tmp/vsw-it-last (no secrets: passwords are never printed)
-cleanup() { rm -rf /tmp/vsw-it-last; mkdir -p /tmp/vsw-it-last; cp "$W"/*.out "$DBM_LOG" /tmp/vsw-it-last/ 2>/dev/null || true
+# outputs of a failed run are kept in /tmp/siw-it-last (no secrets: passwords are never printed)
+cleanup() { rm -rf /tmp/siw-it-last; mkdir -p /tmp/siw-it-last; cp "$W"/*.out "$DBM_LOG" /tmp/siw-it-last/ 2>/dev/null || true
   [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true
   docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true; it_purge vswitdb; rm -rf "$W"; }
 trap cleanup EXIT

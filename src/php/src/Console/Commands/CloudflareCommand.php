@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console\Commands;
+namespace Simtabi\ServerInfraWorkbench\Console\Commands;
 
-use Simtabi\VpsServerWorkbench\Cloudflare\Cloudflare;
-use Simtabi\VpsServerWorkbench\Cloudflare\Data\DnsRecord;
-use Simtabi\VpsServerWorkbench\Console\Input;
-use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
-use Simtabi\VpsServerWorkbench\Console\Runner;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Security\IssuedCredential;
-use Simtabi\VpsServerWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Cloudflare;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Data\DnsRecord;
+use Simtabi\ServerInfraWorkbench\Console\Input;
+use Simtabi\ServerInfraWorkbench\Console\ProviderFactory;
+use Simtabi\ServerInfraWorkbench\Console\Runner;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Security\IssuedCredential;
+use Simtabi\ServerInfraWorkbench\Support\Item;
 
 /** `workbench cf ...`: Cloudflare API v4. */
 final readonly class CloudflareCommand implements Command

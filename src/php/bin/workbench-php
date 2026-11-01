@@ -3,7 +3,7 @@
 
 declare(strict_types=1);
 
-use Simtabi\VpsServerWorkbench\Console\Application;
+use Simtabi\ServerInfraWorkbench\Console\Application;
 
 if (PHP_VERSION_ID < 80400) {
     fwrite(STDERR, 'workbench: PHP 8.4 or newer is required, this is ' . PHP_VERSION . "\n");

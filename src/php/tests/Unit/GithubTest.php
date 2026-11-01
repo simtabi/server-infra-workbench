@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Github\Github;
-use Simtabi\VpsServerWorkbench\Github\GithubPaginator;
-use Simtabi\VpsServerWorkbench\Github\Repository;
-use Simtabi\VpsServerWorkbench\Github\Secrets;
-use Simtabi\VpsServerWorkbench\Security\Secret;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Github\Github;
+use Simtabi\ServerInfraWorkbench\Github\GithubPaginator;
+use Simtabi\ServerInfraWorkbench\Github\Repository;
+use Simtabi\ServerInfraWorkbench\Github\Secrets;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 /** GitHub REST: headers, Link pagination, libsodium secrets, deploy keys, workflows, releases. No network. */
 final class GithubTest extends TestCase

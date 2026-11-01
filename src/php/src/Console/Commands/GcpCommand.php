@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console\Commands;
+namespace Simtabi\ServerInfraWorkbench\Console\Commands;
 
-use Simtabi\VpsServerWorkbench\Console\Input;
-use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
-use Simtabi\VpsServerWorkbench\Console\Runner;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Gcp\Gcp;
-use Simtabi\VpsServerWorkbench\Gcp\RunningOperation;
-use Simtabi\VpsServerWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Console\Input;
+use Simtabi\ServerInfraWorkbench\Console\ProviderFactory;
+use Simtabi\ServerInfraWorkbench\Console\Runner;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Gcp\Gcp;
+use Simtabi\ServerInfraWorkbench\Gcp\RunningOperation;
+use Simtabi\ServerInfraWorkbench\Support\Item;
 
 /** `workbench gcp ...`: Compute Engine, Cloud DNS and Cloud Storage. */
 final readonly class GcpCommand implements Command

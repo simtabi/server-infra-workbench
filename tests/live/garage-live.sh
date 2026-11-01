@@ -22,7 +22,7 @@ live_args "$@"
 live_begin garage 3
 out() { echo "$LIVE_W/$1.out"; }
 NODES="n1 n2 n3"
-A=/opt/vsw/src/shell/addons/addon.sh
+A=/opt/siw/src/shell/addons/addon.sh
 node() { local n="$1"; shift; live_ssh "$n" "ADDON_CONF=/etc/vsw-addons.conf $A $*"; }
 gx() { live_ssh "$1" "docker exec -e RUST_LOG=warn \$(docker ps -q --filter label=com.docker.compose.service=garage | head -1) /garage ${*:2}"; }
 
@@ -37,11 +37,11 @@ rc=0; for p in $pids; do wait "$p" || rc=1; done
 [ "$rc" = 0 ] && live_ok "init.sh --host --only swap,docker on 3 nodes in parallel" || { for n in $NODES; do tail -15 "$(out "init-$n")"; done; live_fail "init"; }
 
 # ---- 2. the add-on tool + its stacks on every node; a conf per node -------------------------
-COPYFILE_DISABLE=1 tar --no-xattrs -czf "$LIVE_W/vsw.tgz" src/shell/addons src/shell/lib stacks/addons
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "$LIVE_W/siw.tgz" src/shell/addons src/shell/lib stacks/addons
 for n in $NODES; do
   ip="$(live_private_ip "$n")"; z="dc${n#n}"
-  scp -q "$LIVE_W/vsw.tgz" "$n:/root/vsw.tgz"
-  live_ssh "$n" "mkdir -p /opt/vsw && tar -C /opt/vsw -xzf /root/vsw.tgz && rm -f /root/vsw.tgz
+  scp -q "$LIVE_W/siw.tgz" "$n:/root/siw.tgz"
+  live_ssh "$n" "mkdir -p /opt/siw && tar -C /opt/siw -xzf /root/siw.tgz && rm -f /root/siw.tgz
     umask 077; printf 'ADDON_BIND=%s\nADDON_NETWORK=host\nGARAGE_ZONE=%s\nGARAGE_CAPACITY=1G\nGARAGE_REPLICATION=3\nSTORAGE_BUCKET=cluster\n' '$ip' '$z' > /etc/vsw-addons.conf"
 done
 live_ok "addon.sh + stacks/addons copied; ADDON_BIND = each node's VPC address, one zone per node"
@@ -54,7 +54,7 @@ live_ssh n2 "printf 'GARAGE_PEERS=%s\n' '$id1' >> /etc/vsw-addons.conf"
 if node n2 install garage --role db --yes > "$(out n2a)" 2>&1; then live_fail "n2 joined without the cluster secrets"; fi
 grep -q 'copy secrets.env' "$(out n2a)" && live_ok "n2: joining without the cluster's secrets.env is refused" || { cat "$(out n2a)"; live_fail "join gate"; }
 for n in n2 n3; do   # secrets.env: node to node through this machine's pipe, never printed or stored here
-  live_ssh n1 'cat /opt/vsw-addons/garage/secrets.env' | live_ssh "$n" 'umask 077; mkdir -p /opt/vsw-addons/garage && cat > /opt/vsw-addons/garage/secrets.env'
+  live_ssh n1 'cat /opt/siw-addons/garage/secrets.env' | live_ssh "$n" 'umask 077; mkdir -p /opt/siw-addons/garage && cat > /opt/siw-addons/garage/secrets.env'
 done
 node n2 install garage --role db --yes > "$(out n2)" 2>&1 && grep -q 'layout staged' "$(out n2)" && live_ok "n2: joined n1 over the VPC (2 of 3)" || { tail -30 "$(out n2)"; live_fail "n2 install"; }
 id2="$(node n2 garage-node-id)"
@@ -100,7 +100,7 @@ node n1 doctor garage > "$(out doc)" 2>&1 && grep -q 'healthy nodes: 3 (replicat
   && live_ok "doctor on n1: 3 healthy nodes" || { cat "$(out doc)"; live_fail "doctor"; }
 
 # ---- 6. no secret in any output -----------------------------------------------------------------------
-live_ssh n1 "sed -n 's/^[A-Z_]*=//p' /opt/vsw-addons/garage/secrets.env /root/app.env" > "$LIVE_W/secrets.txt"; chmod 600 "$LIVE_W/secrets.txt"
+live_ssh n1 "sed -n 's/^[A-Z_]*=//p' /opt/siw-addons/garage/secrets.env /root/app.env" > "$LIVE_W/secrets.txt"; chmod 600 "$LIVE_W/secrets.txt"
 leak=0; while IFS= read -r v; do [ "${#v}" -ge 12 ] || continue; cat "$LIVE_W"/*.out | grep -qF -- "$v" && leak=1; done < "$LIVE_W/secrets.txt"
 rm -f "$LIVE_W/secrets.txt"
 [ "$leak" = 0 ] && live_ok "no cluster secret in any output" || live_fail "secret printed"

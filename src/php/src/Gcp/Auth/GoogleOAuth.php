@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp\Auth;
+namespace Simtabi\ServerInfraWorkbench\Gcp\Auth;
 
 use Psr\Http\Message\RequestInterface;
-use Simtabi\VpsServerWorkbench\Http\Authenticator;
+use Simtabi\ServerInfraWorkbench\Http\Authenticator;
 
 /**
  * Least privilege: each API gets its own scopes, and reads ask for the read-only one. A key that is only

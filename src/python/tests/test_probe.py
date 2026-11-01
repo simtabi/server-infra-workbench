@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
-from vps_server_workbench.cli import main
-from vps_server_workbench.probe import tcp_probe, validate
+from server_infra_workbench.cli import main
+from server_infra_workbench.probe import tcp_probe, validate
 
 
 class ProbeTest(unittest.TestCase):

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Http;
+namespace Simtabi\ServerInfraWorkbench\Http;
 
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Support\Data;
-use Simtabi\VpsServerWorkbench\Support\Item;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 /**
  * One REST collection (list / get / create / update / delete) described once: where it lives, how pages

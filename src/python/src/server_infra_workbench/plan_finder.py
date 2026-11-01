@@ -8,7 +8,7 @@ in; only plan/region pairs that both agree on are returned.
 
 Use it as a library, with a fluent interface:
 
-    from vps_server_workbench.plan_finder import PloiDoPlanFinder
+    from server_infra_workbench.plan_finder import PloiDoPlanFinder
 
     print(
         PloiDoPlanFinder()
@@ -25,7 +25,7 @@ Or from the command line. Every setting can come from a .env file, an
 environment variable, or a --flag (flags win over env, env wins over .env).
 Template: config/ploi-do-plan-finder.env.example (copy it outside the repo):
 
-    bin/workbench plans --env-file ~/.config/vps-server-workbench/plans.env \
+    bin/workbench plans --env-file ~/.config/server-infra-workbench/plans.env \
         --regions atl1,nyc3 --min-memory-mb 2048 --output-format markdown
 """
 
@@ -42,7 +42,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
 
-from vps_server_workbench.progress import Progress
+from server_infra_workbench.progress import Progress
 
 
 class PlanFinderError(Exception):

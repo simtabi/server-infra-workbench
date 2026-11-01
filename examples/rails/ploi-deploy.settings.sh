@@ -13,9 +13,9 @@ BUILD_CMDS='bundle config set --local deployment true
 bundle config set --local without "development test"
 bundle install --jobs 4 --quiet
 RAILS_ENV=production SECRET_KEY_BASE_DUMMY=1 bin/rails assets:precompile'
-FIRST_INSTALL_CMD='/usr/local/bin/vsw-with-env .env bin/rails db:prepare'
+FIRST_INSTALL_CMD='/usr/local/bin/siw-with-env .env bin/rails db:prepare'
 INSTALL_ENV_KEYS=""
-MIGRATE_CMD='/usr/local/bin/vsw-with-env .env bin/rails db:migrate'
+MIGRATE_CMD='/usr/local/bin/siw-with-env .env bin/rails db:migrate'
 EXTRA_MIGRATE_CMDS=""
 POST_DEPLOY_CMDS=""                   # restarts go in Ploi's post-deploy section (post-deploy.sh)
 HEALTHCHECK_CMD='curl -fsS -o /dev/null https://shop.example.com/up'

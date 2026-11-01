@@ -103,8 +103,8 @@ Every port is bound to the private IP, so none of them is reachable from the pub
 /opt/db/postgres/Dockerfile
 /opt/db/postgres/init/10-extensions.sql
 /opt/db/backups/<YYYYmmdd-HHMMSS>/{postgres,mysql,mariadb}.sql.gz, grants-*.sql.gz, manifest.txt, SHA256SUMS
-/etc/vps-server-workbench/secrets/<env>.env   per-environment passwords (chmod 600, with APP set)
-/var/lib/vps-server-workbench/db/            status stamps (last backup, restore test, off-site) for doctor
+/etc/server-infra-workbench/secrets/<env>.env   per-environment passwords (chmod 600, with APP set)
+/var/lib/server-infra-workbench/db/            status stamps (last backup, restore test, off-site) for doctor
 Docker volumes: db_pg_data, db_mysql_data, db_mariadb_data
 ```
 Every run of `install` and `reset` rewrites these files from the script, so make changes in the script rather than in the files.

@@ -108,7 +108,7 @@ documentation IP ranges.
 | Lesson | Rule now |
 |---|---|
 | Plans before changes | every tool prints a plan and has `--dry-run`; destructive steps need a typed word; protected envs need `--force-prod` |
-| Writes are audited | `/var/log/vps-server-workbench/audit.log` and syslog, with fingerprints and names, never secrets |
+| Writes are audited | `/var/log/server-infra-workbench/audit.log` and syslog, with fingerprints and names, never secrets |
 | Client data doesn't belong in a shared repo | client notes live in gitignored `local/<client>/`; `make client-check` and a secret scan run before every push |
 | Pin versions, upgrade on purpose | images and packages are pinned; `upgrade --dry-run` shows the diff first |
 
@@ -135,6 +135,6 @@ documentation IP ranges.
 | Some things only a real cloud proves | Spaces host-style URLs and its public CA, `--host` over real ssh, swap and Docker on a real kernel, Garage across real hosts were "not container-tested" for three phases | opt-in live tests on throwaway DigitalOcean resources ([live tests](live-tests.md)): dry run by default, cost guard, trap teardown, verified cleanup, never in CI |
 | A region's first VPC can never be deleted | the first VPC in a region becomes its default; a test that made its own VPC there would leave one behind for good | the live tests refuse a region without a VPC unless `--create-default-vpc` makes `default-<region>` first |
 | doctl reports API errors on stdout | with `-o json`, a 422 ("tag does not exist") went into the parsed output and `set -e` ended the test without a word; the firewall also needs its tags to exist before any droplet has them | `live_create` shows the API's reason; the tags are created first; the API omits `"default": false`, so absent means false |
-| A second signal cut the teardown short | interrupting a live run killed its teardown too and left three droplets running until `sweep.sh` | teardown ignores INT/TERM/HUP; the watchdog's `sleep` dies with it; `make live-sweep` finds anything named `vswlt-*` |
+| A second signal cut the teardown short | interrupting a live run killed its teardown too and left three droplets running until `sweep.sh` | teardown ignores INT/TERM/HUP; the watchdog's `sleep` dies with it; `make live-sweep` finds anything named `siwlt-*` |
 | Deleting the last Spaces bucket is how Spaces is turned off | there is no cancel call in the API or doctl; the $5/month subscription starts with the first bucket and ends with the last | the Spaces test deletes its bucket, waits for the bucket list to drop it, and reports the count; `sweep.sh --buckets` checks every region |
 | A MySQL-only install was refused | `validate_config` checked Postgres extensions against the base image even with `ENABLE_POSTGRES=0` | the check runs only when Postgres is on |

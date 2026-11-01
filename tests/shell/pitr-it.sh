@@ -11,9 +11,9 @@ cd "$(dirname "$0")/../.."
 . tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "pitr-it skipped (no docker)"; exit 0; }
 M="$PWD/src/shell/db/docker-db-server-manager.sh"
-W="$(mktemp -d /tmp/vsw-pitr.XXXX)"; D="$W/vswpitr"
+W="$(mktemp -d /tmp/siw-pitr.XXXX)"; D="$W/vswpitr"
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
-cleanup() { rm -rf /tmp/vsw-pitr-last; mkdir -p /tmp/vsw-pitr-last; cp "$W"/*.out "$DBM_LOG" /tmp/vsw-pitr-last/ 2>/dev/null || true
+cleanup() { rm -rf /tmp/siw-pitr-last; mkdir -p /tmp/siw-pitr-last; cp "$W"/*.out "$DBM_LOG" /tmp/siw-pitr-last/ 2>/dev/null || true
   [ -d "$D" ] && (cd "$D" && docker compose --env-file .env --env-file stack.env down -v --remove-orphans >/dev/null 2>&1) || true
   docker ps -aq --filter name=vsw-rt- | xargs -r docker rm -f >/dev/null 2>&1 || true; it_purge vswpitr; rm -rf "$W"; }
 trap cleanup EXIT

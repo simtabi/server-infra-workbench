@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Github;
+namespace Simtabi\ServerInfraWorkbench\Github;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\Endpoint;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Support\Data;
-use Simtabi\VpsServerWorkbench\Support\Item;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\Endpoint;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 /**
  * Deploy keys: an SSH key that can pull (and, only if asked, push) ONE repository. The usual way for a

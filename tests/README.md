@@ -10,7 +10,7 @@ No test calls a real API or a real server, except the opt-in live tests in [`liv
 | [`shell/smoke-db.sh`](shell/smoke-db.sh) | DB manager functions (env-init, privileges, engines) | `make test` |
 | [`shell/smoke-addons.sh`](shell/smoke-addons.sh) | add-on planner and validation | `make test` |
 | [`shell/smoke-net.sh`](shell/smoke-net.sh) | `net wireguard` setup/status/remove on two fake roots with stub `wg`/`ufw`/`systemctl` | `make test` |
-| [`shell/smoke-server.sh`](shell/smoke-server.sh) | server init/harden/update/inventory, web diagnose, env init/check, ssh fixkeys against a fake root (`VSW_SYSROOT`) + stubs | `make test` |
+| [`shell/smoke-server.sh`](shell/smoke-server.sh) | server init/harden/update/inventory, web diagnose, env init/check, ssh fixkeys against a fake root (`SIW_SYSROOT`) + stubs | `make test` |
 | [`shell/client-check.sh`](shell/client-check.sh) | no client name, IP or domain in tracked files or commit messages | `make client-check` |
 | [`shell/upgrade-it.sh`](shell/upgrade-it.sh) | the DB manager on real containers (docker) | `make it` |
 | [`shell/addons-it.sh`](shell/addons-it.sh) | add-ons on real containers (docker) | `make it` |
@@ -47,13 +47,13 @@ ports, and the default leak guard removes every new `vsw*` object, including the
 own prefix:
 
 ```bash
-VSW_IT_PREFIX=vswa ONLY=addons-it,garage-cluster-it make it
-VSW_IT_PREFIX=vswb VSW_IT_PORT_OFFSET=18000 ONLY=garage-cluster-it make it
+SIW_IT_PREFIX=vswa ONLY=addons-it,garage-cluster-it make it
+SIW_IT_PREFIX=vswb SIW_IT_PORT_OFFSET=18000 ONLY=garage-cluster-it make it
 ```
 
-- `it_name SUFFIX` gives `<prefix>SUFFIX`, `it_port BASE` gives `BASE + VSW_IT_PORT_OFFSET`. The default
+- `it_name SUFFIX` gives `<prefix>SUFFIX`, `it_port BASE` gives `BASE + SIW_IT_PORT_OFFSET`. The default
   prefix `vsw` keeps the historic names and offset 0. Another prefix gets -10000, 11000 or 18000 from a hash
-  of the prefix; set `VSW_IT_PORT_OFFSET` yourself when two prefixes hash alike. The suites' ports span less
+  of the prefix; set `SIW_IT_PORT_OFFSET` yourself when two prefixes hash alike. The suites' ports span less
   than 7000, so different offsets never overlap, and none lands in 30000-32767 (Kubernetes NodePorts on
   Docker Desktop). `addons-it` checks its published ports are free first (`it_ports_free`): a desktop app on
   127.0.0.1:30000 once answered its Gotenberg checks.

@@ -13,7 +13,7 @@ BUILD_CMDS='python3 -m venv .venv
 .venv/bin/pip install --quiet -r requirements.txt'
 FIRST_INSTALL_CMD=""
 INSTALL_ENV_KEYS=""
-MIGRATE_CMD='/usr/local/bin/vsw-with-env .env .venv/bin/alembic upgrade head'
+MIGRATE_CMD='/usr/local/bin/siw-with-env .env .venv/bin/alembic upgrade head'
 EXTRA_MIGRATE_CMDS=""
 POST_DEPLOY_CMDS=""                   # restarts go in Ploi's post-deploy section (post-deploy.sh)
 HEALTHCHECK_CMD='curl -fsS -o /dev/null https://api.example.com/healthz'

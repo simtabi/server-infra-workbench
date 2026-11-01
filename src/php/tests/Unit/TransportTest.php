@@ -2,23 +2,23 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Psr\Http\Client\NetworkExceptionInterface;
 use Psr\Http\Message\RequestInterface;
-use Simtabi\VpsServerWorkbench\Exception\ApiValidationException;
-use Simtabi\VpsServerWorkbench\Exception\AuthenticationException;
-use Simtabi\VpsServerWorkbench\Exception\NotFoundException;
-use Simtabi\VpsServerWorkbench\Exception\RateLimitException;
-use Simtabi\VpsServerWorkbench\Exception\TransportException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\BearerToken;
-use Simtabi\VpsServerWorkbench\Http\RetryPolicy;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Security\Secret;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Exception\ApiValidationException;
+use Simtabi\ServerInfraWorkbench\Exception\AuthenticationException;
+use Simtabi\ServerInfraWorkbench\Exception\NotFoundException;
+use Simtabi\ServerInfraWorkbench\Exception\RateLimitException;
+use Simtabi\ServerInfraWorkbench\Exception\TransportException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\BearerToken;
+use Simtabi\ServerInfraWorkbench\Http\RetryPolicy;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class TransportTest extends TestCase
 {
@@ -46,7 +46,7 @@ final class TransportTest extends TestCase
         self::assertSame(['ok' => true], $response->json);
         self::assertSame('Bearer '.self::tok(), $request->getHeaderLine('Authorization'));
         self::assertSame('application/json', $request->getHeaderLine('Accept'));
-        self::assertStringStartsWith('vps-server-workbench/', $request->getHeaderLine('User-Agent'));
+        self::assertStringStartsWith('server-infra-workbench/', $request->getHeaderLine('User-Agent'));
         self::assertSame('https://api.example.test/v1/things?page=2&flag=true', (string) $request->getUri());
     }
 
@@ -74,7 +74,7 @@ final class TransportTest extends TestCase
         try {
             $this->transport()->send('POST', '/x', [], []);
             self::fail('expected exception');
-        } catch (\Simtabi\VpsServerWorkbench\Exception\ApiException $e) {
+        } catch (\Simtabi\ServerInfraWorkbench\Exception\ApiException $e) {
             self::assertSame(500, $e->status);
             self::assertStringContainsString('boom', $e->getMessage());
         }

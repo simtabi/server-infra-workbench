@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Cloudflare\Cloudflare;
-use Simtabi\VpsServerWorkbench\Cloudflare\OriginCertificates;
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\StaticTokenProvider;
-use Simtabi\VpsServerWorkbench\Gcp\Gcp;
-use Simtabi\VpsServerWorkbench\Ploi\Crontabs;
-use Simtabi\VpsServerWorkbench\Ploi\Ploi;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Security\IssuedCredential;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Cloudflare;
+use Simtabi\ServerInfraWorkbench\Cloudflare\OriginCertificates;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\StaticTokenProvider;
+use Simtabi\ServerInfraWorkbench\Gcp\Gcp;
+use Simtabi\ServerInfraWorkbench\Ploi\Crontabs;
+use Simtabi\ServerInfraWorkbench\Ploi\Ploi;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Security\IssuedCredential;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 /** The resources added in the provider audit: safety rules, request shapes and one-time secrets. No network. */
 final class ProviderResourcesTest extends TestCase

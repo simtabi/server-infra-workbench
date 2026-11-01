@@ -16,7 +16,7 @@ Made up: API `api.example.com` on Ploi web droplet `web-01` (`10.0.0.6`), Postgr
   only in the 600 pgpass file from [`app-env.sh`](../_shared/app-env.sh). It is never in the unit, `ps` output or
   a `DATABASE_URL`. `EnvironmentFile=` loads the rest of the shared `.env`.
 - **Graceful stop.** `srv.Shutdown` finishes in-flight requests on SIGTERM. After a deploy,
-  [`vsw-reload-daemon`](../_shared/reload-daemon.sh) sends TERM as `ploi` and systemd starts the new binary.
+  [`siw-reload-daemon`](../_shared/reload-daemon.sh) sends TERM as `ploi` and systemd starts the new binary.
   `ploi` needs no sudo rule.
 - **Build on the server, per release.** `CGO_ENABLED=0 go build -trimpath` gives a static binary, and the old
   release keeps running until Ploi switches. To build in CI instead, have `BUILD_CMDS` download the artifact.
@@ -27,7 +27,7 @@ bin/workbench configure --profile dev-budget --client <you> --set APP=api \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env   # DB server; copy to web, remove
 # web server: shared helpers once (examples/_shared/README.md), then as ploi:
-vsw-app-env --stack go --from ~/stg-db.env --out /home/ploi/api.example.com-shared
+siw-app-env --stack go --from ~/stg-db.env --out /home/ploi/api.example.com-shared
 shred -u ~/stg-db.env
 # first deploy in Ploi (builds bin/api), then as root:
 install -m 644 api-example.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now api-example

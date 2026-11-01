@@ -37,7 +37,7 @@ All take `--json`; writes take `--dry-run`, `--yes`; destructive writes need `--
   `bin/workbench ploi cron-create <server-id> --command "php /home/ploi/app.example.com/artisan schedule:run" --frequency "* * * * *" --user ploi`,
   `bin/workbench ploi cron-delete <server-id> <cron-id> --force`
 - `bin/workbench ploi databases <server-id>`
-- `bin/workbench ploi database-create <server-id> app --user app --out ~/.config/vps-server-workbench/app-db.pass --site <site-id>`
+- `bin/workbench ploi database-create <server-id> app --user app --out ~/.config/server-infra-workbench/app-db.pass --site <site-id>`
   generates the password locally, writes it to the file (mode 600) and shows it as `***` in the plan; without
   `--user` only the database is created.
 - `bin/workbench ploi database-delete <server-id> <database-id> --force`

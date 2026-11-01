@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Support;
+namespace Simtabi\ServerInfraWorkbench\Support;
 
 /**
  * A provider resource reduced to the fields the workbench shows. Used for the long tail of resources

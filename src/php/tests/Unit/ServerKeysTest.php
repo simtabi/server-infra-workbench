@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Exception\ConfirmationRequiredException;
-use Simtabi\VpsServerWorkbench\Exception\TransportException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Keys\ServerKeys;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\FakeKeys;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\FakeSshRunner;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Exception\ConfirmationRequiredException;
+use Simtabi\ServerInfraWorkbench\Exception\TransportException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Keys\ServerKeys;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\FakeKeys;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\FakeSshRunner;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class ServerKeysTest extends TestCase
 {

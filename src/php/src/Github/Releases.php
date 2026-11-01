@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Github;
+namespace Simtabi\ServerInfraWorkbench\Github;
 
-use Simtabi\VpsServerWorkbench\Exception\NotFoundException;
-use Simtabi\VpsServerWorkbench\Http\Endpoint;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Support\Item;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Exception\NotFoundException;
+use Simtabi\ServerInfraWorkbench\Http\Endpoint;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 /** Releases (and the tags they create). */
 final readonly class Releases

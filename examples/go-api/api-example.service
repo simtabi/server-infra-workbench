@@ -1,6 +1,6 @@
 # /etc/systemd/system/api-example.service - the Go API. Install as root:
 #   install -m 644 api-example.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now api-example
-# Restart=always: vsw-reload-daemon (Ploi's post-deploy section) sends TERM, systemd starts the new binary.
+# Restart=always: siw-reload-daemon (Ploi's post-deploy section) sends TERM, systemd starts the new binary.
 [Unit]
 Description=api.example.com (Go API)
 After=network-online.target

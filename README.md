@@ -1,13 +1,17 @@
-# simtabi/vps-server-workbench
+# simtabi/server-infra-workbench
 
-[![CI](https://img.shields.io/github/actions/workflow/status/simtabi/vps-server-workbench/ci.yml?branch=main&label=ci)](https://github.com/simtabi/vps-server-workbench/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/simtabi/server-infra-workbench/ci.yml?branch=main&label=ci)](https://github.com/simtabi/server-infra-workbench/actions/workflows/ci.yml)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4.svg)](src/php/composer.json)
 [![PHPStan](https://img.shields.io/badge/phpstan-level%20max-brightgreen.svg)](src/php/phpstan.neon)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> Tools and runbooks for hosting PHP (Laravel or not) apps on DigitalOcean droplets managed with Ploi: a
-> dedicated Docker database server on the private VPC, a Ploi web server, zero-downtime deploys, daemons,
-> SSH access, and typed API clients for DigitalOcean, Cloudflare, Ploi and Google Compute Engine.
+> Tools and runbooks for running web apps (PHP/Laravel, Python, Ruby, Node, Go) on cloud servers managed
+> with Ploi: a dedicated Docker database server on the private network, Ploi web servers, zero-downtime
+> deploys, daemons, backups with point-in-time restore, monitoring, cross-region WireGuard, SSH access, and
+> typed API clients for DigitalOcean, Cloudflare, Google Cloud, GitHub and Ploi.
+
+Formerly `vps-server-workbench` (old URLs redirect; `VSW_*` settings still work):
+see [ADR 0014](docs/adr/0014-rename-to-server-infra-workbench.md).
 
 Server tooling is plain Bash plus docker compose; platform automation is a small PHP 8.4 library with a CLI.
 Every name, path, IP, port and image version is a parameter with a default; project-specific values live
@@ -16,7 +20,7 @@ only in [`examples/`](examples).
 ## Install
 
 ```bash
-git clone <your remote or path> vps-server-workbench && cd vps-server-workbench
+git clone <your remote or path> server-infra-workbench && cd server-infra-workbench
 composer install --working-dir=src/php        # only needed for the platform APIs (PHP 8.4+)
 bin/workbench list                        # every tool and where it lives
 ```
@@ -57,7 +61,7 @@ bin/workbench gcp firewalls --project my-project                  # flags rules 
 ```
 
 ```php
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
 
 $action = DigitalOcean::make()->droplets()->snapshot(123456, 'db-pre-upgrade'); // nothing sent yet
 $action->plan();                 // dry run

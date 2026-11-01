@@ -41,7 +41,7 @@ All take `--json`; writes take `--dry-run`, `--yes`; destructive writes need `--
 
 - `bin/workbench do droplets --tag db` and `bin/workbench do droplet <id>`
 - `bin/workbench do droplet-create <name> --region nyc3 --size s-2vcpu-4gb --ssh-keys <key-id> --vpc <vpc-uuid> --tag db`
-  (idempotent by name; image from `--image`, `VSW_DROPLET_IMAGE`, else the newest Ubuntu LTS; `--image latest`
+  (idempotent by name; image from `--image`, `SIW_DROPLET_IMAGE`, else the newest Ubuntu LTS; `--image latest`
   asks the API)
 - `bin/workbench do power <id> reboot` (`power_off` / `power_cycle` need `--force`)
 - `bin/workbench do resize <id> --size s-4vcpu-8gb` shuts down, resizes and powers on. `--disk` grows the disk
@@ -93,7 +93,7 @@ All take `--json`; writes take `--dry-run`, `--yes`; destructive writes need `--
 **Spaces access keys**
 
 - `bin/workbench do spaces-keys list`
-- `bin/workbench do spaces-keys create <name> --bucket backups --permission readwrite --out ~/.config/vps-server-workbench/spaces-backups.key`
+- `bin/workbench do spaces-keys create <name> --bucket backups --permission readwrite --out ~/.config/server-infra-workbench/spaces-backups.key`
   writes the secret key to the file (mode 600) and prints only the access key id.
 - `bin/workbench do spaces-keys delete <access-key> --force`
 

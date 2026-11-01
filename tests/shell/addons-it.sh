@@ -3,7 +3,7 @@
 # Not part of `make ci` (needs Docker, ~2 min): run by `make it`. Covers Gotenberg (PDF, SSRF guard,
 # basic auth), Garage (layout, bucket, least-privilege key, idempotent re-install) and SeaweedFS
 # (bucket-scoped identity) and RustFS (experimental gate, bucket-scoped app key, console on loopback).
-# Names and ports follow VSW_IT_PREFIX (tests/shell/it-lib.sh), so a parallel run does not collide.
+# Names and ports follow SIW_IT_PREFIX (tests/shell/it-lib.sh), so a parallel run does not collide.
 # shellcheck disable=SC2015
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -11,7 +11,7 @@ cd "$(dirname "$0")/../.."
 . tests/shell/it-lib.sh
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "addons-it skipped (no docker)"; exit 0; }
 A="$PWD/src/shell/addons/addon.sh"
-W="$(mktemp -d /tmp/vsw-addons-it.XXXX)"; P="$(it_name "")"; LAST="/tmp/$P-addons-it-last"
+W="$(mktemp -d /tmp/siw-addons-it.XXXX)"; P="$(it_name "")"; LAST="/tmp/$P-addons-it-last"
 PG=$(it_port 23000); PGA=$(it_port 23900); PSW=$(it_port 22535); PRF=$(it_port 29000); PRC=$(it_port 29001)
 it_ports_free "$PG" "$PGA" "$(it_port 23903)" "$(it_port 28333)" "$PSW" "$PRF" "$PRC" || exit 1
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }

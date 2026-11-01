@@ -14,7 +14,7 @@ npm run build
 npm prune --omit=dev'
 FIRST_INSTALL_CMD=""
 INSTALL_ENV_KEYS=""
-MIGRATE_CMD='/usr/local/bin/vsw-with-env .env node node_modules/typeorm/cli.js migration:run -d dist/data-source.js'
+MIGRATE_CMD='/usr/local/bin/siw-with-env .env node node_modules/typeorm/cli.js migration:run -d dist/data-source.js'
 EXTRA_MIGRATE_CMDS=""
 POST_DEPLOY_CMDS=""                   # restarts go in Ploi's post-deploy section (post-deploy.sh)
 HEALTHCHECK_CMD='curl -fsS -o /dev/null https://api.example.com/health'

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\DigitalOcean;
+namespace Simtabi\ServerInfraWorkbench\DigitalOcean;
 
-use Simtabi\VpsServerWorkbench\Http\BearerToken;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Security\Secret;
-use Simtabi\VpsServerWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Http\BearerToken;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Support\Data;
 
 /**
  * DigitalOcean API v2.

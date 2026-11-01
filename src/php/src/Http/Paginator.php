@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Http;
+namespace Simtabi\ServerInfraWorkbench\Http;
 
 /** One per provider: where the items are in a page, and how to ask for the next page. */
 interface Paginator

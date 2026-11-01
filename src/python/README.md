@@ -1,4 +1,4 @@
-# src/python — vps-server-workbench (Python)
+# src/python — server-infra-workbench (Python)
 
 A deliberately small package: standard library only, `src/` layout, `unittest` tests. It exists so Python
 automation has a home with lint and tests already wired; platform APIs (DigitalOcean, Ploi, Cloudflare,

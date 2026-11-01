@@ -3,16 +3,18 @@
 # The tools embed nothing from here at run time on a server: `--host` copies the tool AND this file.
 # Every tool: plan first, confirm (--yes, typed "yes", or a typed name on prd), lock, audit log, backups.
 #
-#   VSW_SYSROOT   prefix for every file the tools read or write (tests point it at a temp dir)
-#   VSW_LOG_DIR   audit log dir (default /var/log/vps-server-workbench)
-#   VSW_TTY       where typed confirmations are read from (default /dev/tty; tests use a file)
-#   VSW_LOCK_DIR  lock dir (default /run/lock)
-#   VSW_PROGRESS / VSW_QUIET / NO_COLOR  progress output (lib/progress.sh, loaded below)
+#   SIW_SYSROOT   prefix for every file the tools read or write (tests point it at a temp dir)
+#   SIW_LOG_DIR   audit log dir (default /var/log/server-infra-workbench, or the pre-rename
+#                 /var/log/vps-server-workbench while only that exists: siw_path)
+#   (VSW_* names from before the rename are still read: lib/progress.sh)
+#   SIW_TTY       where typed confirmations are read from (default /dev/tty; tests use a file)
+#   SIW_LOCK_DIR  lock dir (default /run/lock)
+#   SIW_PROGRESS / SIW_QUIET / NO_COLOR  progress output (lib/progress.sh, loaded below)
 
 # shellcheck source=src/shell/lib/progress.sh
 . "$(dirname "${BASH_SOURCE[0]}")/progress.sh"
 
-R="${VSW_SYSROOT:-}"
+R="${SIW_SYSROOT:-}"
 YES="${YES:-0}" DRY="${DRY:-0}"
 c_ok=0 c_warn=0 c_fail=0 c_todo=0
 
@@ -24,17 +26,20 @@ bad()  { c_fail=$((c_fail + 1)); printf '  FAIL  %s\n' "$*"; }
 todo() { c_todo=$((c_todo + 1)); printf '  todo  %s\n' "$*"; }
 why()  { printf '        why: %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
+siw_path() { # a server-infra-workbench path, or the pre-rename vps-server-workbench one while only that exists (ADR 0014)
+  local old="${1/server-infra-workbench/vps-server-workbench}"
+  if [ ! -e "$1" ] && [ -e "$old" ]; then printf '%s\n' "$old"; else printf '%s\n' "$1"; fi; }
 mute() { "$@" >/dev/null; }   # stdout off, errors still shown (progress_run "label" mute cmd)
 
 audit() { # audit <outcome> <details...>; never logs values, only what was done
-  local d="${VSW_LOG_DIR:-$R/var/log/vps-server-workbench}"
+  local d="${SIW_LOG_DIR:-$(siw_path "$R/var/log/server-infra-workbench")}"
   { mkdir -p "$d" && chmod 700 "$d"; } 2>/dev/null || return 0
   printf '%s tool=%s by=%s host=%s outcome=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TOOL" \
     "${SUDO_USER:-$(id -un)}" "$(hostname 2>/dev/null || echo '?')" "$1" "${*:2}" >> "$d/audit.log" 2>/dev/null || true
 }
 
 lock() { # one run at a time per tool; mkdir is atomic everywhere (no flock on macOS)
-  LOCK="${VSW_LOCK_DIR:-$R/run/lock}/vsw-$TOOL.lock"
+  LOCK="${SIW_LOCK_DIR:-$R/run/lock}/vsw-$TOOL.lock"
   mkdir -p "$(dirname "$LOCK")" 2>/dev/null || true
   if ! mkdir "$LOCK" 2>/dev/null; then
     local pid; pid="$(cat "$LOCK/pid" 2>/dev/null || true)"
@@ -45,7 +50,7 @@ lock() { # one run at a time per tool; mkdir is atomic everywhere (no flock on m
 }
 
 confirm() { # confirm "<what>" [typed-word]; --yes skips the plain prompt, never the typed word
-  local what="$1" word="${2:-}" tty="${VSW_TTY:-/dev/tty}" reply=""
+  local what="$1" word="${2:-}" tty="${SIW_TTY:-/dev/tty}" reply=""
   # /dev/tty can exist and be readable yet fail to open without a controlling terminal (ssh without -t,
   # cron, CI): test that it opens, so a plan-only run ends with the clean message instead of a shell error
   { : < "$tty"; } 2>/dev/null || tty=/nonexistent
@@ -71,7 +76,7 @@ backup() { # backup FILE -> FILE.bak.<ts> (mode 600); prints the path
 
 write_file() { # write_file PATH MODE < content ; atomic, keeps a backup when the content changes
   local f="$1" mode="$2" tmp; mkdir -p "$(dirname "$f")"
-  tmp="$(mktemp "$(dirname "$f")/.vsw.XXXXXX")"; cat > "$tmp"; chmod "$mode" "$tmp"
+  tmp="$(mktemp "$(dirname "$f")/.siw.XXXXXX")"; cat > "$tmp"; chmod "$mode" "$tmp"
   if [ -f "$f" ] && cmp -s "$tmp" "$f"; then rm -f "$tmp"; return 0; fi
   backup "$f"; mv "$tmp" "$f"
 }

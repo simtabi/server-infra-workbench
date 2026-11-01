@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve `simtabi/vps-server-workbench`. Please read the
+Thanks for helping improve `simtabi/server-infra-workbench`. Please read the
 [Code of Conduct](CODE_OF_CONDUCT.md) first, and report security issues as described in
 [SECURITY.md](SECURITY.md), not in public issues.
 

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console;
+namespace Simtabi\ServerInfraWorkbench\Console;
 
-use Simtabi\VpsServerWorkbench\Http\Sleeper;
-use Simtabi\VpsServerWorkbench\Http\WaitObserver;
+use Simtabi\ServerInfraWorkbench\Http\Sleeper;
+use Simtabi\ServerInfraWorkbench\Http\WaitObserver;
 
 /** Decorates the real (or a test) Sleeper so every Waiter poll shows up as progress. */
 final readonly class ProgressSleeper implements Sleeper, WaitObserver

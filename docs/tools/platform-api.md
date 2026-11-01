@@ -5,7 +5,7 @@ DNS, Cloud Storage) and **GitHub**, sharing one HTTP core. Per-provider guides (
 checklists, lessons learned) are in [docs/providers](../providers/README.md). The [`bin/workbench` CLI](cli.md) is a thin layer over this library; you can also use it from any
 PHP 8.4+ project or script.
 
-- **Namespace** `Simtabi\VpsServerWorkbench\` (PSR-4, `src/php/src/`), package `simtabi/vps-server-workbench`.
+- **Namespace** `Simtabi\ServerInfraWorkbench\` (PSR-4, `src/php/src/`), package `simtabi/server-infra-workbench`.
 - **Standards** PSR-18 HTTP client and PSR-17 factories (Guzzle by default; inject any client), PSR-3 logger,
   PSR-12/PER style enforced by Pint, PHPStan level `max` with strict rules.
 - **No vendor SDKs.** Each platform is a few small classes over the same `Transport` (see
@@ -21,12 +21,12 @@ make php                                    # pint --test, phpstan, phpunit
 ```
 
 In another project, add this repo as a Composer `path` (or `vcs`) repository and
-`composer require simtabi/vps-server-workbench`.
+`composer require simtabi/server-infra-workbench`.
 
 ## Quick start
 
 ```php
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
 
 $do = DigitalOcean::make();                                  // token from DIGITALOCEAN_TOKEN or the credentials file
 
@@ -40,7 +40,7 @@ $action = $snapshot->confirm()->wait(timeoutSeconds: 1800);          // send, th
 ```
 
 ```php
-use Simtabi\VpsServerWorkbench\Cloudflare\Cloudflare;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Cloudflare;
 
 $dns = Cloudflare::make()->dns('example.com');               // zone by name or 32-char id
 $dns->upsert('A', 'db', '203.0.113.10', ttl: 300)->confirm(); // create, update or no-op; refuses duplicates
@@ -49,7 +49,7 @@ $dns->delete($recordId)->confirm();                           // destructive: Pe
 ```
 
 ```php
-use Simtabi\VpsServerWorkbench\Ploi\Ploi;
+use Simtabi\ServerInfraWorkbench\Ploi\Ploi;
 
 $server = Ploi::make()->servers()->find(42);                  // lazy, scoped handle; no request yet
 $server->get();                                               // Server DTO
@@ -58,7 +58,7 @@ $server->sites()->deploy(1001)->confirm();
 ```
 
 ```php
-use Simtabi\VpsServerWorkbench\Gcp\Gcp;
+use Simtabi\ServerInfraWorkbench\Gcp\Gcp;
 
 $gcp = Gcp::make('my-project');                               // service-account key or gcloud, see Credentials
 $gcp->instances()->list();                                    // all zones (aggregated)
@@ -69,8 +69,8 @@ $gcp->snapshots()->create('us-east1-b', 'db-disk', 'db-pre-upgrade')->confirm()-
 ```
 
 ```php
-use Simtabi\VpsServerWorkbench\Github\Github;
-use Simtabi\VpsServerWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Github\Github;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
 
 $repo = Github::make()->repo('owner/name');                    // token from GITHUB_TOKEN
 $repo->workflows()->runs(workflow: 'ci.yml', branch: 'main');
@@ -111,8 +111,8 @@ GCP `nextPageToken`, GitHub `Link: rel="next"`) and return typed, immutable DTOs
 `ClientOptions` is immutable; each `with*()` returns a copy. Pass it as the second argument of `make()`.
 
 ```php
-use Simtabi\VpsServerWorkbench\Http\{ClientOptions, RetryPolicy};
-use Simtabi\VpsServerWorkbench\Safety\JsonlAuditLog;
+use Simtabi\ServerInfraWorkbench\Http\{ClientOptions, RetryPolicy};
+use Simtabi\ServerInfraWorkbench\Safety\JsonlAuditLog;
 
 $options = ClientOptions::defaults()
     ->withTimeout(30, connectSeconds: 5)
@@ -132,7 +132,7 @@ $do = DigitalOcean::make(options: $options);
 | What is retried | `429` always (honouring `Retry-After`, capped at 120 s); `5xx` and network errors only for idempotent methods (GET, HEAD, PUT, DELETE, OPTIONS). A `POST` is never replayed |
 | Redirects | Refused (`3xx` is an error) so a bearer token is never forwarded to another host |
 | Paths | Validated (`/v2/...` shape, no `..`); IDs and names are validated before any request |
-| User-Agent | `vps-server-workbench/<version>` (`withUserAgent()` to change) |
+| User-Agent | `server-infra-workbench/<version>` (`withUserAgent()` to change) |
 
 ## Errors
 
@@ -160,7 +160,7 @@ Resolved in this order; the first hit wins ([ADR 0005](../adr/0005-credentials-o
 
 1. A value passed to `make()` (string or `Security\Secret`).
 2. The environment variable.
-3. The credentials file: `$VSW_CREDENTIALS_FILE`, else `~/.config/vps-server-workbench/credentials`.
+3. The credentials file: `$SIW_CREDENTIALS_FILE`, else `~/.config/server-infra-workbench/credentials`.
    `KEY=VALUE` lines; the file must be **mode 600, owned by you, and outside any git working tree**, or it is
    refused.
 
@@ -184,21 +184,21 @@ for the file format.
 ## Audit log
 
 Every `plan()` and `confirm()` appends one JSON line (time, provider, action, target, method, path, outcome,
-error) to `$VSW_AUDIT_LOG`, else `~/.local/state/vps-server-workbench/audit.log` (directory 700, file 600).
-Payloads and tokens are not written. `VSW_AUDIT_LOG=off` disables it.
+error) to `$SIW_AUDIT_LOG`, else `~/.local/state/server-infra-workbench/audit.log` (directory 700, file 600).
+Payloads and tokens are not written. `SIW_AUDIT_LOG=off` disables it.
 
 ## Testing
 
 `make php` runs Pint (`--test`), PHPStan and PHPUnit. Tests use a queued mock PSR-18 client and a recording
-sleeper: no network, no real waits, no credentials. `phpunit.xml` forces `VSW_AUDIT_LOG=off` and points the
+sleeper: no network, no real waits, no credentials. `phpunit.xml` forces `SIW_AUDIT_LOG=off` and points the
 credentials file at a path that does not exist, so a developer's real file is never read. Contract tests cover
 each provider's pagination, retries, `Retry-After`, quota waits and error mapping.
 
-Live read-only tests (`tests/Live`, testsuite `live`, not in the default run) need `VSW_LIVE=1` and a token, and
+Live read-only tests (`tests/Live`, testsuite `live`, not in the default run) need `SIW_LIVE=1` and a token, and
 use a client that refuses anything but GET (and the Google token exchange):
 
 ```bash
-cd src/php && VSW_LIVE=1 vendor/bin/phpunit --testsuite live    # providers without a token are skipped
+cd src/php && SIW_LIVE=1 vendor/bin/phpunit --testsuite live    # providers without a token are skipped
 ```
 
 ## Adding a platform

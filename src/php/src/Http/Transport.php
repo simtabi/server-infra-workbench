@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Http;
+namespace Simtabi\ServerInfraWorkbench\Http;
 
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
-use Simtabi\VpsServerWorkbench\Exception\ApiException;
-use Simtabi\VpsServerWorkbench\Exception\TransportException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Security\RedactingLogger;
-use Simtabi\VpsServerWorkbench\Security\Redactor;
+use Simtabi\ServerInfraWorkbench\Exception\ApiException;
+use Simtabi\ServerInfraWorkbench\Exception\TransportException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Security\RedactingLogger;
+use Simtabi\ServerInfraWorkbench\Security\Redactor;
 
 /**
  * The one place HTTP happens: auth, JSON, retries with backoff, Retry-After, timeouts (via the PSR-18

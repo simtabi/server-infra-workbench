@@ -2,12 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Support\Env;
 
 /**
  * The account-key providers: DigitalOcean, Vultr, Hetzner Cloud, Linode, Scaleway, plus any described
@@ -48,8 +49,8 @@ final class KeyProviders
     }
 
     /**
-     * Built-ins plus the extra providers in $file (or $VSW_KEYS_CONFIG, $VPSKEYS_CONFIG,
-     * ~/.config/vps-server-workbench/keys.json). A missing file is fine; a broken one is an error.
+     * Built-ins plus the extra providers in $file (or $SIW_KEYS_CONFIG, $VPSKEYS_CONFIG,
+     * ~/.config/server-infra-workbench/keys.json). A missing file is fine; a broken one is an error.
      */
     public static function load(?string $file = null): self
     {
@@ -73,15 +74,15 @@ final class KeyProviders
 
     public static function defaultConfig(): ?string
     {
-        foreach (['VSW_KEYS_CONFIG', 'VPSKEYS_CONFIG'] as $env) {
-            $value = getenv($env);
-            if (is_string($value) && $value !== '') {
+        foreach (['SIW_KEYS_CONFIG', 'VPSKEYS_CONFIG'] as $env) {
+            $value = Env::get($env);
+            if ($value !== null) {
                 return $value;
             }
         }
         $home = getenv('HOME');
 
-        return is_string($home) && $home !== '' ? $home.'/.config/vps-server-workbench/keys.json' : null;
+        return is_string($home) && $home !== '' ? Env::userPath($home, '.config/{name}/keys.json') : null;
     }
 
     /** @return list<string> */
@@ -116,7 +117,7 @@ final class KeyProviders
         $scope = null;
         if ($spec->scopeEnv !== '') {
             if (! $credentials->has($spec->scopeEnv)) {
-                throw new \Simtabi\VpsServerWorkbench\Exception\CredentialException(sprintf('%s: also set %s (the project these keys belong to)', $name, $spec->scopeEnv));
+                throw new \Simtabi\ServerInfraWorkbench\Exception\CredentialException(sprintf('%s: also set %s (the project these keys belong to)', $name, $spec->scopeEnv));
             }
             $scope = $credentials->get($spec->scopeEnv)->reveal();
         }

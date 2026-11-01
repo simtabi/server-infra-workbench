@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Offline tests for the server tools (server/*, web/diagnose, ssh/fixkeys): a fake root
-# (VSW_SYSROOT) and stub commands on PATH; nothing touches this machine's /etc or the network.
+# (SIW_SYSROOT) and stub commands on PATH; nothing touches this machine's /etc or the network.
 # shellcheck disable=SC2015,SC2016  # stub bodies are literal shell
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -16,7 +16,7 @@ for c in systemctl apt-get sysctl sshd dpkg-query apt-mark shutdown ufw php; do 
 stub nc 'exit 1'
 stub apt "printf 'Listing...\nopenssl/noble-updates 3.0.13 amd64 [upgradable from: 3.0.12]\ndocker-ce/noble 5:28 amd64 [upgradable from: 5:27]\n'"
 stub docker 'case "$1" in ps) [ "$2" = -q ] && echo c0ffee || echo "10.0.0.5:5432->5432/tcp";; esac'
-export PATH="$T/bin:$PATH" VSW_SYSROOT="$T/root" VSW_TTY="$T/tty" VSW_LOG_DIR="$T/log"
+export PATH="$T/bin:$PATH" SIW_SYSROOT="$T/root" SIW_TTY="$T/tty" SIW_LOG_DIR="$T/log"
 H=src/shell/server/harden.sh U=src/shell/server/update.sh W=src/shell/web/diagnose.sh
 : > "$T/tty"
 
@@ -75,12 +75,12 @@ fresh
 bash "$U" --dry-run >"$T/o"; grep -q '2 upgradable' "$T/o" && grep -q 'held for this run' "$T/o" && ! grep -q 'upgrade$' "$T/calls" \
   && ok "update: plan lists packages, holds Docker with running containers" || fail "update plan"
 touch "$T/root/var/run/reboot-required"
-VSW_NOW=03:10 bash "$U" --yes --reboot-window 02:00-04:00 >/dev/null
+SIW_NOW=03:10 bash "$U" --yes --reboot-window 02:00-04:00 >/dev/null
 grep -q 'apt-mark hold docker-ce' "$T/calls" && grep -q 'apt-mark unhold docker-ce' "$T/calls" && grep -q 'shutdown -r +1' "$T/calls" \
   && ok "update: inside the window -> upgrade, unhold, reboot in 1 min" || fail "update in window"
-: > "$T/calls"; VSW_NOW=12:00 bash "$U" --yes --reboot-window 23:30-01:00 --allow-docker >/dev/null
+: > "$T/calls"; SIW_NOW=12:00 bash "$U" --yes --reboot-window 23:30-01:00 --allow-docker >/dev/null
 grep -q 'shutdown -r 23:30' "$T/calls" && ! grep -q 'apt-mark hold' "$T/calls" && ok "update: outside a midnight-crossing window -> scheduled; --allow-docker" || fail "update outside"
-: > "$T/calls"; VSW_NOW=00:30 bash "$U" --yes --reboot-window 23:30-01:00 >/dev/null; grep -q 'shutdown -r +1' "$T/calls" && ok "update: 00:30 is inside 23:30-01:00" || fail "midnight"
+: > "$T/calls"; SIW_NOW=00:30 bash "$U" --yes --reboot-window 23:30-01:00 >/dev/null; grep -q 'shutdown -r +1' "$T/calls" && ok "update: 00:30 is inside 23:30-01:00" || fail "midnight"
 : > "$T/calls"; bash "$U" --yes --no-reboot >"$T/o"; ! grep -q shutdown "$T/calls" && grep -q 'reboot required' "$T/o" && ok "update --no-reboot only reports" || fail "no-reboot"
 bash "$U" --reboot-window 25:00-01:00 >/dev/null 2>&1 && fail "bad window" || ok "update: validates the window"
 if bash "$U" >/dev/null 2>&1; then fail "update without yes"; else ok "update: not confirmed without --yes (exit 3)"; fi
@@ -186,18 +186,18 @@ stub ss "printf 'LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 200 10.0.0.5:5432 
 bash "$V" --out /var/lib/vsw/inv >"$T/o"; grep -q 'changes since the last inventory' "$T/o" && grep -q '^+net.listen.0.0.0.0:6379' "$T/root/var/lib/vsw/inv"/changes-*.diff \
   && grep -q 'tool=inventory.*outcome=changed' "$T/log/audit.log" && ok "inventory: diff vs the last run, audited" || fail "inventory diff"
 bash "$V" --install-cron --dry-run >/dev/null; [ ! -e "$T/root/etc/cron.d/vsw-inventory" ] && bash "$V" --install-cron --yes >/dev/null \
-  && grep -q 'inventory.sh --out /var/lib/vps-server-workbench/inventory' "$T/root/etc/cron.d/vsw-inventory" && [ -x "$T/root/usr/local/lib/vps-server-workbench/server/inventory.sh" ] \
+  && grep -q 'inventory.sh --out /var/lib/server-infra-workbench/inventory' "$T/root/etc/cron.d/vsw-inventory" && [ -x "$T/root/usr/local/lib/server-infra-workbench/server/inventory.sh" ] \
   && ok "inventory --install-cron: plan, then tool copy + /etc/cron.d" || fail "inventory cron"
 cat > "$T/bin/ssh" <<STUB
 #!/bin/sh
-case "\$*" in *mktemp*) echo "$T/remote";; *"mkdir -p"*) mkdir -p "$T/remote/tool" "$T/remote/lib";; *) VSW_SYSROOT="$T/root" bash "$T/remote/tool/inventory.sh" --txt;; esac
+case "\$*" in *mktemp*) echo "$T/remote";; *"mkdir -p"*) mkdir -p "$T/remote/tool" "$T/remote/lib";; *) SIW_SYSROOT="$T/root" bash "$T/remote/tool/inventory.sh" --txt;; esac
 STUB
 printf '#!/bin/sh\n[ "$1" = -q ] && shift\nfor a; do last="$a"; done; cp "$1" "%s/remote/${last#*:%s/remote/}"\n' "$T" "$T" > "$T/bin/scp"; chmod +x "$T/bin/ssh" "$T/bin/scp"
-export VSW_REPO_ROOT="$T/repo"; mkdir -p "$VSW_REPO_ROOT"; L="$VSW_REPO_ROOT/local/smoketest-client"
+export SIW_REPO_ROOT="$T/repo"; mkdir -p "$SIW_REPO_ROOT"; L="$SIW_REPO_ROOT/local/smoketest-client"
 bash "$V" --host db-1 --pull --client smoketest-client >"$T/o" 2>&1 && grep -q 'first inventory' "$T/o" && [ -f "$L/inventory/db-1/inventory.json" ] && [ ! -e local/smoketest-client ] \
   && bash "$V" --host db-1 --pull --client smoketest-client >"$T/o" 2>&1 && grep -q 'no changes' "$T/o" \
   && ok "inventory --pull: saved to local/<client>/inventory/<host>/, diff on the next pull" || { cat "$T/o"; fail "inventory pull"; }
-rm -f "$T/bin/ssh" "$T/bin/scp"; unset VSW_REPO_ROOT
+rm -f "$T/bin/ssh" "$T/bin/scp"; unset SIW_REPO_ROOT
 
 # --- ssh fixkeys (self-contained; --root = a mounted disk) ------------------------------------
 K=src/shell/ssh/fixkeys.sh FR="$T/fk"
@@ -220,7 +220,7 @@ FK perms >/dev/null 2>&1; [ "$(stat -c %a "$FR/home/deploy" 2>/dev/null || stat 
 FK list >"$T/o" 2>&1; fp2="$(sed -n 's/.*bob@desk  ssh-ed25519  //p' "$T/o")"
 FK remove "$fp2" --yes >/dev/null 2>&1; ! grep -q bob@desk "$AKF" && grep -q alice@laptop "$AKF" && ok "fixkeys remove by fingerprint (backup kept)" || fail "fixkeys remove"
 FK remove 1 --yes >/dev/null 2>&1 || true; grep -q alice@laptop "$AKF" && ok "fixkeys: last key needs typed EMPTY (--yes is not enough)" || fail "fixkeys last key"
-ls "$AKF".bak.* >/dev/null 2>&1 && grep -q 'tool=fixkeys .*outcome=removed .*fp=SHA256:' "$FR/var/log/vps-server-workbench/audit.log" && ! grep -q AAAA "$FR/var/log/vps-server-workbench/audit.log" \
+ls "$AKF".bak.* >/dev/null 2>&1 && grep -q 'tool=fixkeys .*outcome=removed .*fp=SHA256:' "$FR/var/log/server-infra-workbench/audit.log" && ! grep -q AAAA "$FR/var/log/server-infra-workbench/audit.log" \
   && ok "fixkeys: backups + audit with fingerprints only" || fail "fixkeys audit"
 echo 1 > "$FIXKEYS_TTY"; b1="$(grep -l bob@desk "$AKF".bak.* | head -1)"; FK restore "$(basename "$b1")" --yes >/dev/null 2>&1; [ "$(grep -c ssh-ed25519 "$AKF")" = 2 ] && ok "fixkeys restore: a backup put back" || fail "fixkeys restore"
 FK restore /etc/passwd --yes >/dev/null 2>&1 && fail "restore of an arbitrary file" || ok "fixkeys restore: only <file>.bak.* accepted"

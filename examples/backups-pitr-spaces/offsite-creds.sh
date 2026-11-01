@@ -2,7 +2,7 @@
 # examples/backups-pitr-spaces/offsite-creds.sh - write the DB server's off-site credentials file, once.
 #
 #   sudo bash offsite-creds.sh                   asks for the Spaces key pair (hidden), generates the rest
-#   sudo bash offsite-creds.sh --dir DIR         default /etc/vps-server-workbench
+#   sudo bash offsite-creds.sh --dir DIR         default /etc/server-infra-workbench
 #   bash offsite-creds.sh --self-test            offline, throwaway directory
 #
 # Writes DIR/offsite.env (600): OFFSITE_ACCESS_KEY, OFFSITE_SECRET_KEY (typed, never in argv or history) and
@@ -12,7 +12,7 @@
 # the keys, in the one folder you escrow. Existing values are never replaced (that would orphan every backup
 # already encrypted with them). Values are never printed.
 set -euo pipefail
-dir=/etc/vps-server-workbench
+dir=/etc/server-infra-workbench
 die() { printf 'offsite-creds: %s\n' "$1" >&2; exit "${2:-1}"; }
 mode_of() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 has() { grep -qE "^$1=.+" "$2" 2>/dev/null; }
@@ -68,5 +68,5 @@ case "${1:-}" in
   -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) die "unknown argument: $1" 2 ;;
 esac
-[ "$(id -u)" -eq 0 ] || [ "$dir" != /etc/vps-server-workbench ] || die "run as root (sudo)"
+[ "$(id -u)" -eq 0 ] || [ "$dir" != /etc/server-infra-workbench ] || die "run as root (sudo)"
 write_creds "$dir"

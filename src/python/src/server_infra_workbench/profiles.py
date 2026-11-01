@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from vps_server_workbench import envfile
+from server_infra_workbench import compat, envfile
 
 META = ("PROFILE_VERSION", "PROFILE_DESCRIPTION")
 
@@ -125,7 +125,7 @@ _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def repo_root() -> Path:
-    env = os.environ.get("VSW_ROOT")
+    env = compat.get("SIW_ROOT")
     return Path(env) if env else Path(__file__).resolve().parents[4]
 
 

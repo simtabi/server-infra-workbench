@@ -12,11 +12,11 @@ ENV_DEFAULTS=""                       # app-env.sh writes the .env before the fi
 BUILD_CMDS='python3 -m venv .venv
 .venv/bin/pip install --quiet --upgrade pip
 .venv/bin/pip install --quiet -r requirements.txt
-/usr/local/bin/vsw-with-env .env .venv/bin/python manage.py collectstatic --noinput
-/usr/local/bin/vsw-with-env .env .venv/bin/python manage.py check --deploy --fail-level WARNING'
+/usr/local/bin/siw-with-env .env .venv/bin/python manage.py collectstatic --noinput
+/usr/local/bin/siw-with-env .env .venv/bin/python manage.py check --deploy --fail-level WARNING'
 FIRST_INSTALL_CMD=""
 INSTALL_ENV_KEYS=""
-MIGRATE_CMD='/usr/local/bin/vsw-with-env .env .venv/bin/python manage.py migrate --noinput'
+MIGRATE_CMD='/usr/local/bin/siw-with-env .env .venv/bin/python manage.py migrate --noinput'
 EXTRA_MIGRATE_CMDS=""
 POST_DEPLOY_CMDS=""                   # restarts go in Ploi's post-deploy script (post-deploy.sh): after activation
 HEALTHCHECK_CMD='curl -fsS -o /dev/null https://api.example.com/healthz'

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Http;
+namespace Simtabi\ServerInfraWorkbench\Http;
 
 /**
  * When and how long to back off. Retries 429 always, and 5xx / network errors only for idempotent

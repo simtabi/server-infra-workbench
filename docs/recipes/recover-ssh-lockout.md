@@ -42,7 +42,7 @@ bash /root/fixkeys.sh --version      # prints: fixkeys 2.0.0
 ```
 
 If pasting a long text is unreliable, the server may still reach GitHub:
-`curl -fsSLo /root/fixkeys.sh https://raw.githubusercontent.com/simtabi/vps-server-workbench/main/src/shell/ssh/fixkeys.sh`.
+`curl -fsSLo /root/fixkeys.sh https://raw.githubusercontent.com/simtabi/server-infra-workbench/main/src/shell/ssh/fixkeys.sh`.
 
 ## 3. Diagnose, then fix
 
@@ -72,7 +72,7 @@ bash fixkeys.sh --root /mnt --user root add 'ssh-ed25519 AAAA... me@laptop'
 ```
 
 `--root` reads users and owners from `/mnt/etc/passwd` (numeric ids, so ownership is right on the real
-system) and writes the audit line to `/mnt/var/log/vps-server-workbench/audit.log`. `sshd -T` can't run
+system) and writes the audit line to `/mnt/var/log/server-infra-workbench/audit.log`. `sshd -T` can't run
 against a mounted disk, so it reads `/mnt/etc/ssh/sshd_config` and its drop-ins instead. Switch back to
 *Boot from Hard Drive* and power-cycle.
 

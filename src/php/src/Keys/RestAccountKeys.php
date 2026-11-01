@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
-use Simtabi\VpsServerWorkbench\Exception\NotFoundException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Support\Data;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Exception\NotFoundException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 /** Account SSH keys on any provider described by a KeyApiSpec. */
 final readonly class RestAccountKeys implements AccountKeys

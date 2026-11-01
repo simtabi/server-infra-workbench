@@ -45,7 +45,7 @@ while [ $# -gt 0 ]; do
     --backup-first) BACKUP_FIRST=1; shift ;;
     --no-refresh) REFRESH=0; shift ;;
     --dry-run|-n) DRY=1; shift ;;
-    --quiet|-q) export VSW_QUIET=1; shift ;;
+    --quiet|-q) export SIW_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -66,7 +66,7 @@ in_window() { # in_window HH:MM-HH:MM NOW(HH:MM)
   local s e n; s="$(mins "${1%-*}")"; e="$(mins "${1#*-}")"; n="$(mins "$2")"
   if [ "$s" -le "$e" ]; then [ "$n" -ge "$s" ] && [ "$n" -lt "$e" ]; else [ "$n" -ge "$s" ] || [ "$n" -lt "$e" ]; fi
 }
-NOW="${VSW_NOW:-$(date +%H:%M)}"
+NOW="${SIW_NOW:-$(date +%H:%M)}"
 REBOOT_FLAG="$R/var/run/reboot-required"
 DOCKER_PKGS="docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker.io"
 
@@ -125,7 +125,7 @@ unhold
 if [ -f "$REBOOT_FLAG" ]; then
   if [ -n "$WINDOW" ]; then
     if in_window "$WINDOW" "$NOW"; then when="+1"; else when="${WINDOW%-*}"; fi
-    shutdown -r "$when" "vps-server-workbench: reboot after updates" && ok "reboot scheduled ($when); cancel with: shutdown -c"
+    shutdown -r "$when" "server-infra-workbench: reboot after updates" && ok "reboot scheduled ($when); cancel with: shutdown -c"
     audit applied "reboot scheduled=$when"
   else warn "reboot required - run in a window: update.sh --yes --reboot-window HH:MM-HH:MM"; fi
 fi

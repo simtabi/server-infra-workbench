@@ -15,7 +15,7 @@ Also checked (added in the docs audit, each one a bug that reached a doc):
 - Coverage the other way: every manager command, shell tool and PHP subcommand is named in some doc.
 
 Exit 1 on any unknown tool, subcommand or flag.   Usage: python3 tests/docs/check-commands.py [root]
-Inline opt-out for a deliberate example of a wrong command: `<!-- vsw-commands: ignore -->` on the line.
+Inline opt-out for a deliberate example of a wrong command: `<!-- siw-commands: ignore -->` on the line.
 """
 import os, re, subprocess, sys
 
@@ -39,7 +39,7 @@ _cache = {}
 def helptext(argv):
     key = tuple(argv)
     if key not in _cache:
-        env = dict(os.environ, NO_COLOR="1", VSW_DOCS_CHECK="1")
+        env = dict(os.environ, NO_COLOR="1", SIW_DOCS_CHECK="1")
         try:
             r = subprocess.run(argv, cwd=root, env=env, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
             _cache[key] = r.stdout + r.stderr
@@ -216,7 +216,7 @@ def commands(path):
             if FENCE.match(line):
                 fenced = not fenced
                 continue
-            if "vsw-commands: ignore" in line:
+            if "siw-commands: ignore" in line:
                 continue
             spans = [line] if fenced else re.findall(r"`([^`]+)`", line)
             for s in spans:

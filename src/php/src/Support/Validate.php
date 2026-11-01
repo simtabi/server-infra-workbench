@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Support;
+namespace Simtabi\ServerInfraWorkbench\Support;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
 
 /**
  * Input validation shared by the clients and the CLI. Everything that ends up in a URL path is checked

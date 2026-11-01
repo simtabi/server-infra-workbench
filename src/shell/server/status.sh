@@ -29,7 +29,7 @@ usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,
 
 JSON=0 HOST="" URLS=()
 DISK_WARN="${STATUS_DISK_WARN:-85}" BACKUP_MAX_H="${STATUS_BACKUP_MAX_H:-26}"
-DB_STATE="${STATE_DIR:-$R/var/lib/vps-server-workbench/db}" MON_DIR="${MONITOR_DIR:-$R/opt/vsw-monitor}" ADD_DIR="${ADDON_DIR:-$R/opt/vsw-addons}"
+DB_STATE="${STATE_DIR:-$(siw_path "$R/var/lib/server-infra-workbench/db")}" MON_DIR="${MONITOR_DIR:-$R/opt/vsw-monitor}" ADD_DIR="${ADDON_DIR:-$R/opt/vsw-addons}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --json) JSON=1; shift ;;

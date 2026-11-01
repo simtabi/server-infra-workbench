@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Security\RedactingLogger;
-use Simtabi\VpsServerWorkbench\Security\Redactor;
-use Simtabi\VpsServerWorkbench\Security\Secret;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MemoryLogger;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Security\RedactingLogger;
+use Simtabi\ServerInfraWorkbench\Security\Redactor;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MemoryLogger;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class SecurityTest extends TestCase
 {

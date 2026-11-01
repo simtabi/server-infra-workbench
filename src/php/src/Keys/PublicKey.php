@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
 
 /**
  * One OpenSSH public key line: [options] type base64 [comment]. Keys are compared by their key material

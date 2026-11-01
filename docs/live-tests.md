@@ -35,18 +35,18 @@ will keep open; a killed run is cleaned up by `make live-sweep LIVE_ARGS=--yes`.
 - **Dry run by default.** Without `--yes` a test prints its plan and worst-case cost and creates nothing.
 - **Cost guard.** Worst case = hourly price of the droplets x the timeout rounded up to whole hours (DO bills
   per started hour) + fixed costs. Above `--max-usd` the test refuses to start. Every run appends start and end
-  lines (seconds, estimate, leftovers, month-to-date usage) to `~/.local/state/vsw-livetest/cost.log`.
+  lines (seconds, estimate, leftovers, month-to-date usage) to `~/.local/state/siw-livetest/cost.log`.
 - **Teardown always runs.** An EXIT/INT/TERM/HUP trap tears down; during teardown further signals are
   ignored so a second Ctrl-C cannot leave paid resources behind. A watchdog sends TERM after `--timeout`.
-- **Only its own resources.** Everything is named `vswlt-<run>-*` and droplets carry the tags `vsw-livetest` and
-  `vsw-livetest-<run>`. Teardown deletes droplets by the run tag only after checking that every one also has the
+- **Only its own resources.** Everything is named `siwlt-<run>-*` and droplets carry the tags `siw-livetest` and
+  `siw-livetest-<run>`. Teardown deletes droplets by the run tag only after checking that every one also has the
   name prefix and the base tag; anything else stops it. Your existing droplets, VPCs and keys are never touched.
 - **Its own network.** Each run makes a non-default VPC in a free `10.200-250.x.0/24`, a throwaway ed25519 key,
   and a cloud firewall that allows ssh from your public IPv4 only and all traffic inside the VPC.
 - **No first VPC by accident.** The first VPC in a region becomes its default and can never be deleted. A region
   without a VPC is refused unless you pass `--create-default-vpc`, which creates `default-<region>` (free, kept)
   before the test VPC.
-- **Verified cleanup.** After teardown the account is listed again; any `vswlt-<run>-*` droplet, firewall, ssh
+- **Verified cleanup.** After teardown the account is listed again; any `siwlt-<run>-*` droplet, firewall, ssh
   key or VPC left is reported as LEFTOVERS and the run fails.
 - **No secrets or addresses in output.** Spaces keys go to 600 files and reach curl on stdin; IPs are not
   printed; each test greps its outputs for its secrets.

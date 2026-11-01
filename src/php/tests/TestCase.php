@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests;
+namespace Simtabi\ServerInfraWorkbench\Tests;
 
 use PHPUnit\Framework\TestCase as Base;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Http\RetryPolicy;
-use Simtabi\VpsServerWorkbench\Safety\InMemoryAuditLog;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MemoryLogger;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\RecordingSleeper;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Http\RetryPolicy;
+use Simtabi\ServerInfraWorkbench\Safety\InMemoryAuditLog;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MemoryLogger;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\RecordingSleeper;
 
 abstract class TestCase extends Base
 {
@@ -66,7 +66,7 @@ abstract class TestCase extends Base
 
     protected function tempDir(): string
     {
-        $dir = sys_get_temp_dir().'/vsw-php-test-'.bin2hex(random_bytes(6));
+        $dir = sys_get_temp_dir().'/siw-php-test-'.bin2hex(random_bytes(6));
         mkdir($dir, 0o700, true);
         register_shutdown_function(static function () use ($dir): void {
             exec('rm -rf '.escapeshellarg($dir));

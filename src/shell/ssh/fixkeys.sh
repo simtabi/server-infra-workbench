@@ -27,7 +27,7 @@
 #  ENV  FIXKEYS_TTY  where prompts are read from (default /dev/tty; tests use a file)
 #
 #  Every change: backup <file>.bak.<ts> (600), atomic write, owner + modes
-#  restored, a line in <root>/var/log/vps-server-workbench/audit.log
+#  restored, a line in <root>/var/log/server-infra-workbench/audit.log
 #  (fingerprints only). Keys are validated with ssh-keygen before they go in.
 # =============================================================================
 # shellcheck disable=SC2015  # 'test && say || say': say cannot fail
@@ -75,7 +75,9 @@ done
 
 # ---- who and which file -------------------------------------------------------------------
 pw() { awk -F: -v u="$1" -v f="$2" '$1 == u { print $f; exit }' "$ROOT/etc/passwd" 2>/dev/null; }   # pw user field
-audit() { local d="$ROOT/var/log/vps-server-workbench"; { mkdir -p "$d" && chmod 700 "$d"; } 2>/dev/null || return 0
+audit() { local d="$ROOT/var/log/server-infra-workbench"   # pre-rename vps-server-workbench while only that exists
+  [ -e "$d" ] || [ ! -e "$ROOT/var/log/vps-server-workbench" ] || d="$ROOT/var/log/vps-server-workbench"
+  { mkdir -p "$d" && chmod 700 "$d"; } 2>/dev/null || return 0
   printf '%s tool=fixkeys by=%s host=%s outcome=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SUDO_USER:-$(id -un)}" \
     "$(hostname 2>/dev/null || echo '?')" "$1" "${*:2}" >> "$d/audit.log" 2>/dev/null || true
   have logger && [ -z "$ROOT" ] && logger -t fixkeys "outcome=$1 ${*:2}" 2>/dev/null || true; }

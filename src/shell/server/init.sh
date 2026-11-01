@@ -49,7 +49,7 @@ while [ $# -gt 0 ]; do
     --skip) SKIP="${2:?}"; shift 2 ;;
     --firewall) FIREWALL=1; shift ;;
     --dry-run|-n) DRY=1; shift ;;
-    --quiet|-q) export VSW_QUIET=1; shift ;;
+    --quiet|-q) export SIW_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -134,7 +134,7 @@ apply_item() {
         chmod 600 "$F_SWAP"; mkswap "$F_SWAP" >/dev/null; swapon "$F_SWAP"
         grep -qE '^/swapfile[[:space:]]' "$F_FSTAB" 2>/dev/null || { backup "$F_FSTAB" >/dev/null; echo '/swapfile none swap sw 0 0' >> "$F_FSTAB"; }
       fi
-      if [ "$ROLE" = db ]; then printf '# Managed by vps-server-workbench init.sh\nvm.swappiness = 10\n' | write_file "$F_SWAPPY" 644
+      if [ "$ROLE" = db ]; then printf '# Managed by server-infra-workbench init.sh\nvm.swappiness = 10\n' | write_file "$F_SWAPPY" 644
         sysctl -p "$F_SWAPPY" >/dev/null 2>&1 || true; fi ;;
     packages)
       export DEBIAN_FRONTEND=noninteractive

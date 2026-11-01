@@ -15,7 +15,7 @@ import sys
 import time
 from pathlib import Path
 
-from vps_server_workbench import profiles as P
+from server_infra_workbench import profiles as P
 
 LEVEL_MARK = {"error": "ERROR", "warn": "warn ", "info": "info "}
 WIZARD_KEYS = (  # asked in this order by the interactive wizard; everything else via KEY=VALUE overrides
@@ -44,7 +44,7 @@ def _overrides(pairs: list[str]) -> dict[str, str]:
 
 def previous_overrides(path: Path) -> tuple[str, dict[str, str]]:
     """(profile, overrides) from an earlier workbench.conf: the lines tagged `# override`."""
-    from vps_server_workbench import envfile
+    from server_infra_workbench import envfile
 
     text = path.read_text(encoding="utf-8")
     values = envfile.parse(text)
@@ -136,7 +136,7 @@ def engines_turned_off(previous: str | None, r: P.Resolved) -> list[str]:
     """Engines on in the earlier db-server.conf and off now (pgbouncer before postgres)."""
     if not previous:
         return []
-    from vps_server_workbench import envfile
+    from server_infra_workbench import envfile
 
     old = envfile.parse(previous)
     off = [e for k, e in ENGINE_CMD.items() if old.get(k) == "1" and r.values.get(k) == "0"]
@@ -167,18 +167,18 @@ def next_commands(r: P.Resolved, out_dir: Path, turned_off: list[str] | None = N
         names = [a for a, rl in P.addons_placed(v) if rl == role]
         cmds += [
             f"# add-ons on the {role} node: {' '.join(names)}",
-            f"rsync -a src/shell/addons/addon.sh stacks/addons/ {host}:/tmp/vsw-addons-src/",
+            f"rsync -a src/shell/addons/addon.sh stacks/addons/ {host}:/tmp/siw-addons-src/",
             f"scp {rel}/addons-{role}.conf {host}:/tmp/addons.conf && ssh {host} 'sudo install -m 600 -o root "
             "-g root /tmp/addons.conf /etc/vsw-addons.conf && rm /tmp/addons.conf'",
         ]
-        cmds += [f"ssh {host} 'sudo /tmp/vsw-addons-src/addon.sh plan {n}'" for n in names]
+        cmds += [f"ssh {host} 'sudo /tmp/siw-addons-src/addon.sh plan {n}'" for n in names]
     placed = P.monitor_placed(v)
     for role in sorted(placed, key=lambda rl: placed[rl] != "both"):  # hub first: agents need its key
         host = {"db": "DB_HOST", "web": "WEB_HOST"}.get(role, "MONITOR_HOST")
         cmds += [
             f"# monitoring on the {role} node ({placed[role]}): {','.join(P.monitor_stacks(v))}",
-            f"rsync -a src/shell/monitor/monitor.sh src/shell/lib/progress.sh {host}:/tmp/vsw-monitor-src/ "
-            f"&& rsync -a stacks/monitor/ {host}:/tmp/vsw-monitor-src/stacks/",
+            f"rsync -a src/shell/monitor/monitor.sh src/shell/lib/progress.sh {host}:/tmp/siw-monitor-src/ "
+            f"&& rsync -a stacks/monitor/ {host}:/tmp/siw-monitor-src/stacks/",
             f"scp {rel}/monitor-{role}.conf {host}:/tmp/monitor.conf && ssh {host} 'sudo install -m 600 -o root "
             "-g root /tmp/monitor.conf /etc/vsw-monitor.conf && rm /tmp/monitor.conf'",
         ]
@@ -186,7 +186,7 @@ def next_commands(r: P.Resolved, out_dir: Path, turned_off: list[str] | None = N
             cmds.append(
                 "ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh monitor-user'   # exporter login (password stays on the node)"
             )
-        cmds.append(f"ssh -t {host} 'sudo /tmp/vsw-monitor-src/monitor.sh plan'")
+        cmds.append(f"ssh -t {host} 'sudo /tmp/siw-monitor-src/monitor.sh plan'")
     if v["STORAGE"] == "spaces" or v["OFFSITE"] == "s3":
         cmds.append(
             "# DO control panel: create the Spaces bucket(s) and a key limited to them (docs/tools/addons.md)"

@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
-from vps_server_workbench import cli
-from vps_server_workbench.plan_finder import ApiClient, Config, PlanFinderError, PloiDoPlanFinder
+from server_infra_workbench import cli
+from server_infra_workbench.plan_finder import ApiClient, Config, PlanFinderError, PloiDoPlanFinder
 
 PROVIDERS = [
     {

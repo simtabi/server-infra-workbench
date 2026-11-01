@@ -1,7 +1,7 @@
 """Spinner, bar, ETA and elapsed time on stderr, so stdout (tables, JSON) stays parseable.
 
 Same switches as the shell tools (src/shell/lib/progress.sh) and the PHP core (Console\\Progress):
-VSW_PROGRESS=auto|tty|plain|off (auto animates on a terminal, prints plain lines otherwise), VSW_QUIET=1, NO_COLOR.
+SIW_PROGRESS=auto|tty|plain|off (auto animates on a terminal, prints plain lines otherwise), SIW_QUIET=1, NO_COLOR.
 
     progress = Progress.detect()
     with progress.task("DigitalOcean sizes"):
@@ -19,6 +19,8 @@ import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from typing import TextIO
+
+from server_infra_workbench import compat
 
 TTY, PLAIN, OFF = "tty", "plain", "off"
 _FRAMES = "|/-\\"
@@ -50,12 +52,12 @@ class Progress:
         cls, stream: TextIO | None = None, env: Mapping[str, str] | None = None, isatty: bool | None = None
     ) -> Progress:
         stream = stream or sys.stderr
-        env = os.environ if env is None else env
+        env = compat.with_fallbacks(os.environ if env is None else env)
         tty = stream.isatty() if isatty is None else isatty
-        if env.get("VSW_QUIET") == "1":
+        if env.get("SIW_QUIET") == "1":
             mode = OFF
-        elif env.get("VSW_PROGRESS") in (TTY, PLAIN, OFF):
-            mode = env["VSW_PROGRESS"]
+        elif env.get("SIW_PROGRESS") in (TTY, PLAIN, OFF):
+            mode = env["SIW_PROGRESS"]
         else:
             mode = TTY if tty and env.get("TERM", "dumb") != "dumb" else PLAIN
         return cls(stream, mode, color=mode == TTY and not env.get("NO_COLOR"))

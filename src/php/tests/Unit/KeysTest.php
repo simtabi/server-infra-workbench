@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
-use Simtabi\VpsServerWorkbench\Exception\NotFoundException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Keys\AuthorizedKeys;
-use Simtabi\VpsServerWorkbench\Keys\KeyApiSpec;
-use Simtabi\VpsServerWorkbench\Keys\KeyProviders;
-use Simtabi\VpsServerWorkbench\Keys\PublicKey;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\FakeKeys;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Exception\NotFoundException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Keys\AuthorizedKeys;
+use Simtabi\ServerInfraWorkbench\Keys\KeyApiSpec;
+use Simtabi\ServerInfraWorkbench\Keys\KeyProviders;
+use Simtabi\ServerInfraWorkbench\Keys\PublicKey;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\FakeKeys;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class KeysTest extends TestCase
 {
@@ -28,7 +28,7 @@ final class KeysTest extends TestCase
     }
 
     /** @param array<string, string> $env */
-    private function keys(string $provider, ?array $env = null, ?KeyProviders $providers = null): \Simtabi\VpsServerWorkbench\Keys\AccountKeys
+    private function keys(string $provider, ?array $env = null, ?KeyProviders $providers = null): \Simtabi\ServerInfraWorkbench\Keys\AccountKeys
     {
         return ($providers ?? new KeyProviders)->make($provider, $this->options(), new Credentials('/nonexistent', $env ?? self::env()));
     }

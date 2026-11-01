@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp\Auth;
+namespace Simtabi\ServerInfraWorkbench\Gcp\Auth;
 
-use Simtabi\VpsServerWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
 
 /** A token you already have (CI, workload identity, tests). */
 final readonly class StaticTokenProvider implements TokenProvider

@@ -8,7 +8,7 @@ Shell tools that run **on a droplet** (or from your workstation with `--host`, w
 | Plan first | Every run prints what it found and what it would change. `--dry-run` stops there |
 | Confirm | `--yes`, or type `yes`. Production fixes need the **site domain typed**; `--yes` is not enough |
 | Lock | One run per tool at a time (`/run/lock/vsw-<tool>.lock`) |
-| Audit | `/var/log/vps-server-workbench/audit.log`: who, what, outcome. Values are never logged |
+| Audit | `/var/log/server-infra-workbench/audit.log`: who, what, outcome. Values are never logged |
 | Backups | Any file replaced is copied to `<file>.bak.<timestamp>` (mode 600) first; writes are atomic. In `/etc/apt/*.d` the copy is `<file>.<timestamp>.bak`, which apt skips quietly (`harden` renames older `.bak.<timestamp>` copies there) |
 | Re-runnable | Items already in place report `ok` and are skipped |
 
@@ -38,7 +38,7 @@ does only the generic items.
 ```bash
 bin/workbench server inventory --host db-1 --pull --client acme   # -> local/acme/inventory/db-1/ (gitignored)
 bin/workbench server inventory --json                             # on the server, to stdout
-bin/workbench server inventory --host db-1 --install-cron --yes   # daily 05:17 into /var/lib/vps-server-workbench/inventory
+bin/workbench server inventory --host db-1 --install-cron --yes   # daily 05:17 into /var/lib/server-infra-workbench/inventory
 ```
 
 Records OS, kernel, timezone, pending upgrades and reboot, CPU/RAM/swap/disk, IPv4 addresses, listening TCP
@@ -121,7 +121,7 @@ Postgres (5432), the DO cloud firewall or ufw, or the DB containers being down. 
 
 ## Testing
 
-`tests/shell/smoke-server.sh` (part of `make test`) runs every tool against a fake root (`VSW_SYSROOT`)
+`tests/shell/smoke-server.sh` (part of `make test`) runs every tool against a fake root (`SIW_SYSROOT`)
 with stub commands on `PATH`. `tests/shell/server-it.sh` (part of `make it`) runs `init`, `harden`,
 `inventory`, `update --dry-run` and `env` for real as root in a throwaway Ubuntu 26.04 container (`SERVER_IT_IMAGE=ubuntu:24.04` for the previous LTS): real apt,
 real `sshd -t`/`sshd -T` (including the rollback of a broken drop-in), real audit log and cron install.

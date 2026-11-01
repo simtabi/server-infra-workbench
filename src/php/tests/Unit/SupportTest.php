@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\RetryPolicy;
-use Simtabi\VpsServerWorkbench\Safety\AuditEntry;
-use Simtabi\VpsServerWorkbench\Safety\JsonlAuditLog;
-use Simtabi\VpsServerWorkbench\Support\Validate;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\RetryPolicy;
+use Simtabi\ServerInfraWorkbench\Safety\AuditEntry;
+use Simtabi\ServerInfraWorkbench\Safety\JsonlAuditLog;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class SupportTest extends TestCase
 {

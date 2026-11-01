@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
 /** Runs `ssh <options> <target> <command>`. Tests use a fake; ProcessSshRunner runs the system ssh. */
 interface SshRunner

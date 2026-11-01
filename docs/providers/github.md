@@ -37,7 +37,7 @@ writes need `--force`.
 - `bin/workbench github dispatch ci.yml --repo owner/name --ref main --inputs target=staging`
 - `bin/workbench github rerun <run-id> --repo owner/name` re-queues the failed jobs; `bin/workbench github cancel <run-id> --repo owner/name`
 - `bin/workbench github secrets list --repo owner/name --env production`
-- `bin/workbench github secrets set DEPLOY_KEY --repo owner/name --env production --value-file ~/.config/vps-server-workbench/deploy.key`
+- `bin/workbench github secrets set DEPLOY_KEY --repo owner/name --env production --value-file ~/.config/server-infra-workbench/deploy.key`
   (or the value on stdin). The value is sealed locally with the repository's public key (libsodium sealed box)
   and sent encrypted; it is never accepted on the command line and never printed or logged.
 - `bin/workbench github secrets delete DEPLOY_KEY --repo owner/name --force`

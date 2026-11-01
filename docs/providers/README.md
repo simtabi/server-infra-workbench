@@ -40,7 +40,7 @@ One HTTP core (`Http\Transport`) is shared by every client, so these hold everyw
   given with `--out`, created with mode 600, never printed and never inside the git checkout. The path is
   checked before any request is made.
 
-Credentials come from the environment or `~/.config/vps-server-workbench/credentials` (mode 600); see
+Credentials come from the environment or `~/.config/server-infra-workbench/credentials` (mode 600); see
 [`config/credentials.env.example`](../../config/credentials.env.example) and `bin/workbench credentials`, which
 reports which are set without printing them.
 
@@ -48,9 +48,9 @@ reports which are set without printing them.
 
 - Unit and contract tests (`make php`) use a mocked HTTP client: pagination, retries, `Retry-After`, error
   mapping, plans and redaction. No network, no real or credential-shaped values.
-- Live read-only tests (`src/php/tests/Live`) run only with `VSW_LIVE=1` and the provider's token, and go
+- Live read-only tests (`src/php/tests/Live`) run only with `SIW_LIVE=1` and the provider's token, and go
   through a client that refuses anything but GET (plus the Google OAuth token exchange):
 
 ```bash
-cd src/php && VSW_LIVE=1 vendor/bin/phpunit --testsuite live           # skips any provider without a token
+cd src/php && SIW_LIVE=1 vendor/bin/phpunit --testsuite live           # skips any provider without a token
 ```

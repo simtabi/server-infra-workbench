@@ -9,7 +9,7 @@
 | 5 | DB doctor alerts | `ALERT_EMAIL` or `HEALTHCHECK_URL` in the config; `M cron-install` | `M doctor --alert` once; the alert arrives | catches exposure, privilege drift, stale backups |
 | 6 | Backup check-in | `HEALTHCHECK_URL` (see [06](06-backups-and-dr.md)) | a ping per backup | a missed backup gets noticed |
 | 7 | Tunnel health (cross-region only) | `bin/workbench net wireguard status --host <web> --ping <db-tunnel-ip>` | handshake under 3 minutes | a dead tunnel looks like a dead DB |
-| 8 | Inventory drift | `bin/workbench server inventory --install-cron --yes` on each host | daily files in `/var/lib/vps-server-workbench/inventory` | shows what changed when something breaks |
+| 8 | Inventory drift | `bin/workbench server inventory --install-cron --yes` on each host | daily files in `/var/lib/server-infra-workbench/inventory` | shows what changed when something breaks |
 | 9 | Monitoring login on the DB | `M monitor-user` | `/etc/vsw-monitor/pg-monitor.pass` is 600; `M doctor` clean | exporters get `pg_monitor` only, never the app or admin login |
 | 10 | Pick stacks per node | `MONITOR_STACKS` and `MONITOR_ROLE` in `/etc/vsw-monitor.conf` ([example](../../config/monitor.conf.example)), then `bin/workbench monitor plan` | the plan shows binds, RAM estimate, firewall rule; exit 3 = RAM gate | heavy stacks next to a 2 GB database get OOM-killed first ([ADR 0012](../adr/0012-monitoring-stack.md)) |
 | 11 | Install agents, then the hub | `bin/workbench monitor install` on the DB node (agent), then on the hub node | `monitor doctor` reports 0 problems; agents listen on the private IP only | agents first, so the hub finds its targets at once |

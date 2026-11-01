@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Health;
+namespace Simtabi\ServerInfraWorkbench\Health;
 
 use Psr\Http\Client\ClientExceptionInterface;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
 
 /**
  * A doctor-style check of public health endpoints (e.g. https://app.example.com/up): status code,

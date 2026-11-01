@@ -179,9 +179,9 @@ mem() { awk -v k="$1" '$1==k":" {print int($2/1024); exit}' "$MONITOR_MEMINFO" 2
 
 ram_gate() { # sums the units; prints findings; dies when blocked
   local u est=0 total avail heavy="" blocked=0
-  for u in $(units); do ( load_unit "$u"; echo "$u $MON_RAM_MB $MON_HEAVY" ); done > "${TMPDIR:-/tmp}/vsw-mon-ram.$$"
-  while read -r u r h; do est=$((est + r)); [ "$h" = 1 ] && heavy="$heavy $u"; done < "${TMPDIR:-/tmp}/vsw-mon-ram.$$"
-  rm -f "${TMPDIR:-/tmp}/vsw-mon-ram.$$"
+  for u in $(units); do ( load_unit "$u"; echo "$u $MON_RAM_MB $MON_HEAVY" ); done > "${TMPDIR:-/tmp}/siw-mon-ram.$$"
+  while read -r u r h; do est=$((est + r)); [ "$h" = 1 ] && heavy="$heavy $u"; done < "${TMPDIR:-/tmp}/siw-mon-ram.$$"
+  rm -f "${TMPDIR:-/tmp}/siw-mon-ram.$$"
   total="$(mem MemTotal)"; avail="$(mem MemAvailable)"
   if [ -z "$total" ]; then echo "  ram      unknown here (no $MONITOR_MEMINFO); estimate ${est} MB"; return 0; fi
   echo "  ram      estimate ${est} MB; host ${total} MB total, ${avail} MB available"
@@ -476,9 +476,9 @@ cmd_install() {
 cmd_tunnel() {
   local u k p args="" desc=""
   for u in beszel kuma netdata prometheus; do installed "$u" || continue
-    ( load_unit "$u"; for k in $MON_UI_PORT_KEYS; do echo "$u $k ${!k}"; done ); done > "${TMPDIR:-/tmp}/vsw-mon-t.$$"
-  while read -r u k p; do args="$args -L $p:$MONITOR_BIND:$p"; desc="$desc\n  http://127.0.0.1:$p  $u ($k)"; done < "${TMPDIR:-/tmp}/vsw-mon-t.$$"
-  rm -f "${TMPDIR:-/tmp}/vsw-mon-t.$$"
+    ( load_unit "$u"; for k in $MON_UI_PORT_KEYS; do echo "$u $k ${!k}"; done ); done > "${TMPDIR:-/tmp}/siw-mon-t.$$"
+  while read -r u k p; do args="$args -L $p:$MONITOR_BIND:$p"; desc="$desc\n  http://127.0.0.1:$p  $u ($k)"; done < "${TMPDIR:-/tmp}/siw-mon-t.$$"
+  rm -f "${TMPDIR:-/tmp}/siw-mon-t.$$"
   [ -n "$args" ] || { echo "no monitoring UI installed on this node"; return 0; }
   echo "run on your laptop:"; echo "  ssh -N$args ${OPT_HOST:-<user>@<this-server>}"
   printf "then open:%b\n" "$desc"
@@ -594,7 +594,7 @@ main() {
       --yes|-y) OPT_YES=1 ;;
       --force) OPT_FORCE=1 ;;
       --delete-data) OPT_DELETE_DATA=1 ;;
-      -q|--quiet) export VSW_QUIET=1 ;;
+      -q|--quiet) export SIW_QUIET=1 ;;
       -h|--help) usage; exit 0 ;;
       -*) CODE=2 die "unknown flag $1" ;;
       *) [ -z "$arg" ] || CODE=2 die "one argument at a time"; arg="$1" ;;

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Simtabi\VpsServerWorkbench\Console\Progress;
-use Simtabi\VpsServerWorkbench\Console\ProgressSleeper;
-use Simtabi\VpsServerWorkbench\Exception\TimeoutException;
-use Simtabi\VpsServerWorkbench\Http\Waiter;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\RecordingSleeper;
+use Simtabi\ServerInfraWorkbench\Console\Progress;
+use Simtabi\ServerInfraWorkbench\Console\ProgressSleeper;
+use Simtabi\ServerInfraWorkbench\Exception\TimeoutException;
+use Simtabi\ServerInfraWorkbench\Http\Waiter;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\RecordingSleeper;
 
 /** Console progress (spinner, bar, ETA) and its hook into Waiter. No real sleeping, no terminal needed. */
 final class ProgressTest extends TestCase
@@ -35,8 +35,8 @@ final class ProgressTest extends TestCase
 
     public function test_detect_honours_quiet_env_override_tty_and_no_color(): void
     {
-        self::assertSame(Progress::OFF, Progress::detect($this->stream, ['VSW_QUIET' => '1', 'VSW_PROGRESS' => 'tty'], true)->mode());
-        self::assertSame(Progress::PLAIN, Progress::detect($this->stream, ['VSW_PROGRESS' => 'plain', 'TERM' => 'xterm'], true)->mode());
+        self::assertSame(Progress::OFF, Progress::detect($this->stream, ['SIW_QUIET' => '1', 'SIW_PROGRESS' => 'tty'], true)->mode());
+        self::assertSame(Progress::PLAIN, Progress::detect($this->stream, ['SIW_PROGRESS' => 'plain', 'TERM' => 'xterm'], true)->mode());
         self::assertSame(Progress::TTY, Progress::detect($this->stream, ['TERM' => 'xterm'], true)->mode());
         self::assertSame(Progress::PLAIN, Progress::detect($this->stream, ['TERM' => 'dumb'], true)->mode());
         self::assertSame(Progress::PLAIN, Progress::detect($this->stream, ['TERM' => 'xterm'], false)->mode());

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Droplets;
-use Simtabi\VpsServerWorkbench\DigitalOcean\FirewallPreset;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Droplets;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\FirewallPreset;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 /** Firewalls, uptime checks/alerts and droplet create. All mocked. */
 final class DigitalOceanApiTest extends TestCase

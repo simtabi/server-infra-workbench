@@ -25,10 +25,10 @@ bin/workbench configure --profile dev-budget --client <you> --set APP=api \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env   # DB server; copy to web, remove
 # web server: shared helpers once (examples/_shared/README.md), then as ploi:
-vsw-app-env --stack fastapi --from ~/stg-db.env --out /home/ploi/api.example.com-shared --set WEB_CONCURRENCY=3
+siw-app-env --stack fastapi --from ~/stg-db.env --out /home/ploi/api.example.com-shared --set WEB_CONCURRENCY=3
 shred -u ~/stg-db.env
 bin/workbench ploi daemon-create <server-id> --directory /home/ploi/api.example.com --dry-run \
-  --command "/usr/local/bin/vsw-with-env /home/ploi/api.example.com-shared/.env .venv/bin/fastapi run app/main.py --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1"
+  --command "/usr/local/bin/siw-with-env /home/ploi/api.example.com-shared/.env .venv/bin/fastapi run app/main.py --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1"
 ```
 
 | File | Use |

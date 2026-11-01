@@ -23,8 +23,8 @@ brew install bash shellcheck shfmt jq php composer python doctl
 ## Get the code
 
 ```bash
-git clone <your remote or path> vps-server-workbench
-cd vps-server-workbench
+git clone <your remote or path> server-infra-workbench
+cd server-infra-workbench
 composer install --working-dir=src/php       # only for the platform APIs
 bin/workbench list                       # every tool and where it lives
 ```

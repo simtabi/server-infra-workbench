@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console\Commands;
+namespace Simtabi\ServerInfraWorkbench\Console\Commands;
 
-use Simtabi\VpsServerWorkbench\Console\Input;
-use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
-use Simtabi\VpsServerWorkbench\Console\Runner;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Droplet;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Firewall;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\UptimeAlert;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\UptimeCheck;
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Droplets;
-use Simtabi\VpsServerWorkbench\DigitalOcean\FirewallPreset;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Monitoring;
-use Simtabi\VpsServerWorkbench\DigitalOcean\RunningAction;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Uptime;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Security\IssuedCredential;
-use Simtabi\VpsServerWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Console\Input;
+use Simtabi\ServerInfraWorkbench\Console\ProviderFactory;
+use Simtabi\ServerInfraWorkbench\Console\Runner;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\Droplet;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\Firewall;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\UptimeAlert;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\UptimeCheck;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Droplets;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\FirewallPreset;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Monitoring;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\RunningAction;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Uptime;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Security\IssuedCredential;
+use Simtabi\ServerInfraWorkbench\Support\Item;
 
 /** `workbench do ...`: DigitalOcean API v2. */
 final readonly class DigitalOceanCommand implements Command

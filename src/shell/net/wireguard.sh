@@ -50,9 +50,9 @@ is_key() { [[ "$1" =~ ^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$ ]]; }
 fp() { printf '%s' "$1" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -c1-12; }
 
 # run_on HOST SUBCOMMAND ARGS... : the server side of this script, on HOST over ssh
-# (tests: VSW_WG_LOCAL=<dir> runs it locally with VSW_SYSROOT=<dir>/<host>)
+# (tests: SIW_WG_LOCAL=<dir> runs it locally with SIW_SYSROOT=<dir>/<host>)
 run_on() { local h="$1"; shift
-  if [ -n "${VSW_WG_LOCAL:-}" ]; then VSW_SYSROOT="$VSW_WG_LOCAL/$h" bash "$0" "$@"
+  if [ -n "${SIW_WG_LOCAL:-}" ]; then SIW_SYSROOT="$SIW_WG_LOCAL/$h" bash "$0" "$@"
   else REMOTE_NOTTY=1 remote "$h" "$0" "$@"; fi
 }
 
@@ -98,7 +98,7 @@ srv_apply() {
   [ -s "$(key_path "$IFACE")" ] || die "no $(key_path "$IFACE"): run keygen first"
   lock
   write_file "$(conf_path "$IFACE")" 600 <<CONF
-# Managed by vps-server-workbench wireguard.sh - re-run setup instead of editing.
+# Managed by server-infra-workbench wireguard.sh - re-run setup instead of editing.
 # The private key stays in /etc/wireguard/$IFACE.key (600) and is loaded by PostUp.
 [Interface]
 Address = $SELF_IP/24

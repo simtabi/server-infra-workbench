@@ -19,13 +19,13 @@ RAM figures are planning estimates, not measurements under your load. A node run
 From your workstation (repo root). `DB_HOST` is your SSH alias for the node, and you need a sudo user:
 
 ```bash
-rsync -a src/shell/addons/addon.sh stacks/addons/ DB_HOST:/tmp/vsw-addons-src/
+rsync -a src/shell/addons/addon.sh stacks/addons/ DB_HOST:/tmp/siw-addons-src/
 # optional settings (no secrets), e.g. written by `bin/workbench configure`
 scp local/<client>/addons-db.conf DB_HOST:/tmp/addons.conf \
   && ssh DB_HOST 'sudo install -m 600 -o root -g root /tmp/addons.conf /etc/vsw-addons.conf && rm /tmp/addons.conf'
 
-ssh DB_HOST 'sudo /tmp/vsw-addons-src/addon.sh plan garage'       # writes nothing
-ssh -t DB_HOST 'sudo /tmp/vsw-addons-src/addon.sh install garage' # type the name to confirm
+ssh DB_HOST 'sudo /tmp/siw-addons-src/addon.sh plan garage'       # writes nothing
+ssh -t DB_HOST 'sudo /tmp/siw-addons-src/addon.sh install garage' # type the name to confirm
 ssh DB_HOST 'sudo /opt/vsw-addons/addon.sh doctor garage'         # later runs use the installed copy
 ssh DB_HOST 'sudo /opt/vsw-addons/addon.sh laravel-env garage --out /root/garage.laravel.env'
 ```

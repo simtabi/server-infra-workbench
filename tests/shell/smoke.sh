@@ -175,11 +175,11 @@ if command -v python3 >/dev/null 2>&1; then
   set +e; bin/workbench py ping 127.0.0.1 notaport >/dev/null 2>&1; rc=$?; set -e; [ "$rc" -eq 2 ] && ok "workbench py validates input" || fail "workbench py validation"
 fi
 if command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' && [ -f src/php/vendor/autoload.php ]; then
-  out="$(DIGITALOCEAN_TOKEN="$(gen)" VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 --name pre-upgrade --dry-run)"
+  out="$(DIGITALOCEAN_TOKEN="$(gen)" SIW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 --name pre-upgrade --dry-run)"
   grep -q 'DRY RUN — nothing sent.*POST /v2/droplets/42/actions' <<<"$out" && ok "workbench do snapshot --dry-run sends nothing" || fail "do snapshot dry-run: $out"
-  set +e; DIGITALOCEAN_TOKEN="$(gen)" VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 </dev/null 2>/dev/null; rc=$?; set -e
+  set +e; DIGITALOCEAN_TOKEN="$(gen)" SIW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 </dev/null 2>/dev/null; rc=$?; set -e
   [ "$rc" -eq 3 ] && ok "workbench writes refuse without --yes" || fail "write without --yes exit $rc"
-  set +e; env -u DIGITALOCEAN_TOKEN VSW_CREDENTIALS_FILE=/nonexistent bin/workbench digitalocean droplets 2>"$T/cred"; rc=$?; set -e
+  set +e; env -u DIGITALOCEAN_TOKEN SIW_CREDENTIALS_FILE=/nonexistent bin/workbench digitalocean droplets 2>"$T/cred"; rc=$?; set -e
   [ "$rc" -eq 4 ] && grep -q 'DIGITALOCEAN_TOKEN is not set' "$T/cred" && ok "workbench reports missing credentials" || fail "missing credentials exit $rc"
 else
   ok "workbench PHP checks skipped (php 8.4+ with src/php/vendor not available)"

@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console\Commands;
+namespace Simtabi\ServerInfraWorkbench\Console\Commands;
 
-use Simtabi\VpsServerWorkbench\Console\Input;
-use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
-use Simtabi\VpsServerWorkbench\Console\Runner;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Github\Github;
-use Simtabi\VpsServerWorkbench\Github\Repo;
-use Simtabi\VpsServerWorkbench\Support\Item;
+use Simtabi\ServerInfraWorkbench\Console\Input;
+use Simtabi\ServerInfraWorkbench\Console\ProviderFactory;
+use Simtabi\ServerInfraWorkbench\Console\Runner;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Github\Github;
+use Simtabi\ServerInfraWorkbench\Github\Repo;
+use Simtabi\ServerInfraWorkbench\Support\Item;
 
 /** `workbench github ...` (alias gh): GitHub REST API 2022-11-28. */
 final readonly class GithubCommand implements Command

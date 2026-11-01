@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp\Auth;
+namespace Simtabi\ServerInfraWorkbench\Gcp\Auth;
 
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
-use Simtabi\VpsServerWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
 
 /**
  * Wraps `gcloud auth print-access-token` for people who log in with gcloud instead of a key file.

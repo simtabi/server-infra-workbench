@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
 /** Pure text operations on an authorized_keys file. Comments, options and unknown lines are preserved. */
 final class AuthorizedKeys

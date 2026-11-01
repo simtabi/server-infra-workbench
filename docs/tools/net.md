@@ -28,7 +28,7 @@ server; by default the rule is printed for Ploi's Network tab).
 - **Ordering.** On the DB side, `docker.service` gets `After=wg-quick@wg0.service`, so Docker can publish the
   DB ports on the tunnel IP after a reboot.
 - **Plan, confirm, audit, lock.** As every server tool: nothing changes without `--yes` or typed `yes`; each
-  server logs to `/var/log/vps-server-workbench/audit.log` (fingerprints only).
+  server logs to `/var/log/server-infra-workbench/audit.log` (fingerprints only).
 
 ## After setup
 

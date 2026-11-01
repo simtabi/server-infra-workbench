@@ -154,7 +154,10 @@ PG_IMAGE_LEGACY="${PG_IMAGE_LEGACY:-local/postgres:18-postgis-pgvector}"  # old 
 MARIADB_ED25519="${MARIADB_ED25519:-0}"             # 1 = new MariaDB users use ed25519 (PHP mysqlnd cannot)
 MY_APP_HOST="${MY_APP_HOST:-%}"                     # host part of MySQL/MariaDB app users (ports are VPC-only)
 BINLOG_DAYS="${BINLOG_DAYS:-7}"                     # MySQL/MariaDB binlog retention on the server
-STATE_DIR="${STATE_DIR:-/var/lib/vps-server-workbench/db}"   # status stamps for doctor/monitoring
+siw_path() { # a server-infra-workbench path, or the pre-rename vps-server-workbench one while only that exists (ADR 0014)
+  local old="${1/server-infra-workbench/vps-server-workbench}"
+  if [ ! -e "$1" ] && [ -e "$old" ]; then printf '%s\n' "$old"; else printf '%s\n' "$1"; fi; }
+STATE_DIR="${STATE_DIR:-$(siw_path /var/lib/server-infra-workbench/db)}"   # status stamps for doctor/monitoring
 # ---- monitoring (workbench monitor; docs/tools/monitor.md) --
 MONITOR_USER="${MONITOR_USER:-vsw_monitor}"          # pg_monitor login for the exporters (monitor-user); empty = none
 MONITOR_PASSWORD_FILE="${MONITOR_PASSWORD_FILE:-/etc/vsw-monitor/pg-monitor.pass}"  # 600, read by monitor.sh, never printed
@@ -167,7 +170,7 @@ TENANT_ENVS="${TENANT_ENVS:-$ENVS}"                 # envs whose app role may CR
 PROTECTED_ENVS="${PROTECTED_ENVS:-stg prd}"
 PRD_LOCATION="${PRD_LOCATION:-local}"               # local | droplet | managed (prd not on this host)
 ENV_MIGRATOR="${ENV_MIGRATOR:-0}"                   # 1 = separate <app>_<env>_migrator for DDL
-ENV_SECRETS_DIR="${ENV_SECRETS_DIR:-/etc/vps-server-workbench/secrets}"
+ENV_SECRETS_DIR="${ENV_SECRETS_DIR:-$(siw_path /etc/server-infra-workbench/secrets)}"
 FRESH_BACKUP_MIN="${FRESH_BACKUP_MIN:-15}"          # protected envs: destructive ops need a backup this fresh
 TRASH_DAYS="${TRASH_DAYS:-7}"                       # soft-dropped Postgres DBs are purged after this
 DROPPED_DUMP_DAYS="${DROPPED_DUMP_DAYS:-30}"        # MySQL/MariaDB: dumps of dropped DBs kept this long
@@ -190,8 +193,8 @@ OFFSITE_REGION="${OFFSITE_REGION:-us-east-1}"
 OFFSITE_BUCKET="${OFFSITE_BUCKET:-}"
 OFFSITE_PREFIX="${OFFSITE_PREFIX:-db/$(hostname 2>/dev/null || echo host)}"
 OFFSITE_ENCRYPTION="${OFFSITE_ENCRYPTION:-openssl}" # openssl (AES-256, key file) | age (recipients file)
-OFFSITE_KEY_FILE="${OFFSITE_KEY_FILE:-/etc/vps-server-workbench/backup.key}"   # chmod 600
-OFFSITE_CREDS_FILE="${OFFSITE_CREDS_FILE:-/etc/vps-server-workbench/offsite.env}" # chmod 600: OFFSITE_ACCESS_KEY / OFFSITE_SECRET_KEY
+OFFSITE_KEY_FILE="${OFFSITE_KEY_FILE:-$(siw_path /etc/server-infra-workbench/backup.key)}"   # chmod 600
+OFFSITE_CREDS_FILE="${OFFSITE_CREDS_FILE:-$(siw_path /etc/server-infra-workbench/offsite.env)}" # chmod 600: OFFSITE_ACCESS_KEY / OFFSITE_SECRET_KEY
 OFFSITE_TOOL="${OFFSITE_TOOL:-rclone}"              # rclone | aws
 OFFSITE_KEEP_DAYS="${OFFSITE_KEEP_DAYS:-400}"
 BINLOG_SHIP_CRON="${BINLOG_SHIP_CRON:-*/5 * * * *}"
@@ -376,13 +379,18 @@ set_env_key() { # key value [file]: replace or append one line, file stays 600
 }
 
 # ---- progress (spinner, bar, ETA on stderr; same code as src/shell/lib/progress.sh) ----
-# VSW_PROGRESS=auto|tty|plain|off, --quiet (VSW_QUIET=1), NO_COLOR. Cron runs get plain lines.
+# SIW_PROGRESS=auto|tty|plain|off, --quiet (SIW_QUIET=1), NO_COLOR. Cron runs get plain lines.
 # >>> progress.sh
+# SIW_* was VSW_* before the rename (ADR 0014): an unset SIW_X takes VSW_X, with one notice per name
+for _v in $(compgen -e); do case "$_v" in VSW_*)
+  _n="SIW_${_v#VSW_}"; [ -n "${!_n+x}" ] || export "$_n=${!_v}"
+  case " ${SIW_COMPAT_NOTED:-} " in *" $_v "*) ;; *) export SIW_COMPAT_NOTED="${SIW_COMPAT_NOTED:-} $_v"
+    printf 'note: %s is deprecated, use %s (the old name is still read for now)\n' "$_v" "$_n" >&2 ;; esac ;; esac; done
 PROGRESS_T0="${PROGRESS_T0:-$(date +%s)}" PROGRESS_N=0 PROGRESS_BAR_T0="" PROGRESS_BAR_DEC=-1
 progress_mode() {
-  [ "${VSW_QUIET:-0}" = 1 ] && { echo off; return; }
-  case "${VSW_PROGRESS:-auto}" in
-    tty|plain|off) echo "$VSW_PROGRESS" ;;
+  [ "${SIW_QUIET:-0}" = 1 ] && { echo off; return; }
+  case "${SIW_PROGRESS:-auto}" in
+    tty|plain|off) echo "$SIW_PROGRESS" ;;
     *) if [ -t 2 ] && [ "${TERM:-dumb}" != dumb ]; then echo tty; else echo plain; fi ;;
   esac
 }
@@ -399,7 +407,7 @@ progress_step() {
 progress_run() {
   local label="$1" m t0 pid rc=0 log="" i=0 f="|/-\\"; shift; m="$(progress_mode)"; t0="$(date +%s)"
   if [ "$m" = tty ]; then
-    log="$(mktemp "${TMPDIR:-/tmp}/vsw-progress.XXXXXX")"
+    log="$(mktemp "${TMPDIR:-/tmp}/siw-progress.XXXXXX")"
     "$@" >"$log" 2>&1 </dev/null & pid=$!
     while kill -0 "$pid" 2>/dev/null; do
       printf '\r  %s %s  %s ' "${f:i++%4:1}" "$label" "$(progress_fmt $(($(date +%s) - t0)))" >&2; sleep 0.2
@@ -412,7 +420,7 @@ progress_run() {
   local e; e="$(progress_fmt $(($(date +%s) - t0)))"
   if [ "$rc" = 0 ]; then [ "$m" = off ] || printf '  %s  %s  (%s)\n' "$(progress_col 32 'done')" "$label" "$e" >&2
   else [ "$m" = off ] || printf '  %s  %s  (%s, exit %s)\n' "$(progress_col 31 'FAIL')" "$label" "$e" "$rc" >&2; fi
-  if [ -n "$log" ]; then { [ "$rc" != 0 ] || [ "${VSW_VERBOSE:-0}" = 1 ]; } && sed 's/^/        /' "$log" | tail -n 40 >&2; rm -f "$log"; fi
+  if [ -n "$log" ]; then { [ "$rc" != 0 ] || [ "${SIW_VERBOSE:-0}" = 1 ]; } && sed 's/^/        /' "$log" | tail -n 40 >&2; rm -f "$log"; fi
   return "$rc"
 }
 progress_bar() {
@@ -2546,9 +2554,9 @@ offsite_env() { # export tool credentials for one command (values never printed)
   local OFFSITE_ACCESS_KEY="" OFFSITE_SECRET_KEY="" PITR_CIPHER_PASS=""
   offsite_creds || die "missing $OFFSITE_CREDS_FILE (chmod 600) with OFFSITE_ACCESS_KEY and OFFSITE_SECRET_KEY"
   [ -n "$OFFSITE_BUCKET" ] || die "OFFSITE_BUCKET is not set"
-  export RCLONE_CONFIG_VSW_TYPE=s3 RCLONE_CONFIG_VSW_PROVIDER=Other RCLONE_CONFIG_VSW_ENDPOINT="$OFFSITE_ENDPOINT" \
-    RCLONE_CONFIG_VSW_REGION="$OFFSITE_REGION" RCLONE_CONFIG_VSW_ACCESS_KEY_ID="$OFFSITE_ACCESS_KEY" \
-    RCLONE_CONFIG_VSW_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" RCLONE_CONFIG_VSW_NO_CHECK_BUCKET=true \
+  export RCLONE_CONFIG_SIW_TYPE=s3 RCLONE_CONFIG_SIW_PROVIDER=Other RCLONE_CONFIG_SIW_ENDPOINT="$OFFSITE_ENDPOINT" \
+    RCLONE_CONFIG_SIW_REGION="$OFFSITE_REGION" RCLONE_CONFIG_SIW_ACCESS_KEY_ID="$OFFSITE_ACCESS_KEY" \
+    RCLONE_CONFIG_SIW_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" RCLONE_CONFIG_SIW_NO_CHECK_BUCKET=true \
     RCLONE_CONFIG=/dev/null   # remote from the env only; also silences "config file not found"
   # a private endpoint's CA (PITR_S3_CA_FILE) is trusted by the off-site tools too; TLS stays verified
   # (one variable per tool: rclone's S3 SDK refuses AWS_CA_BUNDLE with "unsupported transport")
@@ -2559,20 +2567,20 @@ offsite_env() { # export tool credentials for one command (values never printed)
 }
 remote_put() { # local remote-name
   case "$OFFSITE_TOOL" in
-    rclone) rclone copyto --s3-no-check-bucket "$1" "vsw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/$2" ;;
+    rclone) rclone copyto --s3-no-check-bucket "$1" "siw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/$2" ;;
     aws) aws s3 cp --only-show-errors ${OFFSITE_ENDPOINT:+--endpoint-url "$OFFSITE_ENDPOINT"} "$1" "s3://$OFFSITE_BUCKET/$OFFSITE_PREFIX/$2" ;;
     *) die "OFFSITE_TOOL must be rclone or aws" ;;
   esac
 }
 remote_get() { # remote-name local
   case "$OFFSITE_TOOL" in
-    rclone) rclone copyto "vsw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/$1" "$2" ;;
+    rclone) rclone copyto "siw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/$1" "$2" ;;
     aws) aws s3 cp --only-show-errors ${OFFSITE_ENDPOINT:+--endpoint-url "$OFFSITE_ENDPOINT"} "s3://$OFFSITE_BUCKET/$OFFSITE_PREFIX/$1" "$2" ;;
   esac
 }
 remote_ls() {
   case "$OFFSITE_TOOL" in
-    rclone) rclone lsf "vsw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/" 2>/dev/null ;;
+    rclone) rclone lsf "siw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/" 2>/dev/null ;;
     aws) aws s3 ls ${OFFSITE_ENDPOINT:+--endpoint-url "$OFFSITE_ENDPOINT"} "s3://$OFFSITE_BUCKET/$OFFSITE_PREFIX/" | awk '{print $4}' ;;
   esac
 }
@@ -2589,7 +2597,7 @@ offsite_upload() { # backup dir
   local rc=0; progress_run "upload $n" remote_put "$t" "$n" && remote_put "$t.sha256" "$n.sha256" || rc=$?
   rm -f "$t" "$t.sha256"
   [ "$rc" = 0 ] || return 1
-  if [ "$OFFSITE_TOOL" = rclone ]; then rclone delete --min-age "${OFFSITE_KEEP_DAYS}d" "vsw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/" >/dev/null 2>&1 || warn "off-site prune failed"; fi
+  if [ "$OFFSITE_TOOL" = rclone ]; then rclone delete --min-age "${OFFSITE_KEEP_DAYS}d" "siw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/" >/dev/null 2>&1 || warn "off-site prune failed"; fi
   stamp offsite "$n"; echo "off-site ok: $n"
 }
 cmd_offsite() { # backup [dir] | list | verify [name] | fetch <name> [dir]
@@ -3421,7 +3429,7 @@ for a in "$@"; do
     -y|--yes) FORCE=1 ;;
     --non-interactive) NONINTERACTIVE=1 ;;
     --config) skip_next=1 ;;
-    -q|--quiet) export VSW_QUIET=1 ;;
+    -q|--quiet) export SIW_QUIET=1 ;;
     --version) echo "$TOOL_NAME $VERSION"; exit 0 ;;
     *) ARGS+=("$a") ;;
   esac

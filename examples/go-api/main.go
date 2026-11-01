@@ -52,7 +52,7 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	<-ctx.Done() // SIGTERM from systemd or vsw-reload-daemon: stop accepting, finish in-flight requests
+	<-ctx.Done() // SIGTERM from systemd or siw-reload-daemon: stop accepting, finish in-flight requests
 	shutdown, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdown)

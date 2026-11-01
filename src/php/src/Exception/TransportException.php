@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Exception;
+namespace Simtabi\ServerInfraWorkbench\Exception;
 
 /** The request never got an HTTP response (DNS, TLS, timeout, connection reset). */
 class TransportException extends \RuntimeException implements WorkbenchException {}

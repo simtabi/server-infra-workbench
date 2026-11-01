@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
-use Simtabi\VpsServerWorkbench\Exception\TransportException;
+use Simtabi\ServerInfraWorkbench\Exception\TransportException;
 
 /**
  * The system ssh, so ~/.ssh/config, the agent and known_hosts all apply. BatchMode means a failed key

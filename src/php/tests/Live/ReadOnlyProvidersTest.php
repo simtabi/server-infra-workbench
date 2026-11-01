@@ -2,26 +2,27 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Live;
+namespace Simtabi\ServerInfraWorkbench\Tests\Live;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
-use Simtabi\VpsServerWorkbench\Cloudflare\Cloudflare;
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
-use Simtabi\VpsServerWorkbench\Gcp\Gcp;
-use Simtabi\VpsServerWorkbench\Github\Github;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Ploi\Ploi;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Cloudflare;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\Gcp\Gcp;
+use Simtabi\ServerInfraWorkbench\Github\Github;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Ploi\Ploi;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Support\Env;
 
 /**
  * Live, READ-ONLY smoke tests against the real APIs. Not part of the default run:
  *
- *   VSW_LIVE=1 DIGITALOCEAN_TOKEN=... vendor/bin/phpunit --testsuite live
+ *   SIW_LIVE=1 DIGITALOCEAN_TOKEN=... vendor/bin/phpunit --testsuite live
  *
- * Each provider is skipped unless VSW_LIVE=1 and its token is set. Every request goes through a client
+ * Each provider is skipped unless SIW_LIVE=1 and its token is set. Every request goes through a client
  * that refuses anything but GET (plus the OAuth token POST for a GCP service account), so a bug here
  * can never change an account. Nothing is printed; assertions only check shapes.
  */
@@ -59,8 +60,8 @@ final class ReadOnlyProvidersTest extends TestCase
 
     private static function need(string ...$keys): Credentials
     {
-        if (getenv('VSW_LIVE') !== '1') {
-            self::markTestSkipped('set VSW_LIVE=1 to run live read-only tests');
+        if (Env::get('SIW_LIVE') !== '1') {
+            self::markTestSkipped('set SIW_LIVE=1 to run live read-only tests');
         }
         $credentials = Credentials::fromEnvironment();
         foreach ($keys as $key) {

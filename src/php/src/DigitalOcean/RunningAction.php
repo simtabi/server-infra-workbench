@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\DigitalOcean;
+namespace Simtabi\ServerInfraWorkbench\DigitalOcean;
 
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Action;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\ActionStatus;
-use Simtabi\VpsServerWorkbench\Exception\ActionFailedException;
-use Simtabi\VpsServerWorkbench\Http\Sleeper;
-use Simtabi\VpsServerWorkbench\Http\Waiter;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\Action;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\ActionStatus;
+use Simtabi\ServerInfraWorkbench\Exception\ActionFailedException;
+use Simtabi\ServerInfraWorkbench\Http\Sleeper;
+use Simtabi\ServerInfraWorkbench\Http\Waiter;
 
 /** A DigitalOcean action that has started. wait() polls until it completes, errors or times out. */
 final readonly class RunningAction implements \JsonSerializable

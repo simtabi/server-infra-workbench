@@ -39,7 +39,7 @@ destructive ones need `--force`.
   an unchanged value is a no-op)
 - `bin/workbench cf ssl example.com` shows the mode; `bin/workbench cf ssl example.com strict` sets it.
 - `bin/workbench cf origin-certs list example.com`
-- `bin/workbench cf origin-certs create example.com --hostnames example.com,*.example.com --validity 5475 --out ~/.config/vps-server-workbench/example.com.key`
+- `bin/workbench cf origin-certs create example.com --hostnames example.com,*.example.com --validity 5475 --out ~/.config/server-infra-workbench/example.com.key`
   makes the private key and CSR locally (the key never leaves the machine), writes the key to the file (mode 600)
   and the certificate next to it as `FILE.crt`.
 - `bin/workbench cf origin-certs revoke example.com <cert-id> --force`

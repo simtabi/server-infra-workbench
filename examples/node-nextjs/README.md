@@ -25,10 +25,10 @@ bin/workbench configure --profile dev-budget --client <you> --set APP=web \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env   # DB server; copy to web, remove
 # web server: shared helpers once (examples/_shared/README.md), then as ploi:
-vsw-app-env --stack nextjs --from ~/stg-db.env --out /home/ploi/www.example.com-shared
+siw-app-env --stack nextjs --from ~/stg-db.env --out /home/ploi/www.example.com-shared
 shred -u ~/stg-db.env
 bin/workbench ploi daemon-create <server-id> --directory /home/ploi/www.example.com --dry-run \
-  --command "/usr/local/bin/vsw-with-env /home/ploi/www.example.com-shared/.env node .next/standalone/server.js"
+  --command "/usr/local/bin/siw-with-env /home/ploi/www.example.com-shared/.env node .next/standalone/server.js"
 ```
 
 | File | Use |

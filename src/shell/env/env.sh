@@ -170,7 +170,7 @@ fi
 
 # ---- init ------------------------------------------------------------------------------------
 [ -f "$TEMPLATE" ] || [ -f "$TARGET" ] || die "no template found (pass --template FILE)"
-WORK="$(mktemp)"; chmod 600 "$WORK"; trap 'rm -f "$WORK" "$WORK.vsw"' EXIT
+WORK="$(mktemp)"; chmod 600 "$WORK"; trap 'rm -f "$WORK" "$WORK.siw"' EXIT
 if [ -f "$TARGET" ]; then cp "$TARGET" "$WORK"; base="existing $TARGET"; else cp "$TEMPLATE" "$WORK"; base="template"; fi
 # env defaults (only where the value is a dev default or empty; your own values win)
 case "$ENVN" in

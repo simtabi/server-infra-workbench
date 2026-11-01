@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Security;
+namespace Simtabi\ServerInfraWorkbench\Security;
 
 /**
  * Removes secrets from anything about to be logged, audited, printed or put in an exception message.

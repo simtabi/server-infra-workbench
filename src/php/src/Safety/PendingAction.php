@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Safety;
+namespace Simtabi\ServerInfraWorkbench\Safety;
 
-use Simtabi\VpsServerWorkbench\Security\Redactor;
+use Simtabi\ServerInfraWorkbench\Security\Redactor;
 
 /**
  * A write that has been described but not sent. Nothing reaches the provider until confirm().

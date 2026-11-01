@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Support;
+namespace Simtabi\ServerInfraWorkbench\Support;
 
 /**
  * Typed reads from decoded JSON. Providers return loosely typed arrays; DTOs read them through

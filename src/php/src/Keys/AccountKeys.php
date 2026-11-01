@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
 
 /** The four operations every provider supports for dashboard SSH keys. */
 interface AccountKeys

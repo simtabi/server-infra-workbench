@@ -48,7 +48,7 @@ command, is in [docs/providers](../providers/README.md) ([DigitalOcean](../provi
 | `workbench do snapshot <droplet-id> [--name N] [--wait] [--timeout S]` | **Write.** Snapshot a droplet (default name `workbench-<id>-<UTC time>`) |
 | `workbench do snapshot-delete <snapshot-id>` | **Destructive.** Needs `--force` |
 | `workbench do account` | Check the token (prints the account record) |
-| `workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I] [--vpc UUID] [--tag T] [--backups] [--user-data FILE]` | **Write.** Create a droplet; a no-op when one with that name exists. Image: `--image`, else `VSW_DROPLET_IMAGE`, else `ubuntu-26-04-x64` (the newest Ubuntu LTS); `--image latest` asks the API for the newest Ubuntu LTS ([why](#default-droplet-image)) |
+| `workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I] [--vpc UUID] [--tag T] [--backups] [--user-data FILE]` | **Write.** Create a droplet; a no-op when one with that name exists. Image: `--image`, else `SIW_DROPLET_IMAGE`, else `ubuntu-26-04-x64` (the newest Ubuntu LTS); `--image latest` asks the API for the newest Ubuntu LTS ([why](#default-droplet-image)) |
 | `workbench do resize <id> --size S [--disk] [--timeout S]` | **Write, downtime.** Shut down (falls back to power off), resize, power back on (always attempted, even when the resize fails). CPU/RAM-only by default so you can size back down; `--disk` grows the disk permanently and needs `--force`. Snapshot first |
 | `workbench do alerts [list]` | Monitoring alert policies |
 | `workbench do alerts standard --email a@x (--droplet ID[,ID] \| --tag T)` | **Write.** CPU > 85% for 10m, memory > 90% for 10m, disk > 85% for 5m. Creates only the missing ones (matched by description), so it is safe to rerun |
@@ -138,15 +138,15 @@ New droplets get the **newest Ubuntu LTS** (`ubuntu-26-04-x64` today). Why:
 | To get | Do |
 |---|---|
 | The default (newest LTS known to this release) | nothing |
-| A fixed image on this workstation, e.g. to match servers still on 24.04 | `VSW_DROPLET_IMAGE=ubuntu-24-04-x64` in the environment or the credentials file |
+| A fixed image on this workstation, e.g. to match servers still on 24.04 | `SIW_DROPLET_IMAGE=ubuntu-24-04-x64` in the environment or the credentials file |
 | A different image for one droplet | `--image <slug>` (wins over the setting) |
-| Whatever is newest on DigitalOcean right now | `--image latest` or `VSW_DROPLET_IMAGE=latest` (one read-only `GET /v2/images`; falls back to the default) |
+| Whatever is newest on DigitalOcean right now | `--image latest` or `SIW_DROPLET_IMAGE=latest` (one read-only `GET /v2/images`; falls back to the default) |
 
 In your own shell scripts, quote the area when it follows another word that bash treats as a keyword
 (`bin/workbench 'do' droplets`), or use the `digitalocean` alias; shellcheck flags a bare `do` (SC1010).
 
-Every write, dry runs included, is appended to the audit log (`~/.local/state/vps-server-workbench/audit.log`;
-`VSW_AUDIT_LOG=off` to disable). See [platform-api.md](platform-api.md#audit-log).
+Every write, dry runs included, is appended to the audit log (`~/.local/state/server-infra-workbench/audit.log`;
+`SIW_AUDIT_LOG=off` to disable). See [platform-api.md](platform-api.md#audit-log).
 
 ## Python: `workbench py`
 
@@ -165,10 +165,10 @@ PHP core, the Python plan finder, and `make it` (one line per suite plus a summa
 
 | Setting | Effect |
 |---|---|
-| `VSW_PROGRESS=auto` (default) | spinner/bar on a terminal, one plain line per step otherwise (logs, cron, CI) |
-| `VSW_PROGRESS=tty` / `plain` / `off` | force a mode |
-| `--quiet` / `-q` or `VSW_QUIET=1` | no progress lines; errors and results still print |
-| `VSW_VERBOSE=1` | on a terminal, also show the output of wrapped commands (normally replayed only on failure) |
+| `SIW_PROGRESS=auto` (default) | spinner/bar on a terminal, one plain line per step otherwise (logs, cron, CI) |
+| `SIW_PROGRESS=tty` / `plain` / `off` | force a mode |
+| `--quiet` / `-q` or `SIW_QUIET=1` | no progress lines; errors and results still print |
+| `SIW_VERBOSE=1` | on a terminal, also show the output of wrapped commands (normally replayed only on failure) |
 | `NO_COLOR=1` | no colour (https://no-color.org) |
 
 Why it is built this way:

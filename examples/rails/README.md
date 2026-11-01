@@ -27,10 +27,10 @@ bin/workbench configure --profile dev-budget --client <you> --set APP=shop \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.6 --set VPC_CIDR=10.0.0.0/20
 sudo /root/docker-db-server-manager.sh env-creds stg --out /root/stg-db.env   # DB server; copy to web, remove
 # web server: shared helpers once (examples/_shared/README.md), then as ploi:
-vsw-app-env --stack rails --from ~/stg-db.env --out /home/ploi/shop.example.com-shared --set SOLID_QUEUE_IN_PUMA=1
+siw-app-env --stack rails --from ~/stg-db.env --out /home/ploi/shop.example.com-shared --set SOLID_QUEUE_IN_PUMA=1
 shred -u ~/stg-db.env
 bin/workbench ploi daemon-create <server-id> --directory /home/ploi/shop.example.com --dry-run \
-  --command "/usr/local/bin/vsw-with-env /home/ploi/shop.example.com-shared/.env bin/bundle exec puma -C config/puma.rb"
+  --command "/usr/local/bin/siw-with-env /home/ploi/shop.example.com-shared/.env bin/bundle exec puma -C config/puma.rb"
 ```
 
 | File | Use |
