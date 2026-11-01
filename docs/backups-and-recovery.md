@@ -137,6 +137,7 @@ flowchart TD
 |---|---|
 | Restore last night's dump | `restore /opt/db/backups/<ts> postgres` (type `RESTORE`; protected envs also need `--force-prod` and the env name) |
 | Point in time (Postgres) | `pitr restore --target '2026-10-31 09:14:00+00'` restores the **whole cluster**; then `verify`, `doctor`, `pitr backup full` |
+| Point in time (MySQL/MariaDB) | `binlog-replay --target '2026-10-31 09:14:00' [--engine mysql\|mariadb]` (UTC): newest dump before T, then the binlogs up to T ([below](#mysqlmariadb-point-in-time-binlog-replay)) |
 | Droplet lost | `server init --role db`, copy the manager and config, `install`, put the key back, `offsite list`, `offsite fetch <name>`, `restore <dir> all` |
 | Soft-dropped database | the undo line printed by `drop-db`: `ALTER DATABASE "<db>__trash_<ts>" ALLOW_CONNECTIONS true; ALTER DATABASE ... RENAME TO "<db>";` |
 | Dropped MySQL/MariaDB database | `gunzip -c $BACKUP_DIR/dropped/<db>-<ts>.sql.gz \| docker compose exec -T mysql mysql -uroot -p` |
@@ -147,7 +148,30 @@ Practise a restore monthly on a scratch droplet ([checklist](checklists/monthly-
 
 - A PITR restore can't target one database: it rewinds every database on the Postgres server. To recover one
   table, restore to a scratch server and copy the rows back.
-- MySQL/MariaDB point-in-time replay from shipped binlogs is manual (`mysqlbinlog --stop-datetime`).
-- Container-tested: PITR restore to a time from a posix repo (`pitr-it`) and from an S3 repo (`pitr-s3-it`,
-  Garage behind TLS). Not reproducible locally: the real Spaces endpoint and its public CA; rehearse that on a
-  scratch droplet. See [tests](../tests/README.md).
+- `binlog-replay` replays from the shipped copies in `$BACKUP_DIR/binlogs/<engine>` (it runs `binlog-ship` first);
+  after losing the droplet, put the off-site copies back there first. It skips account
+  statements (users, grants, passwords): accounts stay as they are now.
+- Tested: PITR restore to a time from a posix repo (`pitr-it`), from an S3 repo (`pitr-s3-it`, Garage behind
+  TLS), from a real Spaces bucket (`pitr-spaces-live`, [live tests](live-tests.md)), and MySQL/MariaDB binlog
+  replay (`mysql-pitr-it`). See [tests](../tests/README.md).
+
+### MySQL/MariaDB point in time (binlog replay)
+
+```sh
+./docker-db-server-manager.sh binlog-replay --prepare                       # MySQL: build the decoder image now
+./docker-db-server-manager.sh binlog-replay --target '2026-10-31 09:14:00'  # UTC, type RESTORE
+./docker-db-server-manager.sh binlog-replay --target '2026-10-31 09:14:00' --engine mariadb --from /opt/db/backups/<ts>
+```
+
+1. Picks the newest backup that **finished** before the target (`backup` records each dump's binlog file and
+   position, `--source-data`/`--master-data`, and its UTC finish time); `--from` picks one by hand.
+2. Verifies its checksums, ships the binlogs off-site (`binlog-ship`), checks the binlogs from the dump's
+   position on are all still there (a gap stops it), and takes a safety `backup`.
+3. Drops the user databases, loads the dump and replays the binlogs from that position up to the target with
+   binary logging off for the session, then flushes the logs and takes a fresh `backup`.
+
+Protected environments need `--force-prod` and the env name. The binlogs from the dump's position to the target
+must all be there: the server keeps them `BINLOG_DAYS` (default 7), so ship them (cron) and keep backups newer than that. MySQL images ship without `mysqlbinlog`: the first replay (or
+`--prepare`) builds `vsw-local/mysqlbinlog:<tag>` from `MYSQL_IMAGE` plus Oracle's client RPM of the same version,
+checking its signature; offline servers set `MYSQLBINLOG_IMAGE` to an image that has it. Replication GTIDs are
+not reused (`--skip-gtids`; dumps carry `--set-gtid-purged=OFF`), so the replayed transactions get new GTIDs.

@@ -8,7 +8,7 @@ SCRIPTS := $(shell find . -name '*.sh' -not -path './.git/*' -not -path '*/vendo
 PHP_OK   = command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'
 PY_OK    = command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))'
 
-.PHONY: help lint syntax shellcheck fmt-check compose-check links mermaid test it ci ci-local secrets-check docs-commands \
+.PHONY: help live-test live-sweep lint syntax shellcheck fmt-check compose-check links mermaid test it ci ci-local secrets-check docs-commands \
         php-install php-lint php-test php py-lint py-test python
 
 help:  ## list targets
@@ -117,10 +117,18 @@ test: ## offline smoke tests (no servers touched)
 	python3 stacks/monitor/prometheus/grafana/dashboards.py --check
 	bash examples/run.sh --all
 
-it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (verify-full, metrics, migrate-managed, pg-major-upgrade), PITR restore (posix and S3 via Garage + TLS), a 3-node Garage cluster, monitoring, WireGuard between two hosts (~13 min)
+it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (verify-full, metrics, migrate-managed, pg-major-upgrade), PITR restore (posix and S3 via Garage + TLS), MySQL/MariaDB binlog replay, a 3-node Garage cluster, monitoring, WireGuard between two hosts (~13 min)
 	bash tests/shell/run-suites.sh tests/shell/upgrade-it.sh tests/shell/addons-it.sh tests/shell/server-it.sh \
-	  tests/shell/db-features-it.sh tests/shell/pitr-it.sh tests/shell/pitr-s3-it.sh \
+	  tests/shell/db-features-it.sh tests/shell/pitr-it.sh tests/shell/pitr-s3-it.sh tests/shell/mysql-pitr-it.sh \
 	  tests/shell/garage-cluster-it.sh tests/shell/monitor-it.sh tests/shell/wg-it.sh
+
+live-test: ## LIVE, SPENDS MONEY on DigitalOcean: Spaces PITR, server setup over --host, 3-node Garage over a VPC (dry run unless LIVE_ARGS=--yes; docs/live-tests.md). Never in CI
+	bash tests/live/pitr-spaces-live.sh $(LIVE_ARGS)
+	bash tests/live/server-live.sh $(LIVE_ARGS)
+	bash tests/live/garage-live.sh $(LIVE_ARGS)
+
+live-sweep: ## list what a killed live test left on DigitalOcean (LIVE_ARGS=--yes deletes it)
+	bash tests/live/sweep.sh $(LIVE_ARGS)
 
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
 	tests/shell/client-check.sh

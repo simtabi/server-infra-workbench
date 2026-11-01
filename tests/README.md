@@ -1,7 +1,7 @@
 # tests/
 
 Repository-level tests. Package tests live with their package (`src/php/tests`, `src/python/tests`).
-No test calls a real API or a real server.
+No test calls a real API or a real server, except the opt-in live tests in [`live/`](live/) ([runbook](../docs/live-tests.md)), which never run in CI.
 
 | Folder | What | Run |
 |---|---|---|
@@ -17,6 +17,9 @@ No test calls a real API or a real server.
 | [`shell/server-it.sh`](shell/server-it.sh) | server init/harden/inventory/update, env, fixkeys as root in Ubuntu 26.04 (docker; `SERVER_IT_IMAGE=ubuntu:24.04` for the previous LTS) | `make it` |
 | [`shell/db-features-it.sh`](shell/db-features-it.sh) | verify-full TLS, metrics, migrate-managed, the Postgres major upgrade (docker) | `make it` |
 | [`shell/pitr-it.sh`](shell/pitr-it.sh) | pgBackRest backup and point-in-time restore (docker) | `make it` |
+| [`shell/mysql-pitr-it.sh`](shell/mysql-pitr-it.sh) | MySQL 9.7 and MariaDB point in time: backup with binlog coordinates, `binlog-ship`, `binlog-replay` to a time (rows, a dropped DB, a rotated password kept, guards) (docker) | `make it` |
+| [`live/pitr-spaces-live.sh`](live/pitr-spaces-live.sh), [`live/server-live.sh`](live/server-live.sh), [`live/garage-live.sh`](live/garage-live.sh) | **live, spends money**: PITR on real Spaces; swap, Docker and `--host` on a droplet; 3-node Garage over a VPC | `make live-test LIVE_ARGS=--yes` |
+| [`live/sweep.sh`](live/sweep.sh) | lists (or deletes) anything a killed live run left on DigitalOcean | `make live-sweep` |
 | [`shell/pitr-s3-it.sh`](shell/pitr-s3-it.sh) | PITR through an S3 repo: Garage add-on behind a Caddy TLS front with a per-run CA, encrypted repo, restore to a time (docker) | `make it` |
 | [`shell/garage-cluster-it.sh`](shell/garage-cluster-it.sh) | three Garage nodes in host networking, replication 3, joins, one node down (docker) | `make it` |
 | [`shell/monitor-it.sh`](shell/monitor-it.sh) | the monitoring stacks and exporters against a real manager install (docker) | `make it` |

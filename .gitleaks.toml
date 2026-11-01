@@ -32,6 +32,8 @@ keywords = ["password", "passwd", "passphrase", "secret", "token", "api_key", "a
     '''openssl rand|random_bytes|token_urlsafe|token_hex|secrets\.''',
     '''vsw-secrets: ignore''',
     '''/etc/passwd''',
+    '''os\.environ\[|os\.getenv\(|\bgetenv\(''',
+    '''(?i)\bno password\b''',
     '''=>\s*'[A-Z][A-Za-z]*(?: [A-Za-z/()]+){2,}''',
   ]
 

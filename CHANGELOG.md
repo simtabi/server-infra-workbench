@@ -45,6 +45,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a URL; `--stack none` for app keys only), `with-env.sh`, `reload-daemon.sh` (restart by port after Ploi
   activates the release, wait for health), `nginx-proxy.conf`, `ploi-script.sh` (the generic deploy script with
   an example's settings; `--check`). `run.sh` runs `selftest` lines and checks every `ploi-deploy.settings.sh`.
+- DB manager: `binlog-replay --target 'YYYY-MM-DD HH:MM:SS' [--engine] [--from DIR] [--force-prod] | --prepare`,
+  MySQL/MariaDB point-in-time restore: newest dump finished before T, then the shipped binlogs from the dump's
+  position up to T (UTC). Guards like `restore` (type RESTORE; protected envs need `--force-prod`), ships the
+  binlogs and takes a safety backup first, refuses a binlog gap, skips account statements, takes a new backup
+  after. `backup` records each MySQL/MariaDB dump's binlog coordinates and UTC finish time. MySQL images lack
+  `mysqlbinlog`: a decoder image is built from `MYSQL_IMAGE` plus Oracle's signed client RPM of the same version
+  (`MYSQLBINLOG_IMAGE` overrides).
+- Tests: `mysql-pitr-it` (MySQL 9.7 and MariaDB binlog replay, in `make it`). Opt-in live tests on throwaway
+  DigitalOcean resources, never in CI ([live tests](docs/live-tests.md)): `pitr-spaces-live` (PITR on a real
+  Spaces bucket with a bucket-scoped key), `server-live` (swap, Docker and `--host` on a droplet, across a
+  reboot), `garage-live` (3-node Garage over a real VPC, one node down). Shared `tests/live/lib`: dry run by
+  default, cost guard, watchdog, trap teardown, verified cleanup; `make live-test`, `make live-sweep`.
 
 ### Changed
 
@@ -52,6 +64,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   flags and exit codes are unchanged. `docs/tools/platform-api.md`, `cli.md`, `status.md` and
   `config/credentials.env.example` document the new scopes; the documented-command checker covers `github`/`gh`
   and two-word subcommands. CI installs `ext-sodium`.
+
+### Fixed (test gaps, 2026-11)
+
+- MySQL dumps did not load back into the same server (ERROR 3546, GTID_PURGED overlap; GTIDs are on in MySQL
+  9.7): `backup` and the soft-drop dump use `--set-gtid-purged=OFF`. This affected `restore` of MySQL dumps.
+- A MySQL- or MariaDB-only config (`ENABLE_POSTGRES=0`) was refused when the default `PG_EXTENSIONS` had postgis
+  and the base image could not provide it: the check now runs only with Postgres on.
 
 ### Fixed (final audit, 2026-11)
 - Python style gate never ran: ruff was optional and absent locally and in CI, and the code had drifted (89 findings, 8 files unformatted). Now formatted and clean under ruff 0.17.3, E501 left to the formatter, and CI installs ruff so `make py-lint` enforces it. Real fixes among the findings: `ApiClient` refuses any non-HTTPS URL (including API pagination links) before it builds a request with the bearer token, and errors chain their cause (`raise ... from`).
