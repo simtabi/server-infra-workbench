@@ -123,6 +123,23 @@ final class DigitalOceanTest extends TestCase
         self::assertStringContainsString('403', (string) $this->audit->entries[1]->error);
     }
 
+    public function test_droplet_snapshots_carry_the_droplet_id(): void
+    {
+        // GET /v2/droplets/{id}/snapshots returns images without resource_id; /v2/snapshots includes it as a string
+        $this->http
+            ->json(['snapshots' => [['id' => 501, 'name' => 'pre-upgrade', 'size_gigabytes' => 2.5, 'created_at' => '2026-11-01T00:00:00Z']], 'links' => []])
+            ->json(['snapshots' => [['id' => '502', 'name' => 'nightly', 'resource_id' => '124', 'resource_type' => 'droplet', 'size_gigabytes' => 3]], 'links' => []]);
+
+        $one = $this->do()->droplets()->snapshots(123);
+        $all = $this->do()->snapshots()->list();
+
+        self::assertSame('123', $one[0]->resourceId);
+        self::assertSame('droplet', $one[0]->resourceType);
+        self::assertSame('501', $one[0]->id);
+        self::assertSame('124', $all[0]->resourceId);
+        self::assertSame(['GET /v2/droplets/123/snapshots?per_page=200', 'GET /v2/snapshots?per_page=200&resource_type=droplet'], $this->http->log());
+    }
+
     public function test_snapshot_delete_is_destructive(): void
     {
         $pending = $this->do()->snapshots()->delete('1234567');

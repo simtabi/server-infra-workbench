@@ -61,8 +61,11 @@ confirm() { # confirm "<what>" [typed-word]; --yes skips the plain prompt, never
 }
 
 backup() { # backup FILE -> FILE.bak.<ts> (mode 600); prints the path
+  # Under /etc/apt/*.d the copy is FILE.<ts>.bak instead: apt silently skips names ending in .bak, but warns
+  # "invalid filename extension" on every run for FILE.bak.<ts>.
   [ -e "$1" ] || return 0
-  local b; b="$1.bak.$(date +%Y%m%d%H%M%S)"
+  local b ts; ts="$(date +%Y%m%d%H%M%S)"; b="$1.bak.$ts"
+  case "$1" in */etc/apt/*.d/*) b="$1.$ts.bak" ;; esac
   (umask 077; cp -p "$1" "$b") && chmod 600 "$b" && printf '        backup: %s\n' "$b"
 }
 

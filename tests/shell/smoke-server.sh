@@ -52,6 +52,21 @@ if bash "$H" --only dockergroup --fix-docker-group --check >/dev/null 2>&1; then
 DOCKER_GROUP_ALLOW=deploy bash "$H" --only dockergroup --fix-docker-group --yes >"$T/o" 2>&1
 grep -qx 'docker:x:999:deploy' "$T/root/etc/group" && ls "$T/root/etc/group".bak.* >/dev/null 2>&1 && grep -q 'item=dockergroup' "$T/log/audit.log" \
   && ok "harden --fix-docker-group --yes: removes only non-allowed users, backup + audit" || { cat "$T/o" "$T/root/etc/group"; fail "docker fix"; }
+# apt.conf.d backups end in .bak (apt skips those quietly; FILE.bak.<ts> gets an "invalid filename extension" notice)
+fresh; A="$T/root/etc/apt/apt.conf.d"; mkdir -p "$A"; echo 'APT::Periodic::Unattended-Upgrade "0";' > "$A/20auto-upgrades"
+echo old > "$A/20auto-upgrades.bak.20260101000000"
+bash "$H" --only updates >"$T/o" 2>&1 || true
+grep -q 'rename 1 old .*20auto-upgrades.bak.<ts> backup' "$T/o" && ok "harden plan: old apt.conf.d .bak.<ts> backups listed for renaming" || { cat "$T/o"; fail "apt bak plan"; }
+bash "$H" --only updates --yes >"$T/o" 2>&1
+[ -z "$(find "$A" -name '*.bak.*')" ] && [ -f "$A/20auto-upgrades.20260101000000.bak" ] && [ "$(find "$A" -name '20auto-upgrades.*.bak' | wc -l | tr -d ' ')" = 2 ] \
+  && grep -q 'Unattended-Upgrade "1"' "$A/20auto-upgrades" && ok "harden updates: backup named .<ts>.bak in apt.conf.d, old .bak.<ts> renamed" || { ls -la "$A"; cat "$T/o"; fail "apt bak names"; }
+# ufw inactive and not managed: a note pointing at the cloud firewall or --firewall (no warn, no change)
+stub ufw 'case "$1" in status) echo "Status: inactive";; esac'
+bash "$H" --only journald >"$T/o" 2>&1 || true
+grep -q 'note  ufw is inactive and not managed without --firewall' "$T/o" && ! grep -q 'todo  firewall' "$T/o" && ok "harden: inactive ufw without --firewall is a note" || { cat "$T/o"; fail "ufw note"; }
+bash "$H" --only firewall --firewall >"$T/o" 2>&1 || true
+! grep -q 'note  ufw' "$T/o" && grep -q 'todo  firewall' "$T/o" && ok "harden --firewall: plans ufw, no note" || { cat "$T/o"; fail "ufw firewall plan"; }
+stub ufw
 
 # --- update -------------------------------------------------------------------------
 fresh

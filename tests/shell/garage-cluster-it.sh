@@ -87,6 +87,10 @@ docker stop "$(docker ps -q --filter "label=com.docker.compose.project=$P-n2-gar
 [ "$(s3 "$W/app.env" GET "http://127.0.0.1:$(s3p 1)/cluster/obj.bin")" = 200 ] && cmp -s "$W/s3.body" "$W/obj.bin" \
   && [ "$(s3 "$W/app.env" PUT "http://127.0.0.1:$(s3p 3)/cluster/b.bin" --data-binary @/w/obj.bin)" = 200 ] \
   && ok "node 2 down: reads and writes still succeed (quorum 2 of 3)" || fail "one node down"
+for _ in $(seq 1 30); do [ "$(gx 1 status 2>/dev/null | sed -n '/HEALTHY NODES/,/^$/p' | grep -cE '^[0-9a-f]{16} ' || true)" -le 2 ] && break; sleep 2; done
+node 1 doctor garage > "$W/doc2.out" 2>&1 || true
+grep -qE 'warn +healthy nodes: 2 of 3 \(replication 3\): reads and writes still work' "$W/doc2.out" && ! grep -q 'FAIL.*healthy nodes' "$W/doc2.out" \
+  && ok "doctor with node 2 down: a warning (2 of 3, quorum kept), not a failure" || { cat "$W/doc2.out"; fail "doctor 2 of 3"; }
 docker start "$(docker ps -aq --filter "label=com.docker.compose.project=$P-n2-garage")" >/dev/null
 code=000; for _ in $(seq 1 30); do code="$(s3 "$W/app.env" GET "http://127.0.0.1:$(s3p 2)/cluster/b.bin" || true)"; [ "$code" = 200 ] && break; sleep 2; done
 [ "$code" = 200 ] && cmp -s "$W/s3.body" "$W/obj.bin" \

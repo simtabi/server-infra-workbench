@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Integration test of the server tools in a throwaway Ubuntu 24.04 container (Docker/OrbStack).
+# Integration test of the server tools in a throwaway Ubuntu container (Docker/OrbStack): 26.04 by default, the
+# droplet-create default; SERVER_IT_IMAGE=ubuntu:24.04 for servers still on the previous LTS.
 # Not part of `make ci` (needs Docker and the Ubuntu mirrors, ~3 min): run by `make it`.
 # Real apt, real sshd -t / sshd -T, real files; no systemd in a container, so service reloads only warn.
 # Not covered here (offline in smoke-server.sh): swap (swapon needs privileges), Docker install, --host.
@@ -7,10 +8,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || { echo "server-it skipped (no docker)"; exit 0; }
-IMG="${SERVER_IT_IMAGE:-ubuntu:24.04}" NAME="vsw-server-it-$$"
+IMG="${SERVER_IT_IMAGE:-ubuntu:26.04}" NAME="vsw-server-it-$$"
+OS_VER="${IMG##*:}"; [[ "$OS_VER" =~ ^[0-9]{2}\.[0-9]{2}$ ]] || OS_VER=""  # inventory checks "Ubuntu <tag>" for a numeric tag
 trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
 docker run -d --name "$NAME" -v "$PWD/src/shell:/w/src/shell:ro" -v "$PWD/config:/w/config:ro" "$IMG" sleep infinity >/dev/null
-docker exec -i "$NAME" bash -s <<'INNER'
+docker exec -i -e OS_VER="$OS_VER" "$NAME" bash -s <<'INNER'
 set -euo pipefail
 pass=0; ok() { pass=$((pass + 1)); echo "ok   $1"; }; fail() { echo "FAIL $1" >&2; exit 1; }
 export DEBIAN_FRONTEND=noninteractive
@@ -39,7 +41,7 @@ bash $S/server/harden.sh --only ssh --yes >/dev/null 2>&1 && fail "should fail w
 rm /etc/ssh/sshd_config.d/00-broken.conf; bash $S/server/harden.sh --only ssh --yes >/dev/null
 
 # inventory
-bash $S/server/inventory.sh --json > /tmp/inv.json; jq -e '.facts["os.name"] | startswith("Ubuntu 24.04")' /tmp/inv.json >/dev/null \
+bash $S/server/inventory.sh --json > /tmp/inv.json; jq -e --arg v "Ubuntu $OS_VER" '.facts["os.name"] | startswith($v)' /tmp/inv.json >/dev/null \
   && jq -e '.facts["sec.ssh_dropin"] == "yes" and .facts["sec.fail2ban"] == "installed"' /tmp/inv.json >/dev/null && ok "inventory --json: real facts, valid JSON" || { cat /tmp/inv.json; fail "inventory"; }
 bash $S/server/inventory.sh --out /var/lib/vps-server-workbench/inventory >/dev/null; apt-get install -y -qq htop >/dev/null 2>&1 || true
 bash $S/server/inventory.sh --install-cron --yes >/dev/null && [ -f /etc/cron.d/vsw-inventory ] && /usr/local/lib/vps-server-workbench/server/inventory.sh --out /var/lib/vps-server-workbench/inventory >/dev/null \

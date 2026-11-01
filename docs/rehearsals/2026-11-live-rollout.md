@@ -94,13 +94,17 @@ Docs: rclone install, offsite CA and hosts, "set `PITR=pgbackrest`, upgrade, the
 `pitr setup`", `--yes` for scripted upgrades and DO alert changes, monitoring hub
 needs Docker, and `addon.sh laravel-env` before `env init --addons`.
 
-## Noted, not fixed
+## Noted during the rehearsal, fixed afterwards
 
-- `.bak.<ts>` files in `/etc/apt/apt.conf.d` trigger an apt filename notice (cosmetic).
-- `do snapshots` shows an empty droplet column.
-- The image build shows an `InvalidDefaultArgInFrom` warning and debconf tty noise.
-- ufw stays inactive on nodes after `server init --role db` (the VPC isolated them here).
-- Doctor wording for "replication 3 needs at least that many" nodes is awkward.
+- `.bak.<ts>` files in `/etc/apt/apt.conf.d` triggered an apt filename notice: backups there are now
+  `<file>.<ts>.bak` (apt skips `*.bak` quietly) and `harden` renames the old ones.
+- `do snapshots <droplet-id>` showed an empty droplet column (that endpoint has no `resource_id`): filled in.
+- The image build showed an `InvalidDefaultArgInFrom` warning and debconf tty noise: the base `ARG` has a
+  default and `DEBIAN_FRONTEND=noninteractive` is a build `ARG`.
+- ufw stays inactive after `server init --role db` unless `--firewall` is passed (by design: the DO cloud
+  firewall is the filter); `harden` now prints a note saying so, with the Garage RPC port hint.
+- Garage doctor said "replication 3 needs at least that many" with 2 of 3 nodes up: it is now a warning
+  (reads and writes still work, one more node down stops writes), and a failure only below the write quorum.
 - The clone's Postgres log had five syntax errors from the previous day: an ad-hoc audit with
   hand-escaped quotes, not the app or the toolkit. Follow-up: [plan](../plan/postgres-log-quoting-errors.md),
   `log-errors`, `pg-log-errors`.

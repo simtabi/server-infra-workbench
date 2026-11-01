@@ -9,7 +9,7 @@ Shell tools that run **on a droplet** (or from your workstation with `--host`, w
 | Confirm | `--yes`, or type `yes`. Production fixes need the **site domain typed**; `--yes` is not enough |
 | Lock | One run per tool at a time (`/run/lock/vsw-<tool>.lock`) |
 | Audit | `/var/log/vps-server-workbench/audit.log`: who, what, outcome. Values are never logged |
-| Backups | Any file replaced is copied to `<file>.bak.<timestamp>` (mode 600) first; writes are atomic |
+| Backups | Any file replaced is copied to `<file>.bak.<timestamp>` (mode 600) first; writes are atomic. In `/etc/apt/*.d` the copy is `<file>.<timestamp>.bak`, which apt skips quietly (`harden` renames older `.bak.<timestamp>` copies there) |
 | Re-runnable | Items already in place report `ok` and are skipped |
 
 Exit codes: `0` fine, `1` a failure was found or a step failed, `2` usage error, `3` not confirmed.
@@ -123,6 +123,6 @@ Postgres (5432), the DO cloud firewall or ufw, or the DB containers being down. 
 
 `tests/shell/smoke-server.sh` (part of `make test`) runs every tool against a fake root (`VSW_SYSROOT`)
 with stub commands on `PATH`. `tests/shell/server-it.sh` (part of `make it`) runs `init`, `harden`,
-`inventory`, `update --dry-run` and `env` for real as root in a throwaway Ubuntu 24.04 container: real apt,
+`inventory`, `update --dry-run` and `env` for real as root in a throwaway Ubuntu 26.04 container (`SERVER_IT_IMAGE=ubuntu:24.04` for the previous LTS): real apt,
 real `sshd -t`/`sshd -T` (including the rollback of a broken drop-in), real audit log and cron install.
 Swap, the Docker install and `--host` are covered by the offline stubs only.

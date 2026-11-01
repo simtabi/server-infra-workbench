@@ -14,7 +14,7 @@ No test calls a real API or a real server.
 | [`shell/client-check.sh`](shell/client-check.sh) | no client name, IP or domain in tracked files or commit messages | `make client-check` |
 | [`shell/upgrade-it.sh`](shell/upgrade-it.sh) | the DB manager on real containers (docker) | `make it` |
 | [`shell/addons-it.sh`](shell/addons-it.sh) | add-ons on real containers (docker) | `make it` |
-| [`shell/server-it.sh`](shell/server-it.sh) | server init/harden/inventory/update, env, fixkeys as root in Ubuntu 24.04 (docker) | `make it` |
+| [`shell/server-it.sh`](shell/server-it.sh) | server init/harden/inventory/update, env, fixkeys as root in Ubuntu 26.04 (docker; `SERVER_IT_IMAGE=ubuntu:24.04` for the previous LTS) | `make it` |
 | [`shell/db-features-it.sh`](shell/db-features-it.sh) | verify-full TLS, metrics, migrate-managed, the Postgres major upgrade (docker) | `make it` |
 | [`shell/pitr-it.sh`](shell/pitr-it.sh) | pgBackRest backup and point-in-time restore (docker) | `make it` |
 | [`shell/pitr-s3-it.sh`](shell/pitr-s3-it.sh) | PITR through an S3 repo: Garage add-on behind a Caddy TLS front with a per-run CA, encrypted repo, restore to a time (docker) | `make it` |

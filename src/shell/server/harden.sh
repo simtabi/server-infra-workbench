@@ -130,6 +130,7 @@ F_SYSCTL="$R/etc/sysctl.d/90-workbench.conf"
 F_JOURNAL="$R/etc/systemd/journald.conf.d/90-workbench.conf"
 
 same() { [ -f "$1" ] && cmp -s "$1" <("$2"); }
+legacy_apt_baks() { local f; for f in "$F_AUTO".bak.*; do [ -f "$f" ] && printf '%s\n' "$f"; done; return 0; }  # backups named before .<ts>.bak
 pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep 'install ok installed' >/dev/null; }
 docker_members() { # non-root members of the docker group that are not allowed, one per line
   local line u; line="$(grep -E '^docker:' "$R/etc/group" 2>/dev/null | head -1 || true)"
@@ -157,7 +158,10 @@ plan_item() { # plan_item NAME : prints the state, queues the item when it needs
       fi ;;
     updates)
       if pkg_ok unattended-upgrades && same "$F_AUTO" auto_conf; then ok "updates: unattended security upgrades on"
-      else todo "updates: install unattended-upgrades, write $F_AUTO"; PENDING+=(updates); why "security fixes land within a day without anyone logging in"; fi ;;
+      else todo "updates: install unattended-upgrades, write $F_AUTO"; PENDING+=(updates); why "security fixes land within a day without anyone logging in"; fi
+      if [ -n "$(legacy_apt_baks)" ]; then todo "updates: rename $(legacy_apt_baks | wc -l | tr -d ' ') old $F_AUTO.bak.<ts> backup(s) to .<ts>.bak"
+        why "apt prints an 'invalid filename extension' notice for every .bak.<ts> file in apt.conf.d; it skips *.bak quietly"
+        [[ " ${PENDING[*]:-} " == *" updates "* ]] || PENDING+=(updates); fi ;;
     fail2ban)
       if pkg_ok fail2ban && same "$F_F2B" f2b_conf; then ok "fail2ban: sshd jail on"
       else todo "fail2ban: install, write $F_F2B, restart"; PENDING+=(fail2ban); why "bans IPs that keep failing ssh; cuts log noise and brute-force attempts"; fi ;;
@@ -198,7 +202,8 @@ apply_item() {
       say "        keep this session open and test a NEW ssh login before closing it" ;;
     updates)
       pkg_ok unattended-upgrades || DEBIAN_FRONTEND=noninteractive apt-get install -y -q unattended-upgrades
-      auto_conf | write_file "$F_AUTO" 644 ;;
+      auto_conf | write_file "$F_AUTO" 644
+      local f; while IFS= read -r f; do [ -n "$f" ] && mv "$f" "$F_AUTO.${f##*.bak.}.bak"; done < <(legacy_apt_baks) ;;
     fail2ban)
       pkg_ok fail2ban || DEBIAN_FRONTEND=noninteractive apt-get install -y -q fail2ban
       f2b_conf | write_file "$F_F2B" 644; systemctl restart fail2ban 2>/dev/null || true ;;
@@ -228,6 +233,10 @@ apply_item() {
 # ---- run -------------------------------------------------------------------------
 say "harden plan (role $ROLE$(ploi_managed && echo ', Ploi server')):"
 for i in $ITEMS; do want "$i" && plan_item "$i"; done
+if [ "$FIREWALL" = 0 ] && ! ploi_managed && have ufw && ufw status 2>/dev/null | grep 'Status: inactive' >/dev/null; then
+  say "  note  ufw is inactive and not managed without --firewall; the DO cloud firewall (workbench do firewall-apply) is the"
+  say "        filter then. For ufw too: rerun with --firewall --allow <ports> (a Garage node also needs its RPC port from the VPC)"
+fi
 if have docker && docker ps --format '{{.Ports}}' 2>/dev/null | grep '0\.0\.0\.0:' >/dev/null; then
   warn "docker publishes a port on 0.0.0.0 - Docker bypasses ufw; bind to the private IP"
 fi

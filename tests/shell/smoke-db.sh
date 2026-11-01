@@ -110,6 +110,10 @@ grep -q 'POSTGRES_USER: ${PG_ADMIN_USER}' "$c" && grep -q 'hba_file=/etc/postgre
   && grep -q '"--local-infile=0"' "$c" && grep -q 'secure-file-priv=/var/lib/mysql-files' "$c" && grep -q 'MYSQL_ROOT_HOST: localhost' "$c" \
   && grep -q 'subnet: "${DOCKER_SUBNET}"' "$c" && grep -q '^PG_IMAGE=vsw/postgres:18-postgis-pgvector$' "$T/db/stack.env" \
   && ok "compose: admin bootstrap, pg_hba, logging, local_infile=0, secure_file_priv, no root@'%', fixed subnet, neutral image tag" || fail "compose hardening"
+df="$T/db/postgres/Dockerfile"
+grep -qx 'ARG PG_BASE_IMAGE=postgis/postgis:18-3.6' "$df" && [ "$(grep -n '^ARG PG_BASE_IMAGE=' "$df" | cut -d: -f1)" -lt "$(grep -n '^FROM ' "$df" | cut -d: -f1)" ] \
+  && grep -qx 'ARG DEBIAN_FRONTEND=noninteractive' "$df" && ! grep -q '^ENV DEBIAN_FRONTEND' "$df" \
+  && ok "Dockerfile: base ARG has a default before FROM (no InvalidDefaultArgInFrom), debconf noninteractive as a build ARG only" || { cat "$df"; fail "Dockerfile args"; }
 
 # --- cross-region: extra bind addresses, region check ----------------------------------------
 mkdir -p "$T/db2"; EXTRA_BIND_IPS=10.200.0.1 DB_DIR="$T/db2" L eval 'dc() { :; }; write_files >/dev/null'

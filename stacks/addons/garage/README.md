@@ -29,7 +29,7 @@ bucket and key. `tests/shell/garage-cluster-it.sh` runs exactly this sequence.
 | 3 | node B, C | copy `/opt/vsw-addons/garage/secrets.env` from A over ssh into the same path, `chmod 600` (`install -d -m 700 /opt/vsw-addons/garage` first) | `plan` no longer says "copy secrets.env" |
 | 4 | node B | conf as A with `GARAGE_ZONE=dc2`, `GARAGE_PEERS=<A id>`; `install garage` | `layout staged` |
 | 5 | node C | `GARAGE_ZONE=dc3`, `GARAGE_PEERS=<A id>,<B id>`; `install garage` | `layout apply version 1`, `bucket`, `app key` |
-| 6 | any | `addon.sh doctor garage` | `layout applied`, `healthy nodes: 3 (replication 3)` |
+| 6 | any | `addon.sh doctor garage` | `layout applied`, `healthy nodes: 3 (replication 3)`; with one node down a warning `2 of 3` (still writable), below 2 a failure |
 
 - Open 3901 between the nodes on the VPC only (`ufw allow from <VPC CIDR> to any port 3901 proto tcp`).
   RPC is authenticated with `rpc_secret`, but it should not face the internet.

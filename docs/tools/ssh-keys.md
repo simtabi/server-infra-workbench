@@ -49,7 +49,7 @@ matters: `UsePAM no`), the effective `PubkeyAuthentication`, `PasswordAuthentica
 keys), `sshd -T` errors, and the last hour's sshd refusals from the journal.
 
 Tests: `tests/shell/smoke-server.sh` (fake root, 14 cases) and `tests/shell/server-it.sh` (as root in
-Ubuntu 24.04: real chown, `ssh-keygen`, `sshd -T`, a custom `AuthorizedKeysFile /etc/ssh/keys/%u`).
+Ubuntu 26.04: real chown, `ssh-keygen`, `sshd -T`, a custom `AuthorizedKeysFile /etc/ssh/keys/%u`).
 
 ## Migration from `vps-ssh-key-manager` (vpskeys)
 

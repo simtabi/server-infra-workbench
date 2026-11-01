@@ -32,7 +32,7 @@ Status: **available** = folder with a README and a runnable `example.conf`; **pl
 | [laravel-multitenant](laravel-multitenant/README.md) | landlord DB per env, tenant DBs created at runtime (`<app>_<env>_t_<id>`) | `dev-budget` | `TENANT_ENVS`, `PG_APP_CREATEDB=1` | available |
 | laravel-horizon-reverb | queues with Horizon + Reverb websockets as daemons | `production-single` | [run-daemons recipe](../docs/recipes/run-daemons.md) | planned |
 | laravel-octane | Octane (FrankenPHP/Swoole) behind Nginx on Ploi | `production-single` | `WEB_DROPLET_MB=4096` | planned |
-| mysql-app | a Laravel app on MySQL instead of Postgres | `mysql-app` | `ENABLE_MYSQL=1` | planned |
+| [mysql-app](mysql-app/README.md) | a Laravel app on MySQL instead of Postgres | `mysql-app` | `ENABLE_MYSQL=1` | available |
 | [gotenberg](gotenberg/README.md) | HTML/Office to PDF service next to the app, loopback only | `dev-budget` | `GOTENBERG=1`, `GOTENBERG_ROLE=web` | available |
 
 ### Other stacks (same DB server, different web tier)
@@ -57,7 +57,8 @@ Status: **available** = folder with a README and a runnable `example.conf`; **pl
 | single-droplet-all-in-one | web + DB on one budget droplet (dev only) | `dev-budget` | `PRD_LOCATION=local` | planned |
 | [split-web-db-vpc](split-web-db-vpc/README.md) | web droplet + DB droplet, same region, VPC only | `production-single` | `DB_PRIVATE_IP`, `WEB_PRIVATE_IP`, `VPC_CIDR` | available |
 | [cross-region-wireguard](cross-region-wireguard/README.md) | web and DB in different regions over WireGuard | `cross-region-wireguard` | `WIREGUARD=1`, `PEER_REGION` | available |
-| managed-postgres-prd | prd on DO Managed Postgres, dev/stg on the droplet | `production-ha` | `DB_MODE=managed` | planned |
+| [managed-postgres-prd](managed-postgres-prd/README.md) | prd on DO Managed Postgres with a standby, two web nodes, Spaces | `production-ha` | `DB_MODE=managed` | available |
+| [multi-engine-migration](multi-engine-migration/README.md) | Postgres, MySQL and MariaDB side by side while an app moves engines | `multi-engine` | `ENABLE_MYSQL=1`, `ENABLE_MARIADB=1` | available |
 | ha-two-web-lb | load balancer + 2 web nodes + managed DB | `production-ha` | `WEB_NODES=2`, `LOAD_BALANCER=1` | planned |
 | gcp-vm | the same layout on a GCP VM | any | `bin/workbench gcp` | planned |
 

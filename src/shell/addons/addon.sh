@@ -481,7 +481,11 @@ doctor_one() {
       local gid nodes; gid="$(g node id -q 2>/dev/null | head -1 | cut -c1-16)"
       g layout show 2>/dev/null | sed '/STAGED ROLE CHANGES/,$d' | grep "^${gid:-none} " >/dev/null && ok "layout applied (this node has a role)" || bad "layout not applied for this node (re-run install; with replication > 1 it applies when the last node joins)"
       nodes="$(g status 2>/dev/null | sed -n '/HEALTHY NODES/,/^$/p' | grep -cE '^[0-9a-f]{16} ' || true)"
-      [ "${nodes:-0}" -ge "${GARAGE_REPLICATION:-1}" ] && ok "healthy nodes: $nodes (replication ${GARAGE_REPLICATION:-1})" || bad "healthy nodes: ${nodes:-0}, replication ${GARAGE_REPLICATION:-1} needs at least that many"
+      # write quorum is floor(R/2)+1 (Garage default consistency): 2 of 3 still reads and writes, 1 of 3 refuses writes
+      local rf="${GARAGE_REPLICATION:-1}" q; nodes="${nodes:-0}"; q=$(( rf / 2 + 1 ))
+      if [ "$nodes" -ge "$rf" ]; then ok "healthy nodes: $nodes (replication $rf)"
+      elif [ "$nodes" -ge "$q" ]; then dwarn "healthy nodes: $nodes of $rf (replication $rf): reads and writes still work; one more node down stops writes"
+      else bad "healthy nodes: $nodes of $rf (replication $rf): below the write quorum of $q, writes are refused"; fi
       if g bucket info "$STORAGE_BUCKET" 2>/dev/null | grep "vsw-app-$STORAGE_BUCKET" >/dev/null; then ok "bucket $STORAGE_BUCKET has key vsw-app-$STORAGE_BUCKET"
       else bad "bucket $STORAGE_BUCKET or its app key is missing (re-run install)"; fi ;;
     seaweedfs|rustfs)

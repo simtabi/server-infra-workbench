@@ -94,10 +94,13 @@ final readonly class Droplets
     /** @return list<Snapshot> */
     public function snapshots(int|string $id): array
     {
-        $path = '/v2/droplets/'.Validate::id($id, 'droplet id').'/snapshots';
+        $droplet = Validate::id($id, 'droplet id');
+        $path = '/v2/droplets/'.$droplet.'/snapshots';
         $out = [];
         foreach ($this->transport->paginate($path, ['per_page' => 200], new DigitalOceanPaginator('snapshots')) as $row) {
-            $out[] = Snapshot::fromArray($row);
+            // this endpoint returns images without resource_id/resource_type (only /v2/snapshots has them),
+            // so the DROPLET column was empty; the droplet is the one asked for
+            $out[] = Snapshot::fromArray($row + ['resource_id' => (string) $droplet, 'resource_type' => 'droplet']);
         }
 
         return $out;

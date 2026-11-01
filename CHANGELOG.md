@@ -14,6 +14,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `bin/workbench db pg-log-errors --host <db-alias>`: the same summary from the workstation over ssh, nothing
   installed on the server.
 
+### Fixed (final audit, 2026-11)
+
+The rehearsal's "noted, not fixed" items and audit gaps:
+
+- `backup()` names copies under `/etc/apt/*.d` `<file>.<ts>.bak` (apt warned "invalid filename extension" on
+  every run for `.bak.<ts>`); `harden` renames older `20auto-upgrades.bak.<ts>` copies.
+- `workbench do snapshots <droplet-id>` fills the DROPLET column (the per-droplet endpoint has no `resource_id`).
+- DB manager: the generated Dockerfile gives `ARG PG_BASE_IMAGE` a default (no `InvalidDefaultArgInFrom`) and
+  sets `DEBIAN_FRONTEND=noninteractive` as a build `ARG` (no debconf tty noise). Existing servers see this as a
+  one-line Dockerfile diff on the next `upgrade`.
+- `harden` without `--firewall` notes an inactive ufw and points at the DO cloud firewall or `--firewall --allow`.
+- Garage `doctor`: 2 of 3 healthy nodes is a warning (quorum kept), a failure only below the write quorum.
+- `server-it` and the `wg-it` image run on Ubuntu 26.04, the droplet default (`SERVER_IT_IMAGE=ubuntu:24.04`
+  for the previous LTS).
+- Examples: runnable `mysql-app`, `multi-engine-migration` and `managed-postgres-prd`, so every profile has a
+  runnable example.
+
 ### Fixed (live rollout rehearsal, 2026-11)
 
 A rehearsal of the [live rollout runbook](docs/runbooks/live-rollout.md) on throwaway droplets (a DB snapshot

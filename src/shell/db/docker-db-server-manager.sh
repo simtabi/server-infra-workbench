@@ -596,12 +596,16 @@ write_files() {
   cd "$DB_DIR"
   mkdir -p postgres/init postgres/conf
   {
+    # The ARG default (the configured base; compose passes the same value as a build arg) keeps BuildKit from
+    # warning InvalidDefaultArgInFrom; DEBIAN_FRONTEND as an ARG silences debconf's tty notices during the build
+    # without leaking into the image's environment.
+    echo "# postgis/postgis is amd64-only (fine for DO droplets)"
+    printf 'ARG PG_BASE_IMAGE=%s\n' "$PG_BASE_IMAGE"
     cat <<'EOF'
-# postgis/postgis is amd64-only (fine for DO droplets)
-ARG PG_BASE_IMAGE
 FROM ${PG_BASE_IMAGE}
 ARG PGVECTOR_PKG
 ARG EXTRA_PKGS=""
+ARG DEBIAN_FRONTEND=noninteractive
 # apt packages are GPG-signed; ca-certificates first so the pgdg repo can switch to https
 RUN apt-get -o Acquire::Retries=5 update \
  && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates \
