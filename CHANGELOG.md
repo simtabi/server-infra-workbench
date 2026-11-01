@@ -41,6 +41,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed (P3)
 
+- `validate_config` refuses `postgis` in `PG_EXTENSIONS` on a base image that is not `postgis/*`. Before, the first
+  boot's `CREATE EXTENSION postgis` failed mid-init, the container restarted on a half-initialised cluster with no
+  extensions, and `install` passed only if the restart got healthy in time. This was the intermittent
+  `monitor-it` "postgres unhealthy": that suite used `postgres:18` with the default extension list; it now sets
+  `PG_EXTENSIONS`.
+- `server-it` prints `sshd -t` / `sshd -T` and the drop-ins when its sshd check fails (it was `2>/dev/null`).
 - RustFS: install now creates a bucket-scoped app key (IAM user + policy `vsw-app-<bucket>` through the admin
   API) and `laravel-env` writes it. Before, the app had no usable key unless you made one in the console, and
   a failed bucket create was only a warning. `doctor` checks the app key.

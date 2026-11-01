@@ -1698,6 +1698,10 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
     [[ "${!v}" =~ ^[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?$ ]] || err "$v '${!v}' is not an image reference"
     [[ "${!v}" =~ :latest$ ]] && err "$v uses :latest; pin a version"
   done
+  # postgis is in the default PG_EXTENSIONS but only postgis/* bases ship it: on postgres:NN the first boot's
+  # CREATE EXTENSION fails mid-init, the container restarts on a half-initialised cluster (no extensions)
+  case " $PG_EXTENSIONS " in *" postgis "*) case "$PG_BASE_IMAGE" in *postgis*) ;;
+    *) err "PG_EXTENSIONS has postgis but PG_BASE_IMAGE '$PG_BASE_IMAGE' is not a postgis image (drop postgis or use postgis/postgis:NN-x.y)" ;; esac ;; esac
   [[ "$DB_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] && [ "$DB_DIR" != / ] || err "DB_DIR '$DB_DIR' must be an absolute path"
   case "$TLS_MODE" in off|require|verify-full) ;; *) err "TLS_MODE must be off, require or verify-full" ;; esac
   [ -z "$MONITOR_USER" ] || [[ "$MONITOR_USER" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || err "MONITOR_USER '$MONITOR_USER' must match [a-z_][a-z0-9_]*"

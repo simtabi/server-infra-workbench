@@ -26,7 +26,7 @@ cleanup() { rm -rf /tmp/vsw-mon-last; mkdir -p /tmp/vsw-mon-last; cp "$W"/*.out 
 trap cleanup EXIT
 docker network inspect vsw_monitor >/dev/null 2>&1 && { echo "monitor-it: a vsw_monitor network already exists here; refusing to touch it"; trap - EXIT; rm -rf "$W"; exit 1; }
 mkdir -p "$W/textfile"
-printf 'PG_BASE_IMAGE=postgres:18\nPG_IMAGE=vsw-test/postgres:18\nPGVECTOR_PKG=postgresql-18-pgvector\n' > "$W/dbm.conf"; chmod 600 "$W/dbm.conf"
+printf 'PG_BASE_IMAGE=postgres:18\nPG_IMAGE=vsw-test/postgres:18\nPGVECTOR_PKG=postgresql-18-pgvector\nPG_EXTENSIONS=vector pg_trgm pg_stat_statements\n' > "$W/dbm.conf"; chmod 600 "$W/dbm.conf"
 # the host disk is the laptop's, not a server's: its fill level must not fail doctor (the 1.4 upgrade flake)
 export DOCTOR_DISK_WARN_PCT=100 DOCTOR_DISK_BAD_PCT=100
 export DB_DIR="$D" PRIVATE_IP=127.0.0.1 VPC_CIDR=127.0.0.0/8 DBM_CONFIG="$W/dbm.conf" DBM_LOCK="$W/lock" DBM_LOG="$W/run.log" \

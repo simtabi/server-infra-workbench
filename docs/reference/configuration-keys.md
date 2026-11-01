@@ -49,7 +49,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `PG_BASE_IMAGE` | `postgis/postgis:18-3.6` |  |
 | `PGVECTOR_PKG` | `postgresql-18-pgvector` |  |
 | `PG_MAX_CONNECTIONS` | `200` |  |
-| `PG_EXTENSIONS` | `vector postgis pg_trgm pgcrypto uuid-ossp citext pg_stat_statements` | Created in PG_DB and template1 (so every later database has them). Must exist in the image. |
+| `PG_EXTENSIONS` | `vector postgis pg_trgm pgcrypto uuid-ossp citext pg_stat_statements` | Created in PG_DB and template1 (so every later database has them). Must exist in the image: postgis needs a postgis/* PG_BASE_IMAGE (validate refuses it otherwise). |
 | `PG_PORT` | `5432` |  |
 
 ## PgBouncer (session mode, scram-sha-256)
