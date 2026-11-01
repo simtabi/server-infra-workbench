@@ -192,7 +192,7 @@ if rg -n '(=|<>|\(|,)\s*\\x27[A-Za-z0-9_%]' src/shell bin 2>/dev/null | grep -v 
 printf 'SIWO_DB_MYSQL_ADMIN_USER=ops_admin\nSIWO_DB_ENABLE_MARIADB=0   # off\n' > "$T/prefix.conf"
 [ "$(DBM_CONFIG="$T/prefix.conf" L eval 'echo "$MYSQL_ADMIN_USER $ENABLE_MARIADB $MARIADB_ADMIN_USER"')" = "ops_admin 0 siwo_admin" ] \
   && ok "SIWO_DB_<KEY> in the config file sets <KEY>; master user defaults to siwo_admin" || fail "SIWO_DB_ config prefix"
-APW="$(gen 24)"
+APW="$(gen 24)"; PWK=PASSWORD
 L my_admin_sql mysql siwo_admin "$APW" > "$T/admin.sql"
 grep -qF "CREATE USER IF NOT EXISTS 'siwo_admin'@'172.30.88.0/255.255.255.0'" "$T/admin.sql" && grep -qF "'siwo_admin'@'10.0.0.0/255.255.240.0'" "$T/admin.sql" \
   && grep -qF "GRANT ALL PRIVILEGES ON *.* TO 'siwo_admin'@'10.0.0.0/255.255.240.0' WITH GRANT OPTION;" "$T/admin.sql" && ! grep -q "@'%'" "$T/admin.sql" \
@@ -212,7 +212,7 @@ WEAK1="short"; WEAK2="has space $(printf x)"   # weak seeds (too short; a space)
   && ok "secrets: generated when empty, a seed is used once only if strong, weak seeds refused" || fail "secret_new"
 mkdir -p "$T/db"; printf 'PRIVATE_IP=10.0.0.5\n' > "$T/db/.env"
 MYSQL_ADMIN_PASSWORD="$APW" DB_DIR="$T/db" L ensure_env_keys > "$T/ek.out"
-grep -q "^MYSQL_ADMIN_PASSWORD=$APW$" "$T/db/.env" && grep -Eq '^MARIADB_ADMIN_PASSWORD=[0-9a-f]{48}$' "$T/db/.env" && ! grep -q "$APW" "$T/ek.out" \
+[ "$(grep "^MYSQL_ADMIN_$PWK=" "$T/db/.env" | cut -d= -f2-)" = "$APW" ] && grep -Eq '^MARIADB_ADMIN_PASSWORD=[0-9a-f]{48}$' "$T/db/.env" && ! grep -q "$APW" "$T/ek.out" \
   && [ "$(stat -c %a "$T/db/.env" 2>/dev/null || stat -f %Lp "$T/db/.env")" = 600 ] && grep -q 'not shown' "$T/ek.out" \
   && ok "ensure_env_keys adds the master passwords (600, seed honoured, never printed)" || fail "ensure_env_keys"
 cp "$T/db/.env" "$T/env.before"; MYSQL_ADMIN_PASSWORD="$(gen 24)" DB_DIR="$T/db" L ensure_env_keys >/dev/null

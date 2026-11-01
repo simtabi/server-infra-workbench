@@ -43,6 +43,7 @@ dcx()  { (cd "$D" && docker compose --env-file .env --env-file stack.env "$@"); 
 psq()  { dcx exec -T postgres psql -X -tA -U "$1" -d "$2" -c "$3"; }
 cid()  { docker ps -q --no-trunc --filter label=com.docker.compose.project=vswdbu --filter "label=com.docker.compose.service=$1"; }
 envv() { grep "^$1=" "$D/.env" | cut -d= -f2-; }   # a generated secret, used in a variable only (never printed)
+credv() { grep "^$2=" "$1" | cut -d= -f2-; }   # credv FILE KEY: one value from a creds file (kept in a variable)
 f600() { [ "$(stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1")" = 600 ]; }
 # my <engine> <user> <password> <sql>: a client over the published port, like a DB client through a tunnel
 my() { local img=mysql:9.7 cli=mysql port=23326; [ "$1" = mariadb ] && img=mariadb:13 cli=mariadb port=23327
@@ -71,19 +72,19 @@ grep -q 'ok    master siwo_admin from:' "$W/doctor.out" && ! grep -q 'users with
 if run cmd_admin_creds mysql > "$W/ac0.out" 2>&1; then fail "admin-creds without --out"; fi
 run cmd_admin_creds mysql --out "$W/mysql-admin.creds" > "$W/ac.out" 2>&1 && f600 "$W/mysql-admin.creds" \
   && grep -q '^DB_USERNAME=siwo_admin$' "$W/mysql-admin.creds" && ! grep -q "$(envv MYSQL_ADMIN_PASSWORD)" "$W/ac.out" \
-  && grep -q "^DB_PASSWORD=$(envv MYSQL_ADMIN_PASSWORD)$" "$W/mysql-admin.creds" && ok "admin-creds: 600 file only, never printed, --out required" || { cat "$W/ac.out"; fail "admin-creds"; }
+  && [ "$(credv "$W/mysql-admin.creds" DB_PASSWORD)" = "$(envv MYSQL_ADMIN_PASSWORD)" ] && ok "admin-creds: 600 file only, never printed, --out required" || { cat "$W/ac.out"; fail "admin-creds"; }
 run cmd_admin_creds postgres --out "$W/pg-admin.creds" > "$W/acp.out" 2>&1 && grep -q '^DB_USERNAME=vsw_admin$' "$W/pg-admin.creds" && grep -q '^DB_PORT=25452$' "$W/pg-admin.creds" \
   && grep -q 'PgBouncer' "$W/acp.out" && ok "admin-creds postgres: the bootstrap admin, direct port (not PgBouncer)" || fail "admin-creds pg"
 
 # ---- create-db / create-user: least privilege + idempotent ----------------------------------
 run cmd_create_db shop postgres --readonly-user --out "$W/shop.creds" > "$W/cdb1.out" 2>&1 && f600 "$W/shop.creds" && f600 "$W/shop.creds.readonly" \
   || { cat "$W/cdb1.out"; fail "create-db shop"; }
-spw="$(grep '^DB_PASSWORD=' "$W/shop.creds" | cut -d= -f2-)"
+spw="$(credv "$W/shop.creds" DB_PASSWORD)"
 [ "$(psq vsw_admin postgres "select rolsuper::int::text||rolcreaterole::int::text||rolcreatedb::int::text from pg_roles where rolname='shop'")" = 000 ] \
   && [ "$(psq vsw_admin shop "select pg_get_userbyid(nspowner) from pg_namespace where nspname='public'")" = shop ] \
   && ok "create-db: owner shop (no superuser/createrole/createdb) owns schema public" || fail "pg owner attrs"
-pgc 26452 shop "$spw" shop "create table t(i int); insert into t values (1)" >/dev/null && pgc 26452 shop_ro "$(grep '^DB_PASSWORD=' "$W/shop.creds.readonly" | cut -d= -f2-)" shop "select count(*) from t" | grep -qx 1 \
-  && ! pgc 26452 shop_ro "$(grep '^DB_PASSWORD=' "$W/shop.creds.readonly" | cut -d= -f2-)" shop "insert into t values (2)" >/dev/null 2>&1 \
+pgc 26452 shop "$spw" shop "create table t(i int); insert into t values (1)" >/dev/null && pgc 26452 shop_ro "$(credv "$W/shop.creds.readonly" DB_PASSWORD)" shop "select count(*) from t" | grep -qx 1 \
+  && ! pgc 26452 shop_ro "$(credv "$W/shop.creds.readonly" DB_PASSWORD)" shop "insert into t values (2)" >/dev/null 2>&1 \
   && ok "owner can DDL/DML through PgBouncer; <db>_ro reads, cannot write" || fail "pg grants"
 run cmd_create_db shop postgres --readonly-user --out "$W/shop2.creds" > "$W/cdb2.out" 2>&1 && grep -q 'already existed' "$W/cdb2.out" && [ ! -e "$W/shop2.creds" ] \
   && pgc 26452 shop "$spw" shop "select count(*) from t" | grep -qx 1 && ok "create-db re-run: exit 0, grants re-applied, password and data unchanged, no new creds" || { cat "$W/cdb2.out"; fail "create-db rerun"; }
@@ -94,7 +95,7 @@ if run cmd_create_db other postgres --owner siwo_admin > /dev/null 2>&1 || run c
 ok "master users cannot be used as app owners"
 for e in mysql mariadb; do
   run cmd_create_db shop "$e" --out "$W/shop-$e.creds" > "$W/cdbm-$e.out" 2>&1 || { cat "$W/cdbm-$e.out"; fail "create-db $e"; }
-  mpw="$(grep '^DB_PASSWORD=' "$W/shop-$e.creds" | cut -d= -f2-)"
+  mpw="$(credv "$W/shop-$e.creds" DB_PASSWORD)"
   my "$e" shop "$mpw" 'create table shop.t (i int); insert into shop.t values (1)' >/dev/null
   g="$(my "$e" shop "$mpw" 'show grants')"
   printf '%s' "$g" | grep -q 'GRANT USAGE ON \*\.\*' && ! printf '%s' "$g" | grep -Eq 'ON \*\.\* .*(ALL|FILE|SUPER|PROCESS)|GRANT OPTION' \
@@ -128,7 +129,7 @@ run cmd_engines apply > "$W/noop.out" 2>&1 && grep -q 'nothing to change' "$W/no
 
 # ---- re-enable MySQL: data back; purge MariaDB ---------------------------------------------
 run cmd_engines apply --set ENABLE_MYSQL=1 > "$W/on.out" 2>&1 || { it_why "$W/on.out" 40; fail "engines apply on"; }
-my mysql shop "$(grep '^DB_PASSWORD=' "$W/shop-mysql.creds" | cut -d= -f2-)" 'select count(*) from shop.t' | grep -qx 1 && [ "$(cid postgres)" = "$pg_id" ] \
+my mysql shop "$(credv "$W/shop-mysql.creds" DB_PASSWORD)" 'select count(*) from shop.t' | grep -qx 1 && [ "$(cid postgres)" = "$pg_id" ] \
   && ok "mysql back on: same data and users, postgres untouched" || { cat "$W/on.out"; fail "re-enable"; }
 if run cmd_engines apply --purge > "$W/purge0.out" 2>&1; then fail "purge without typed confirmation"; fi
 docker volume inspect vswdbu_mariadb_data >/dev/null 2>&1 || fail "volume deleted without confirmation"
