@@ -17,6 +17,8 @@ final class Redactor
         '/\b(Bearer|Basic)\s+[A-Za-z0-9._~+\/=-]+/i',
         '/\bdop_v1_[a-f0-9]{64}\b/',
         '/\bya29\.[A-Za-z0-9._-]+/',
+        '/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}\b/',
+        '/\bgithub_pat_[A-Za-z0-9_]{22,255}\b/',
         '/("?(?:[a-z_]*(?:token|secret|password|passwd|api[_-]?key|private[_-]?key|authorization|assertion|client_secret))"?\s*[:=]\s*"?)(?!(?:Bearer|Basic)\s)([^"\s,&}]+)/i',
     ];
 

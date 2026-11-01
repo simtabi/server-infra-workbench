@@ -24,15 +24,34 @@ final class Transport
 
     private readonly RedactingLogger $logger;
 
+    private ?RateLimit $rateLimit = null;
+
+    /**
+     * @param array<string, string> $headers Extra headers on every request (e.g. GitHub's API version).
+     */
     public function __construct(
         private readonly string $provider,
         private readonly string $baseUrl,
         private readonly Authenticator $auth,
         private readonly ClientOptions $options,
         private Redactor $redactor = new Redactor,
+        private readonly array $headers = [],
     ) {
+        // Credentials only ever travel over TLS: a plain-http (or any other scheme) base URL is refused
+        // before a request, and so before a token, can be built.
+        $scheme = parse_url($baseUrl, PHP_URL_SCHEME);
+        $host = parse_url($baseUrl, PHP_URL_HOST);
+        if ($scheme !== 'https' || ! is_string($host) || $host === '' || str_contains($baseUrl, '@')) {
+            throw new ValidationException(sprintf('%s: refusing base URL "%s"; credentials are only sent over https:// to a plain host', $provider, $baseUrl));
+        }
         $this->redactor = $this->redactor->withSecret(...$auth->secrets());
         $this->logger = new RedactingLogger($options->logger(), $this->redactor);
+    }
+
+    /** The rate-limit headers of the last response, when the provider sends them. */
+    public function rateLimit(): ?RateLimit
+    {
+        return $this->rateLimit;
     }
 
     public function provider(): string
@@ -70,6 +89,7 @@ final class Transport
         $retry = $this->options->retry();
 
         for ($attempt = 1; ; $attempt++) {
+            $this->waitForQuota();
             $started = hrtime(true);
 
             try {
@@ -88,24 +108,32 @@ final class Transport
             }
 
             $status = $response->getStatusCode();
+            $quota = RateLimit::fromResponse($response);
+            $this->rateLimit = $quota ?? $this->rateLimit;
+            // GitHub signals an exhausted quota as 403 + x-ratelimit-remaining: 0; treat it like a 429.
+            $limited = $status === 429 || ($status === 403 && $quota?->remaining === 0);
+            if ($quota !== null && $quota->isLow() && ! $limited) {
+                $this->logger->notice('{provider} rate limit low: {remaining}/{limit} left', ['provider' => $this->provider, 'remaining' => $quota->remaining, 'limit' => $quota->limit]);
+            }
             $this->logger->debug('{provider} {method} {uri} -> {status} ({ms} ms)', [
                 'provider' => $this->provider, 'method' => $method, 'uri' => $shown, 'status' => $status,
                 'ms' => intdiv(hrtime(true) - $started, 1_000_000),
             ]);
 
-            if ($retry->shouldRetry($attempt, $status, $idempotent)) {
-                $delay = $retry->delayMs($attempt, self::retryAfter($response));
+            if ($retry->shouldRetry($attempt, $limited ? 429 : $status, $idempotent)) {
+                $delay = $retry->delayMs($attempt, self::retryAfter($response) ?? ($limited ? $this->rateLimit?->resetsIn() : null));
                 $this->logger->notice('{provider} {method} {uri} -> {status}, retry {attempt} in {delay} ms', [
                     'provider' => $this->provider, 'method' => $method, 'uri' => $shown, 'status' => $status, 'attempt' => $attempt, 'delay' => $delay,
                 ]);
                 $this->options->sleeper()->sleep($delay);
+                $this->rateLimit = null; // already waited; don't wait again before the retry
 
                 continue;
             }
 
             $api = ApiResponse::from($response);
             if ($status >= 400) {
-                throw ApiException::fromResponse($this->provider, $method, $shown, $status, $this->redactor()->redactArray($api->json), self::retryAfter($response));
+                throw ApiException::fromResponse($this->provider, $method, $shown, $limited ? 429 : $status, $this->redactor()->redactArray($api->json), self::retryAfter($response) ?? ($limited ? $this->rateLimit?->resetsIn() : null));
             }
             if ($status >= 300) {
                 throw new TransportException(sprintf('%s %s %s: unexpected redirect (HTTP %d) — refusing to follow with credentials', $this->provider, $method, $shown, $status));
@@ -124,9 +152,9 @@ final class Transport
     public function paginate(string $path, array $query, Paginator $paginator, int $maxPages = 500): \Generator
     {
         for ($page = 1; $page <= $maxPages; $page++) {
-            $json = $this->get($path, $query)->json;
-            yield from $paginator->items($json);
-            $next = $paginator->next($json, $query);
+            $response = $this->get($path, $query);
+            yield from $paginator->items($response->json);
+            $next = $paginator instanceof ResponsePaginator ? $paginator->nextFromResponse($response, $query) : $paginator->next($response->json, $query);
             if ($next === null || $next === $query) {
                 return;
             }
@@ -167,6 +195,9 @@ final class Transport
         $request = $this->options->requestFactory()->createRequest($method, $uri)
             ->withHeader('Accept', 'application/json')
             ->withHeader('User-Agent', $this->options->userAgent());
+        foreach ($this->headers as $name => $value) {
+            $request = $request->withHeader($name, $value);
+        }
 
         if ($body !== null) {
             try {
@@ -179,6 +210,25 @@ final class Transport
         }
 
         return $this->auth->authorize($request, $write);
+    }
+
+    /**
+     * Rate-limit awareness: when the last response said the quota is spent and resets soon, wait for the
+     * reset instead of sending a request that is certain to be refused. Long resets are left to the
+     * provider's 429 (which then surfaces as a RateLimitException with retryAfter).
+     */
+    private function waitForQuota(): void
+    {
+        $limit = $this->rateLimit;
+        if ($limit === null || $limit->remaining > 0) {
+            return;
+        }
+        $wait = $limit->resetsIn();
+        if ($wait !== null && $wait > 0 && $wait * 1000 <= $this->options->retry()->delayMs(1, 3600)) {
+            $this->logger->notice('{provider} rate limit spent, waiting {s} s for the reset', ['provider' => $this->provider, 's' => $wait]);
+            $this->options->sleeper()->sleep($wait * 1000);
+        }
+        $this->rateLimit = null;
     }
 
     private static function retryAfter(ResponseInterface $response): ?int

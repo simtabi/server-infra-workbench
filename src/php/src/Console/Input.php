@@ -9,7 +9,8 @@ use Simtabi\VpsServerWorkbench\Exception\ValidationException;
 /** argv split into positionals and known options. Unknown options are an error, never ignored. */
 final readonly class Input
 {
-    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose', 'quiet', 'backups', 'disk', 'below'];
+    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose', 'quiet', 'backups', 'disk', 'below',
+        'everything', 'draft', 'prerelease', 'write'];
 
     public const array VALUES = ['name', 'type', 'ttl', 'zone', 'project', 'priority', 'comment', 'tag', 'timeout',
         // do firewalls / droplets / uptime
@@ -19,7 +20,17 @@ final readonly class Input
         // ploi
         'web-directory', 'project-type', 'user', 'file', 'command', 'processes', 'directory',
         // keys
-        'provider', 'host', 'key-file', 'public-key', 'ssh-opt', 'config'];
+        'provider', 'host', 'key-file', 'public-key', 'ssh-opt', 'config',
+        // do volumes / vpcs / spaces keys / reserved ips
+        'size-gb', 'filesystem', 'ip-range', 'description', 'bucket', 'permission', 'out', 'ip',
+        // cloudflare
+        'hostnames', 'validity', 'files', 'target',
+        // gcp
+        'location', 'storage-class', 'retention-days', 'prefix', 'limit', 'disk-gb', 'network', 'allow', 'source-ranges', 'target-tags',
+        // ploi
+        'frequency', 'site', 'domain',
+        // github
+        'repo', 'org', 'workflow', 'branch', 'status', 'ref', 'inputs', 'env', 'value-file', 'title', 'notes-file'];
 
     /**
      * @param list<string>          $args
@@ -116,6 +127,26 @@ final readonly class Input
     public function value(string $name): ?string
     {
         return $this->values[$name] ?? null;
+    }
+
+    /** A value option that must be present. */
+    public function required(string $name, string $hint = ''): string
+    {
+        $value = $this->values[$name] ?? null;
+
+        return $value === null || $value === '' ? throw new ValidationException("--{$name} is required".($hint === '' ? '' : " ({$hint})")) : $value;
+    }
+
+    /**
+     * Positionals from $index on (e.g. a list of ids).
+     *
+     * @return list<string>
+     */
+    public function rest(int $index, string $name): array
+    {
+        $rest = array_values(array_slice($this->args, $index));
+
+        return $rest === [] ? throw new ValidationException("missing <{$name}>") : $rest;
     }
 
     /**

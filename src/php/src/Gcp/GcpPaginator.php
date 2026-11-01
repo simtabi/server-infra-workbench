@@ -9,16 +9,22 @@ use Simtabi\VpsServerWorkbench\Support\Data;
 
 /**
  * Compute Engine: {items: [...], nextPageToken}. For aggregated lists items is a map of
- * "zones/x" => {<key>: [...]}; pass the key to flatten it.
+ * "zones/x" => {<key>: [...]}; pass the key to flatten it. Cloud DNS and Cloud Storage use the same
+ * nextPageToken scheme with a named list ("managedZones", "rrsets"); pass it as $listKey.
  */
 final readonly class GcpPaginator implements Paginator
 {
-    public function __construct(private ?string $aggregatedKey = null) {}
+    public function __construct(private ?string $aggregatedKey = null, private string $listKey = 'items') {}
+
+    public static function list(string $key): self
+    {
+        return new self(null, $key);
+    }
 
     public function items(array $json): array
     {
         if ($this->aggregatedKey === null) {
-            return Data::objects($json, 'items');
+            return Data::objects($json, $this->listKey);
         }
         $out = [];
         foreach (Data::map($json, 'items') as $scope) {

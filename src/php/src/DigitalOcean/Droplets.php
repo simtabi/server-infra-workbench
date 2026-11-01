@@ -233,4 +233,42 @@ final readonly class Droplets
         return $this->transport->pending('resize droplet', $target, 'POST', $path, $body, $run, destructive: $disk,
             note: 'downtime: shutdown, resize, power on (a few minutes). Snapshot first: workbench do snapshot '.$id.' --wait'.($disk ? '. Disk resize is permanent' : '. CPU/RAM only, reversible'));
     }
+
+    /** Power and reboot actions; each one is a short outage except power_on. */
+    public const array POWER = ['reboot', 'power_cycle', 'shutdown', 'power_off', 'power_on'];
+
+    /**
+     * reboot (graceful), power_cycle (hard), shutdown (graceful), power_off (hard), power_on.
+     *
+     * @return PendingAction<RunningAction>
+     */
+    public function power(int|string $id, string $type): PendingAction
+    {
+        $id = Validate::id($id, 'droplet id');
+        $type = str_replace('-', '_', $type);
+        if (! in_array($type, self::POWER, true)) {
+            throw new ValidationException('power action must be one of '.implode(', ', self::POWER));
+        }
+        $path = "/v2/droplets/{$id}/actions";
+        $body = ['type' => $type];
+
+        return $this->transport->pending(str_replace('_', ' ', $type).' droplet', (string) $id, 'POST', $path, $body,
+            fn (): RunningAction => $this->actions->track(Action::fromArray(Data::map($this->transport->send('POST', $path, [], $body)->json, 'action'))),
+            in_array($type, ['power_cycle', 'power_off'], true), $type === 'power_on' ? null : 'downtime until the droplet is back up; a hard power_off/power_cycle can lose unflushed writes');
+    }
+
+    /**
+     * Destructive: the droplet and its disk are gone (snapshots and backups stay, and keep billing).
+     *
+     * @return PendingAction<bool>
+     */
+    public function delete(int|string $id): PendingAction
+    {
+        $droplet = $this->find($id);
+        $path = '/v2/droplets/'.$droplet->id;
+
+        return $this->transport->pending('delete droplet', sprintf('%d "%s" (%s, %s)', $droplet->id, $droplet->name, $droplet->region, $droplet->size), 'DELETE', $path, [],
+            fn (): bool => $this->transport->send('DELETE', $path)->status < 300, destructive: true,
+            note: 'the disk is destroyed; take a snapshot first if you may need it (workbench do snapshot '.$droplet->id.' --wait)');
+    }
 }

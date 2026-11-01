@@ -42,7 +42,8 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | [Add-ons](tools/addons.md) | `src/shell/addons/addon.sh` + `stacks/addons`: Gotenberg and one object store (Garage, SeaweedFS, RustFS) per node |
 | [Caddy stack](tools/caddy-stack.md) | `stacks/caddy`: the app in containers behind Caddy with automatic HTTPS |
 | [Command line](tools/cli.md) | `bin/workbench`: one entry point, platform commands, flags, exit codes |
-| [Platform API library](tools/platform-api.md) | `src/php`: DigitalOcean, Cloudflare, Ploi, GCP clients, pending actions, audit log |
+| [Platform API library](tools/platform-api.md) | `src/php`: DigitalOcean, Cloudflare, Ploi, GCP, GitHub clients, pending actions, audit log |
+| [Providers](providers/README.md) | Per provider: why, least-privilege token, every command, checklist, lessons learned |
 | [Python package](tools/python.md) | `src/python`: `ping` probe and the `plans` finder (DO plans per region via Ploi) |
 
 ## Reference

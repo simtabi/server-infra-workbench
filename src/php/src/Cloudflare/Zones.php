@@ -43,6 +43,26 @@ final readonly class Zones
         return new DnsRecords($this->transport, $this->find($zone));
     }
 
+    public function settings(string $zone): ZoneSettings
+    {
+        return new ZoneSettings($this->transport, $this->find($zone));
+    }
+
+    public function originCertificates(string $zone): OriginCertificates
+    {
+        return new OriginCertificates($this->transport, $this->find($zone));
+    }
+
+    public function firewall(string $zone): Firewall
+    {
+        return new Firewall($this->transport, $this->find($zone));
+    }
+
+    public function cache(string $zone): Cache
+    {
+        return new Cache($this->transport, $this->find($zone));
+    }
+
     public static function isId(string $value): bool
     {
         return preg_match('/^[a-f0-9]{32}$/', $value) === 1;

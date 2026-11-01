@@ -8,11 +8,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Platform APIs (P3 provider audit): full REST coverage for five providers on the shared transport, each with a
+  guide in [docs/providers](docs/providers/README.md) (why, least-privilege token per command, command reference,
+  checklist, lessons learned):
+  - DigitalOcean: `do volumes` (grow only), `do vpcs` (default handling; refuses deleting the default or a VPC with
+    members), `do spaces-keys`, `do domains`, `do dns`, `do reserved-ips`, `do projects`, `do tags`, `do ssh-keys`
+    (alias of `keys account --provider digitalocean`), `do regions`/`sizes`, `do power`, `do droplet-delete`.
+  - Cloudflare: `cf settings` and `cf ssl` (weakening needs `--force`), `cf origin-certs` (key and CSR made
+    locally), `cf purge`, `cf firewall` (IP access rules; custom WAF rules read-only).
+  - GCP: `gcp instance` create/start/stop/reset/delete, `gcp firewall-create`/`firewall-delete` (world-open
+    non-web ports need `--force`), Cloud DNS (`gcp dns`, atomic changes), Cloud Storage (`gcp buckets`, private
+    and versioned by default).
+  - GitHub (new, `workbench github`, alias `gh`, `GITHUB_TOKEN`): repos, Actions runs/wait/dispatch/rerun/cancel,
+    repository and environment secrets sealed locally with libsodium (value only from a file or stdin), deploy
+    keys (read-only unless `--write --force`), releases.
+  - Ploi: crons, databases (generated password to a 600 file), Let's Encrypt certificates, `server-restart`.
+- One-time secrets (Spaces secret keys, Origin CA private keys, generated database passwords) are returned as an
+  `IssuedCredential`, never serialised, and written by the CLI to `--out` (mode 600, created exclusively, refused
+  inside the git checkout, checked before any request).
+- Transport: GitHub `Link` pagination, rate-limit awareness (quota headers; GitHub's 403 with
+  `x-ratelimit-remaining: 0` waits for the reset like a 429).
+- Tests: mocked unit and contract tests for every new resource and the CLI, and a gated live read-only suite
+  (`VSW_LIVE=1`, `phpunit --testsuite live`) whose client refuses anything but GET.
 - DB manager: `log-errors [--since 24h|7d|all] [--service postgres|pgbouncer]`, a read-only, grouped and masked
   summary of Postgres/PgBouncer ERROR/FATAL lines (exit 1 when there are any); `doctor` warns on Postgres log
   errors in the last 24 h ([plan](docs/plan/postgres-log-quoting-errors.md)).
 - `bin/workbench db pg-log-errors --host <db-alias>`: the same summary from the workstation over ssh, nothing
   installed on the server.
+
+### Changed
+
+- The CLI is split into one command class per provider (`Console\Commands\*`) with a shared `Runner`; output,
+  flags and exit codes are unchanged. `docs/tools/platform-api.md`, `cli.md`, `status.md` and
+  `config/credentials.env.example` document the new scopes; the documented-command checker covers `github`/`gh`
+  and two-word subcommands. CI installs `ext-sodium`.
 
 ### Fixed (final audit, 2026-11)
 - Python style gate never ran: ruff was optional and absent locally and in CI, and the code had drifted (89 findings, 8 files unformatted). Now formatted and clean under ruff 0.17.3, E501 left to the formatter, and CI installs ruff so `make py-lint` enforces it. Real fixes among the findings: `ApiClient` refuses any non-HTTPS URL (including API pagination links) before it builds a request with the bearer token, and errors chain their cause (`raise ... from`).

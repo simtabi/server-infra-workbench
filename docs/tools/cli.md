@@ -5,7 +5,7 @@ flags, platform commands run on the [PHP core](platform-api.md), and `py` runs t
 
 ```bash
 bin/workbench list                         # every tool and where it lives
-bin/workbench help                         # this summary;  bin/workbench help do|cf|ploi|gcp  for one area
+bin/workbench help                         # this summary;  bin/workbench help do|cf|ploi|gcp|github  for one area
 ```
 
 Optional: put it on your `PATH` with `ln -s "$PWD/bin/workbench" ~/.local/bin/workbench`.
@@ -32,9 +32,13 @@ bin/workbench tunnels db-tunnel --help
 
 Area and tool names must match `[a-z0-9-]+`, so nothing outside `shell/` can be reached.
 
-## Platform APIs: `workbench do|cf|ploi|gcp`
+## Platform APIs: `workbench do|cf|ploi|gcp|github`
 
 Requires PHP 8.4+ and `composer install --working-dir=src/php` (the dispatcher says so if either is missing).
+The table lists the common commands; the full reference per provider, with the least-privilege token for each
+command, is in [docs/providers](../providers/README.md) ([DigitalOcean](../providers/digitalocean.md),
+[Cloudflare](../providers/cloudflare.md), [GCP](../providers/gcp.md), [GitHub](../providers/github.md),
+[Ploi](../providers/ploi.md)), and `workbench help <area>` prints it.
 
 | Command | What it does |
 |---|---|
@@ -71,11 +75,15 @@ Requires PHP 8.4+ and `composer install --working-dir=src/php` (the dispatcher s
 | `workbench gcp instances [--zone Z]` | Instances, all zones unless `--zone` |
 | `workbench gcp snapshots` / `firewalls` | Snapshots; firewall rules (`WORLD-OPEN` marks rules open to `0.0.0.0/0`) |
 | `workbench gcp snapshot <zone> <disk> [--name N] [--wait]` | **Write.** Snapshot a persistent disk |
+| `workbench github runs --repo owner/name` / `run <run-id> --repo owner/name --wait` | Workflow runs; wait for one to finish |
+| `workbench github secrets set <NAME> --repo owner/name --value-file FILE` | **Write.** Sealed locally (libsodium); never from argv |
 | `workbench credentials` | Where each credential comes from (`env`, `file`, `missing`); never prints values |
 | `workbench version` | Library and PHP version |
 
 GCP commands take `--project P` (else `GCP_PROJECT`, else the service-account key's project).
-`digitalocean`, `cloudflare` and `gcloud` work as aliases of `do`, `cf` and `gcp`.
+`digitalocean`, `cloudflare`, `gcloud` and `gh` work as aliases of `do`, `cf`, `gcp` and `github`.
+One-time secrets (Spaces keys, Origin CA keys, generated database passwords) are written to the `--out` file
+(mode 600, refused inside the git checkout) and never printed.
 
 ### Flags
 

@@ -26,10 +26,10 @@ MGR_PATH = "src/shell/db/docker-db-server-manager.sh"
 MGR = re.compile(r"(?:^|[\s(`])(?:sudo\s+)?(?:[\w./~-]*/)?docker-db-server-manager\.sh((?:[ \t]+(?:<[^\s<>`]+>|[^\s`|;&#)<>])+)*)")
 M_SPAN = re.compile(r"^\s*(?:sudo\s+)?M((?:[ \t]+(?:<[^\s<>`]+>|[^\s`|;&#)<>])+)+)")
 # docs shorten `bin/workbench do snapshots <id>` to `do snapshots <id>` after the first mention
-SHORT = re.compile(r"^\s*((?:do|cf|ploi|gcp|keys|monitor|addon|env|net|server|web)[ \t]+[a-z][a-z0-9-]*(?:[ \t]+(?:<[^\s<>`]+>|[^\s`|;&#)<>])+)*)\s*$")
+SHORT = re.compile(r"^\s*((?:do|cf|ploi|gcp|github|gh|keys|monitor|addon|env|net|server|web)[ \t]+[a-z][a-z0-9-]*(?:[ \t]+(?:<[^\s<>`]+>|[^\s`|;&#)<>])+)*)\s*$")
 REMOTE = re.compile(r"remote-run(?:\.sh)?\b[^`]*?[ \t]--[ \t]+([^`#<(]+)")
 FENCE = re.compile(r"^\s*(```|~~~)")
-PHP = {"do", "digitalocean", "cf", "cloudflare", "ploi", "gcp", "gcloud", "keys", "health", "credentials", "creds"}
+PHP = {"do", "digitalocean", "cf", "cloudflare", "ploi", "gcp", "gcloud", "github", "gh", "keys", "health", "credentials", "creds"}
 SCRIPT = {"env": "env/env.sh", "addon": "addons/addon.sh", "addons": "addons/addon.sh",
           "monitor": "monitor/monitor.sh", "status": "server/status.sh"}
 PY = {"configure", "profile", "plans", "py", "python"}
@@ -161,7 +161,7 @@ def php_rules(area):
         _php_help[area] = destr
     return _php_help[area]
 
-PHP_ALIAS = {"digitalocean": "do", "cloudflare": "cf", "gcloud": "gcp", "creds": "credentials"}
+PHP_ALIAS = {"digitalocean": "do", "cloudflare": "cf", "gcloud": "gcp", "gh": "github", "creds": "credentials"}
 def check_php_extra(argstr):
     args = [t.split("\\|")[0].strip("\"'\\") for t in argstr.split()]
     if not args or args[0] not in PHP:
@@ -196,13 +196,14 @@ def coverage(docs_text):
             if f.endswith(".sh") and f not in docs_text and not re.search(rf"workbench {a} {t}(?![a-z0-9-])", docs_text):
                 errs.append(f"undocumented shell tool src/shell/{os.path.basename(d)}/{f}")
     lines = [set(re.findall(r"[a-z0-9][a-z0-9-]*", ln)) for ln in docs_text.splitlines() if "workbench" in ln or "`" in ln]
-    for area in ("do", "cf", "ploi", "gcp", "keys"):
+    for area in ("do", "cf", "ploi", "gcp", "github", "keys"):
         for line in helptext([WB, "help", area]).splitlines():
             m = re.match(r"\s*workbench\s+(\S+) ((?:[a-z][a-z0-9-]*(?: |$))+)", line)
             if not m:
                 continue
             words = m.group(2).split()
-            sub = " ".join(words[:2] if area in ("keys",) or words[0] in ("alerts", "uptime", "dns") and len(words) > 1 else words[:1])
+            # grouped areas (`do volumes create`, `github secrets set`, `keys account add`): the first two words
+            sub = " ".join(words[:2])
             # on one doc line: the area and every word of the subcommand (tables write `account list/add/remove`)
             if not any(area in ws and all(w in ws for w in sub.split()) for ws in lines):
                 errs.append(f"undocumented PHP command 'bin/workbench {area} {sub}'")

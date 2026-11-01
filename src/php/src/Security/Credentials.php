@@ -23,6 +23,7 @@ final class Credentials
         'CLOUDFLARE_API_TOKEN' => 'Cloudflare API token (scoped)',
         'GOOGLE_APPLICATION_CREDENTIALS' => 'Path to a Google service-account JSON key',
         'GCP_PROJECT' => 'Google Cloud project id',
+        'GITHUB_TOKEN' => 'GitHub fine-grained personal access token (workbench github)',
         'VULTR_API_KEY' => 'Vultr API key (workbench keys --provider vultr)',
         'HCLOUD_TOKEN' => 'Hetzner Cloud API token (workbench keys --provider hetzner)',
         'LINODE_TOKEN' => 'Linode / Akamai personal access token (workbench keys --provider linode)',

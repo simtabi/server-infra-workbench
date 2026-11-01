@@ -4,7 +4,7 @@
 #   bin/workbench list                       every tool and where it lives
 #   bin/workbench <area> <tool> [args...]    run src/shell/<area>/<tool>.sh    e.g. bin/workbench db remote-run --help
 #                                            server init|harden|update|inventory, web diagnose: plan first, --yes to apply
-#   bin/workbench do|cf|ploi|gcp ...         platform APIs (PHP core)      e.g. bin/workbench do snapshot 123 --dry-run
+#   bin/workbench do|cf|gcp|github|ploi ...  platform APIs (PHP core)      e.g. bin/workbench do snapshot 123 --dry-run
 #   bin/workbench keys [...]                 SSH keys: provider accounts + servers (menu without args)
 #   bin/workbench health <url>...            check health endpoints (status, body, latency)
 #   bin/workbench credentials                which API credentials are set (never prints values)
@@ -36,7 +36,13 @@ list() {
     "do firewalls|firewall-apply|uptime|droplet-create" "DigitalOcean (writes are plan-then-confirm)" \
     "do resize|alerts" "DigitalOcean resize, monitoring alert policies" \
     "ploi servers|sites|deploy" "Ploi" "ploi site-create|deploy-script|daemons" "Ploi" \
+    "do volumes|vpcs|domains|dns|reserved-ips" "DigitalOcean storage, networking, DNS" \
+    "do spaces-keys|projects|tags|power" "DigitalOcean keys, projects, tags, power" \
+    "cf settings|ssl|origin-certs|purge|firewall" "Cloudflare SSL, certificates, cache, firewall" \
     "gcp instances|snapshots|firewalls" "Google Compute Engine" \
+    "gcp instance|firewall-create|dns|buckets" "GCE writes, Cloud DNS, Cloud Storage" \
+    "github repos|runs|dispatch|secrets|releases" "GitHub (alias gh)" \
+    "ploi crons|databases|certs|server-restart" "Ploi cron, databases, SSL" \
     "keys [providers|account|server|fingerprint]" "SSH keys (DO, Vultr, Hetzner, Linode, Scaleway; servers)" \
     "health <url>..." "health endpoint check" "credentials" "credential check"
   echo "shortcuts (shell, src/shell):"
@@ -62,7 +68,7 @@ case "${1:-}" in
   ""|-h|--help|help) if [ -n "${2:-}" ]; then php_core help "$2"; else usage; fi ;;
   list) list ;;
   --version|version) php_core version ;;
-  do|digitalocean|cf|cloudflare|ploi|gcp|gcloud|keys|health|credentials|creds) php_core "$@" ;;
+  do|digitalocean|cf|cloudflare|ploi|gcp|gcloud|github|gh|keys|health|credentials|creds) php_core "$@" ;;
   php) shift; php_core "$@" ;;
   env) shift; exec "$ROOT/src/shell/env/env.sh" "$@" ;;
   addon|addons) shift; [ "${1:-}" = addon ] && shift; exec "$ROOT/src/shell/addons/addon.sh" "$@" ;;

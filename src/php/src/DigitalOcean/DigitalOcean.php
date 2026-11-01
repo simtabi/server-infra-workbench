@@ -61,6 +61,46 @@ final readonly class DigitalOcean
         return new Monitoring($this->transport);
     }
 
+    public function volumes(): Volumes
+    {
+        return new Volumes($this->transport, $this->actions());
+    }
+
+    public function vpcs(): Vpcs
+    {
+        return new Vpcs($this->transport);
+    }
+
+    public function spacesKeys(): SpacesKeys
+    {
+        return new SpacesKeys($this->transport);
+    }
+
+    public function domains(): Domains
+    {
+        return new Domains($this->transport);
+    }
+
+    public function reservedIps(): ReservedIps
+    {
+        return new ReservedIps($this->transport, $this->actions());
+    }
+
+    public function projects(): Projects
+    {
+        return new Projects($this->transport);
+    }
+
+    public function tags(): Tags
+    {
+        return new Tags($this->transport);
+    }
+
+    public function catalog(): Catalog
+    {
+        return new Catalog($this->transport);
+    }
+
     public function actions(): Actions
     {
         return new Actions($this->transport);

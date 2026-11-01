@@ -8,6 +8,7 @@ use Simtabi\VpsServerWorkbench\Cloudflare\Cloudflare;
 use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
 use Simtabi\VpsServerWorkbench\Gcp\Auth\TokenProvider;
 use Simtabi\VpsServerWorkbench\Gcp\Gcp;
+use Simtabi\VpsServerWorkbench\Github\Github;
 use Simtabi\VpsServerWorkbench\Health\HealthCheck;
 use Simtabi\VpsServerWorkbench\Http\ClientOptions;
 use Simtabi\VpsServerWorkbench\Keys\AccountKeys;
@@ -59,6 +60,11 @@ final readonly class ProviderFactory
     public function ploi(): Ploi
     {
         return Ploi::make(null, $this->options, $this->credentials);
+    }
+
+    public function github(): Github
+    {
+        return Github::make(null, $this->options, $this->credentials);
     }
 
     public function gcp(?string $project): Gcp
