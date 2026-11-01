@@ -6,6 +6,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+# hermetic: tools default to the repo-root .env; point them at an empty one so a developer's .env never leaks in
+: > "$T/empty.env"; export SIWO_ENV_FILE="$T/empty.env"
 gen() { openssl rand -hex "${1:-12}"; }  # repo rule: test secrets are generated per run, never hardcoded
 pass=0
 ok()   { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
@@ -120,7 +122,7 @@ grep -q 'no-snapshot' "$T/n" && ok "non-interactive needs a snapshot decision" |
 
 # --- remote-run snapshot fallback chain (PATH stubs: ssh, scp, doctl, workbench) ---
 SB="$T/stubs"; mkdir -p "$SB"; L="$T/stub.log"
-printf '#!/usr/bin/env bash\ncase "$*" in *metadata/v1/id*) echo 123456 ;; *) echo "ssh $*" >> "%s" ;; esac\n' "$L" > "$SB/ssh"
+printf '#!/usr/bin/env bash\ncase "$*" in *metadata/v1/id*) echo 123456 ;; *"sudo -n true"*) [ "${STUB_SUDO:-0}" = 0 ] || echo "sudo: a password is required" >&2; exit "${STUB_SUDO:-0}" ;; *) echo "ssh $*" >> "%s" ;; esac\n' "$L" > "$SB/ssh"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/scp"
 printf '#!/usr/bin/env bash\ncase "$*" in "account get") [ "${STUB_DOCTL:-0}" = 1 ] ;; *) echo "doctl $*" >> "%s" ;; esac\n' "$L" > "$SB/doctl"
 printf '#!/usr/bin/env bash\ncase "$*" in "digitalocean account --json") [ "${STUB_WB:-0}" = 1 ] ;; *) echo "workbench $*" >> "%s" ;; esac\n' "$L" > "$SB/workbench"
@@ -155,8 +157,60 @@ grep -q 'env-apply$' "$L" && grep -q 'upgrade --snapshot-taken' "$L" \
   && ok "the snapshot flag goes to the upgrade command, not the first match" || fail "flag placement: $(cat "$L")"
 printf '#!/usr/bin/env bash\necho "scp $*" >> "%s"\n' "$L" > "$SB/scp"; chmod +x "$SB/scp"
 : > "$T/c.conf"; rr --no-upload --config "$T/c.conf" -- verify
-grep -q "scp -q $T/c.conf h:.vsw-upload-docker-db-server-manager.conf" "$L" && ! grep -q 'docker-db-server-manager.sh h:' "$L" \
+grep -q "scp .*-q $T/c.conf h:.vsw-upload-docker-db-server-manager.conf" "$L" && ! grep -q 'docker-db-server-manager.sh h:' "$L" \
   && ok "--no-upload still uploads --config (no stale config installed)" || fail "--no-upload --config: $(cat "$L")"
+
+# --- remote-run: placeholders, --identity, host from .env, sudo detection -----------------------
+for a in "--host <db-alias> --expect-ip 10.0.0.5" "--host h --expect-ip <db-private-ip>" "--host h --expect-ip 10.0.0.5 -i <key>" "--host h --expect-ip 10.0.0.5 -- create-db <name>"; do
+  # shellcheck disable=SC2086  # word splitting of the test args is intended
+  if "$R" --dry-run $a > "$T/ph.out" 2>&1; then fail "remote-run accepted a placeholder: $a"; fi
+  grep -q 'still a placeholder' "$T/ph.out" || fail "placeholder message for $a: $(cat "$T/ph.out")"
+done
+printf 'SIWO_DB_SSH_HOST=<db-ssh-alias>\nSIWO_DB_PRIVATE_IP=<db-private-ip>\n' > "$T/ph.env"
+if "$R" --dry-run --env-file "$T/ph.env" -- doctor > "$T/ph.out" 2>&1; then fail "remote-run accepted .env placeholders"; fi
+grep -q "still a placeholder: '<db-ssh-alias>'" "$T/ph.out" && ok "remote-run refuses literal <placeholders> (flags, .env, commands) with a fix hint" || fail "env placeholder: $(cat "$T/ph.out")"
+if "$R" --dry-run --host --expect-ip 10.0.0.5 > "$T/ph.out" 2>&1; then fail "--host without a value accepted"; fi
+grep -q -- "--host needs a value (got '--expect-ip')" "$T/ph.out" && ok "remote-run: an option missing its value is named (what an unquoted <db-alias> leaves behind)" || fail "missing value: $(cat "$T/ph.out")"
+if "$R" --dry-run --host h --expect-ip 10.0.0 > /dev/null 2>&1; then fail "bad --expect-ip accepted"; fi
+KEY="$T/id_test"; : > "$KEY"
+"$R" --dry-run --host ploi@192.0.2.10 -i "$KEY" --expect-ip 10.0.0.5 -- engines status > "$T/id.out"
+grep -qF -- "-i $KEY -o IdentitiesOnly=yes" "$T/id.out" && grep -q 'sudo /root/docker-db-server-manager.sh engines status' "$T/id.out" \
+  && ok "remote-run -i KEY: ssh gets -i KEY -o IdentitiesOnly=yes, user@ip accepted" || fail "identity: $(cat "$T/id.out")"
+if "$R" --dry-run --host h -i "$KEY.pub" --expect-ip 10.0.0.5 >/dev/null 2>&1 || "$R" --dry-run --host h -i "$T/nokey" --expect-ip 10.0.0.5 >/dev/null 2>&1; then fail "bad identity accepted"; fi
+ok "remote-run refuses a .pub or missing identity file"
+printf 'SIWO_DB_SSH_HOST=ploi@192.0.2.10\nSIWO_DB_PRIVATE_IP=10.0.0.5\nSIWO_DB_SSH_IDENTITY=%s\n' "$KEY" > "$T/ws1.env"
+"$R" --dry-run --env-file "$T/ws1.env" -- doctor > "$T/env.out"
+grep -qF -- "-i $KEY -o IdentitiesOnly=yes -T ploi@192.0.2.10" "$T/env.out" && grep -qF 'inet 10\.0\.0\.5/' "$T/env.out" \
+  && ok "remote-run without --host: host, private IP and key from SIWO_DB_* in the env file" || fail "env defaults: $(cat "$T/env.out")"
+"$R" --dry-run --host h --expect-ip 10.0.0.5 -- doctor > "$T/sd1.out"; "$R" --dry-run --sudo prompt --host ploi@h --expect-ip 10.0.0.5 -- doctor > "$T/sd2.out"
+grep -q "sudo: checked first with 'sudo -n true'" "$T/sd1.out" && ! grep -q 'sudo -v' "$T/sd1.out" && grep -q "sudo -v -p" "$T/sd2.out" \
+  && ok "remote-run --dry-run: shows the sudo check; --sudo prompt adds one sudo -v up front" || fail "sudo dry-run"
+: > "$L"; set +e; STUB_SUDO=1 PATH="$SB:$PATH" "$R" --host ploi@h -i "$KEY" --expect-ip 10.0.0.5 -- engines status </dev/null > "$T/su.out" 2>&1; rc=$?; set -e
+[ "$rc" -ne 0 ] && grep -q 'needs the login user.s password, and this session has no terminal' "$T/su.out" && [ ! -s "$L" ] \
+  && ok "sudo with a password and no terminal: stops before uploading, says why (never takes a password)" || fail "sudo no-tty: rc=$rc $(cat "$T/su.out" "$L")"
+: > "$L"; STUB_SUDO=0 PATH="$SB:$PATH" "$R" --host ploi@h -i "$KEY" --expect-ip 10.0.0.5 -- engines status </dev/null > "$T/su.out" 2>&1
+grep -qF -- "ssh -o ConnectTimeout=15 -i $KEY -o IdentitiesOnly=yes -T ploi@h" "$L" && ! grep -q 'sudo -v' "$L" && grep -qF "scp -o ConnectTimeout=15 -i $KEY -o IdentitiesOnly=yes -q" "$L" \
+  && ok "passwordless sudo detected: runs without a prompt; scp + ssh both get the key" || fail "sudo nopasswd: $(cat "$T/su.out" "$L")"
+set +e; STUB_SUDO=255 PATH="$SB:$PATH" "$R" --host ploi@h --expect-ip 10.0.0.5 -- doctor </dev/null > "$T/su.out" 2>&1; rc=$?; set -e
+[ "$rc" -ne 0 ] && grep -q 'cannot ssh to ploi@h' "$T/su.out" && ok "ssh failure in the sudo probe is reported as an ssh problem (key/user hint)" || fail "ssh 255: $(cat "$T/su.out")"
+
+# --- remote-run: the server config comes from the root .env (SIWO_DB_* server keys) ----------------
+SECRET="$(gen 16)"
+printf 'SIWO_DB_SSH_HOST=ploi@192.0.2.10\nSIWO_DB_SSH_IDENTITY=%s\nSIWO_DB_PRIVATE_IP=10.0.0.5\nSIWO_DB_VPC_CIDR=10.0.0.0/20\nSIWO_DB_ENABLE_MYSQL=0   # off\nSIWO_DB_PG_DB="app"\nSIWO_DB_MY_RW_PRIVS=\nSIWO_DB_PG_ADMIN_PASSWORD=%s\nSIWO_DB_LOCAL_PG=15432\n# SIWO_DB_PG_USER=commented\n' "$KEY" "$SECRET" > "$T/srv.env"
+"$R" --dry-run --env-file "$T/srv.env" -- engines status > "$T/gc.out"
+grep -q 'upload: config from .*srv.env (keys: PRIVATE_IP VPC_CIDR ENABLE_MYSQL PG_DB) ' "$T/gc.out" && ! grep -q "$SECRET" "$T/gc.out" \
+  && ok "remote-run: server config generated from the env file's SIWO_DB_* keys (no secrets, empties, SSH_/LOCAL_ or comments)" || fail "generated config: $(cat "$T/gc.out")"
+printf '#!/usr/bin/env bash\nfor a; do case "$a" in *:.vsw-upload-docker-db-server-manager.conf) cp "$prev" "%s/up.conf" ;; esac; prev="$a"; done\n' "$T" > "$SB/scp"; chmod +x "$SB/scp"
+PATH="$SB:$PATH" "$R" --env-file "$T/srv.env" -- engines status </dev/null > "$T/gc2.out" 2>&1
+grep -qx 'ENABLE_MYSQL=0' "$T/up.conf" && grep -qx 'PG_DB="app"' "$T/up.conf" && ! grep -q "$SECRET" "$T/up.conf" && ! grep -qE '^(SSH_|LOCAL_|MY_RW_PRIVS|PG_ADMIN_PASSWORD|PG_USER)' "$T/up.conf" \
+  && ! ls "${TMPDIR:-/tmp}"/siwo-db-conf.* >/dev/null 2>&1 \
+  && ok "the uploaded config has the server keys only (prefix dropped) and the temp file is removed" || fail "uploaded config: $(cat "$T/up.conf" "$T/gc2.out")"
+"$R" --dry-run --env-file "$T/srv.env" --config "$T/c.conf" -- doctor > "$T/ov1.out"; "$R" --dry-run --env-file "$T/srv.env" --no-config -- doctor > "$T/ov2.out"
+grep -q "upload: $T/c.conf ->" "$T/ov1.out" && grep -q 'config: none uploaded' "$T/ov2.out" \
+  && ok "--config FILE overrides the generated config; --no-config uploads none" || fail "config override"
+printf 'SIWO_DB_SSH_HOST=h\nSIWO_DB_PRIVATE_IP=10.0.0.5\nSIWO_DB_VPC_CIDR=<vpc-cidr>\n' > "$T/ph2.env"
+if "$R" --dry-run --env-file "$T/ph2.env" -- doctor > "$T/ph2.out" 2>&1; then fail "placeholder server key accepted"; fi
+grep -q 'still <placeholders> in .*SIWO_DB_VPC_CIDR' "$T/ph2.out" && ok "a <placeholder> in a server key is refused, named" || fail "server key placeholder: $(cat "$T/ph2.out")"
 
 # --- deploy script: no Ploi placeholder collisions ---------------------------
 if grep -nE '\$\{(BRANCH|SITE|RELEASE|DOMAIN|REPOSITORY|REPOSITORY_NAME|PROJECT_ROOT|TIME)\}' "$D"; then

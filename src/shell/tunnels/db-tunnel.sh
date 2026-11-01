@@ -7,7 +7,7 @@
 # Options:
 #   --host HOST      SSH destination: user@public-ip or an ~/.ssh/config alias (or DB_TUNNEL_HOST, SIWO_DB_SSH_HOST)
 #   --private-ip IP  DB server private VPC IP the ports bind to (or DB_PRIVATE_IP, SIWO_DB_PRIVATE_IP)
-#   --env-file F     read SIWO_DB_SSH_HOST, SIWO_DB_PRIVATE_IP and SIWO_DB_LOCAL_* from F (default: the repo .env
+#   --env-file F     read SIWO_DB_SSH_HOST, SIWO_DB_PRIVATE_IP and SIWO_DB_LOCAL_* from F (default: $SIWO_ENV_FILE, else the repo .env
 #                    when it exists; never sourced, no password is read)
 #   --background     fork into the background (ssh -f); stop with: pkill -f 'ssh -N .*<host>'
 #   --print          print the ssh command, don't run it
@@ -23,7 +23,7 @@
 set -euo pipefail
 
 HOST="${DB_TUNNEL_HOST:-${SIWO_DB_SSH_HOST:-}}"; PIP="${DB_PRIVATE_IP:-${SIWO_DB_PRIVATE_IP:-}}"; BG=0; PRINT=0; ENG=()
-ENVF="$(cd "$(dirname "$0")/../../.." && pwd)/.env"
+ENVF="${SIWO_ENV_FILE:-$(cd "$(dirname "$0")/../../.." && pwd)/.env}"
 PG_PORT="${PG_PORT:-5432}"; PGBOUNCER_PORT="${PGBOUNCER_PORT:-6432}"
 MYSQL_PORT="${MYSQL_PORT:-3306}"; MARIADB_PORT="${MARIADB_PORT:-3307}"; ADMINER_PORT="${ADMINER_PORT:-8081}"
 PRESET="$(for v in LOCAL_PG LOCAL_PGBOUNCER LOCAL_MYSQL LOCAL_MARIADB LOCAL_ADMINER; do [ -z "${!v:-}" ] || printf '%s ' "$v"; done)"

@@ -111,8 +111,11 @@ fail if a `.env` file is ever tracked or staged.
 - `SIWO_DB_ENABLE_*`: the engine toggles, applied with `bin/siwo db engines` (below).
 - `SIWO_DB_*_ADMIN_USER` / `_PASSWORD`: your record of the master logins. The server keeps the live passwords;
   sync your copy from `admin-creds`. No tool sends the passwords in this file to a server.
-- `SIWO_DB_SSH_HOST`, `SIWO_DB_PRIVATE_IP`, `SIWO_DB_LOCAL_*`: used by `bin/siwo tunnels db-tunnel` and
-  `bin/siwo db engines`.
+- `SIWO_DB_SSH_HOST` (`user@ip` or an ssh alias), `SIWO_DB_SSH_IDENTITY` (private key), `SIWO_DB_PRIVATE_IP`,
+  `SIWO_DB_LOCAL_*`: used by `bin/siwo tunnels db-tunnel`, `remote-run.sh` and `bin/siwo db engines`.
+- Every other `SIWO_DB_<KEY>` (`VPC_CIDR`, `PG_DB`, ...): the server config. `remote-run.sh` installs them as
+  `/etc/docker-db-server-manager.conf` (no passwords, see [remote-run](../tools/remote-run.md#the-server-config)).
+  This replaces `local/<client>/db-server.conf`: env files live in the repo root only.
 
 ## Turning engines on and off
 
@@ -128,11 +131,46 @@ sudo /root/docker-db-server-manager.sh engines apply --set ENABLE_MYSQL=0 --set 
 ```
 
 `apply` prints the plan, asks you to type `APPLY` (`--yes` skips it), takes a backup when a data engine is
-stopped, stops and removes only those containers, writes the setting to the config file, starts and converges
+stopped, stops and removes only those containers, writes the setting to the config file(s), starts and converges
 the engines turned on, prunes their firewall rules, checks that the untouched containers are the same ones
 and runs `doctor`. Data volumes are kept: turning an engine back on brings its data and users back.
 `--purge` deletes the volumes of every engine that is off, after a typed `DELETE-<volume>` (or
 `WORKBENCH_CONFIRM='DELETE <volume>'`). `engine enable|disable <engine>` is the one-engine form.
+
+### Where the setting lives on the server
+
+The manager reads `/etc/docker-db-server-manager.conf` and then `/opt/db/.env`; **`/opt/db/.env` wins** for any
+key it holds. Many servers have no `/etc` file at all and keep every setting in `/opt/db/.env`; that file is
+then the live config. `engines apply` writes `ENABLE_*` to whichever file already holds the key (both if both
+do; `/opt/db/.env` if neither does), with a dated `.bak-*` copy, and does nothing to a file that already has
+the value. `engines` (status) prints which files it reads.
+
+It is also idempotent against changes made by hand. If an engine is already `0` and its container already
+gone (e.g. the setting was edited and the container removed with `docker rm`), the plan does not try to stop
+it again; it shows only what is left:
+
+```text
+  files   regenerate docker-compose.yml: mysql mariadb off, container already gone, still listed
+  ufw     remove the 3306/tcp rule
+```
+
+and a second run says `nothing to change`. The walkthrough of a live change done by hand, with the docker-only
+path, checks, re-enable and purge, is in
+[rehearsals/2026-11-engines-off-live.md](../rehearsals/2026-11-engines-off-live.md).
+
+### Re-enabling and purging
+
+```bash
+sudo /root/docker-db-server-manager.sh engines apply --set ENABLE_MYSQL=1 --dry-run    # plan
+sudo /root/docker-db-server-manager.sh engines apply --set ENABLE_MYSQL=1              # same volume: data and users come back
+sudo /root/docker-db-server-manager.sh engines apply --purge --dry-run                 # which volumes of off engines would go
+```
+
+`--purge` deletes the data volumes (`db_mysql_data`, `db_mariadb_data`) of the engines that are off, after a
+backup and a typed `DELETE-<volume>`. Do it only once you are sure the data is not needed; until then the
+volumes cost disk, not RAM.
+
+### From the workstation
 
 From the workstation, `bin/siwo db engines` reads the toggles from `.env` and runs the same thing through
 `remote-run.sh` (it uploads this checkout's manager unless `--no-upload`):
@@ -142,8 +180,24 @@ bin/siwo db engines status
 bin/siwo db engines plan                 # engines apply --dry-run on the server
 bin/siwo db engines apply                # the server asks you to type APPLY
 bin/siwo db engines plan --print         # show the remote-run command only
+bin/siwo db engines apply --host <user>@<db-public-ip> -i ~/.ssh/<db-key> --expect-ip <db-private-ip>
+bin/siwo db engines plan --no-config     # leave the server's config files alone (only engines apply edits them)
 ```
 
-Only `SIWO_DB_ENABLE_*`, `SIWO_DB_SSH_HOST` and `SIWO_DB_PRIVATE_IP` are read (the file is never sourced); a
-toggle missing from the file is not sent. PgBouncer needs Postgres, so `ENABLE_POSTGRES=0` with
-`ENABLE_PGBOUNCER=1` is refused.
+The repo-root `.env` is read line by line (never sourced): `SIWO_DB_ENABLE_*` become the `--set` arguments,
+`SIWO_DB_SSH_HOST`, `SIWO_DB_SSH_IDENTITY` and `SIWO_DB_PRIVATE_IP` the connection (`--host`, `-i`,
+`--expect-ip` override them), and the other server keys the uploaded config (`--config FILE` overrides,
+`--no-config` skips; see [remote-run](../tools/remote-run.md)). A toggle missing from the file is not sent.
+If sudo on the server needs a password, run it in a terminal: sudo asks once, in its own prompt
+([details](../tools/remote-run.md#sudo)).
+
+The same as a direct remote-run call (`--dry-run` before `--` prints it and connects to nothing; `--dry-run`
+after the manager command is the manager's plan on the server):
+
+```bash
+src/shell/db/remote-run.sh --dry-run --host <user>@<db-public-ip> -i ~/.ssh/<db-key> --expect-ip <db-private-ip> -- engines apply --set ENABLE_MYSQL=0 --set ENABLE_MARIADB=0
+src/shell/db/remote-run.sh --host <user>@<db-public-ip> -i ~/.ssh/<db-key> --expect-ip <db-private-ip> -- engines apply --set ENABLE_MYSQL=0 --set ENABLE_MARIADB=0 --dry-run
+src/shell/db/remote-run.sh --host <user>@<db-public-ip> -i ~/.ssh/<db-key> --expect-ip <db-private-ip> -- engines apply --set ENABLE_MYSQL=0 --set ENABLE_MARIADB=0
+```
+
+PgBouncer needs Postgres, so `ENABLE_POSTGRES=0` with `ENABLE_PGBOUNCER=1` is refused.

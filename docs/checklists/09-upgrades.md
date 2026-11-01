@@ -13,8 +13,8 @@
 | # | Step | Command | Verify | Why |
 |---|---|---|---|---|
 | 1 | Read the changelog | [CHANGELOG](../../CHANGELOG.md) between `M --version` and the new one | you know what changes | new keys have safe defaults, but read them |
-| 2 | Config first | compare with `config/db-server.env.example` (`local/<client>/db-server.conf`) | new keys considered | upgrades never reset data; the config drives them |
-| 3 | Upload and plan | `src/shell/db/remote-run.sh --host <db> --expect-ip <ip> --config local/<client>/db-server.conf -- upgrade --dry-run` | every plan line read | preflight, diff, what will restart |
+| 2 | Config first | compare with `config/db-server.env.example` (the `SIWO_DB_*` keys in the root `.env`) | new keys considered | upgrades never reset data; the config drives them |
+| 3 | Upload and plan | `src/shell/db/remote-run.sh --host <db> --expect-ip <ip> -- upgrade --dry-run` | every plan line read | preflight, diff, what will restart |
 | 4 | Upgrade | same with `-- upgrade` (offers a snapshot) | `M doctor` clean; app `/up` 200 | verified backup, savepoint, apply, verify, auto-rollback on failure |
 | 5 | Re-install cron | `M cron-install` | new jobs listed | new versions add jobs |
 | 6 | Restore test | `M restore-test` | pass | proves the new version's backups load |

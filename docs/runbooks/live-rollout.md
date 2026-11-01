@@ -19,7 +19,7 @@ DB_IP=<db-private-ip>        # the DB droplet's VPC address (10.x)
 DB_DROPLET=<db-droplet-id>
 WEB_DROPLET=<web-droplet-id>
 VPC=<vpc-id-or-cidr>
-CONF=local/<client>/db-server.conf
+CONF=local/<client>/db-server.conf   # legacy override; remote-run otherwise sends the SIWO_DB_* keys of the root .env
 ALERT_EMAIL=<you@example.com>
 ```
 

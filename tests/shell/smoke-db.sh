@@ -224,7 +224,7 @@ done; ok "engines apply: only ENABLE_*=0|1, unknown options refused"
 L usage | grep -q 'engines apply \[--set ENABLE_<ENGINE>=0|1\]' && L usage | grep -q 'admin-creds <postgres|mysql|mariadb> --out F' && ok "usage lists engines + admin-creds" || fail "usage"
 printf 'SIWO_DB_SSH_HOST=db-alias\nSIWO_DB_PRIVATE_IP=10.0.0.5\nSIWO_DB_ENABLE_POSTGRES=1\nSIWO_DB_ENABLE_MYSQL=0   # off\nSIWO_DB_ENABLE_MARIADB="0"\nSIWO_DB_MYSQL_ADMIN_PASSWORD=%s\nSIWO_DB_LOCAL_PG=25432\n' "$APW" > "$T/ws.env"
 src/shell/db/engines.sh apply --env-file "$T/ws.env" --print > "$T/eng.out"
-grep -qF -- '--host db-alias --expect-ip 10.0.0.5 -- engines\ apply\ --set\ ENABLE_POSTGRES=1\ --set\ ENABLE_MYSQL=0\ --set\ ENABLE_MARIADB=0' "$T/eng.out" && ! grep -q "$APW" "$T/eng.out" \
+grep -qF -- '--host db-alias --expect-ip 10.0.0.5' "$T/eng.out" && grep -qF -- "--env-file $T/ws.env -- engines\\ apply\\ --set\\ ENABLE_POSTGRES=1\\ --set\\ ENABLE_MYSQL=0\\ --set\\ ENABLE_MARIADB=0" "$T/eng.out" && ! grep -q "$APW" "$T/eng.out" \
   && src/shell/db/engines.sh plan --env-file "$T/ws.env" --print | grep -q 'dry-run$' && src/shell/db/engines.sh status --env-file "$T/ws.env" --print | grep -q 'engines\\ status$' \
   && ok "siwo db engines: toggles from .env -> engines apply over remote-run; passwords never sent" || { cat "$T/eng.out"; fail "engines.sh"; }
 printf 'SIWO_DB_ENABLE_MYSQL=maybe\nSIWO_DB_SSH_HOST=h\nSIWO_DB_PRIVATE_IP=10.0.0.5\n' > "$T/bad.env"
@@ -232,6 +232,23 @@ if src/shell/db/engines.sh plan --env-file "$T/bad.env" --print >/dev/null 2>&1;
 printf 'SIWO_DB_SSH_HOST=<db-ssh-alias>\nSIWO_DB_PRIVATE_IP=<db-private-ip>\n' > "$T/ph.env"
 if src/shell/db/engines.sh status --env-file "$T/ph.env" --print >/dev/null 2>&1; then fail "engines.sh placeholders"; fi
 ok "siwo db engines refuses bad toggles and unfilled <placeholders>"
+: > "$T/id_eng"
+bin/siwo db engines apply --env-file "$T/ws.env" --host ploi@192.0.2.10 -i "$T/id_eng" --sudo prompt --expect-ip 10.0.0.5 --print > "$T/eng2.out"
+grep -qF -- "--host ploi@192.0.2.10 --expect-ip 10.0.0.5 --identity $T/id_eng --sudo prompt --env-file $T/ws.env -- engines" "$T/eng2.out" \
+  && bin/siwo db engines status --env-file "$T/ws.env" --config "$T/id_eng" --print | grep -qF -- "--config $T/id_eng" \
+  && bin/siwo db engines status --env-file "$T/ws.env" --no-config --print | grep -qF -- "--no-config" \
+  && ok "siwo db engines apply --host user@ip -i KEY: key and sudo mode passed to remote-run" || { cat "$T/eng2.out"; fail "engines identity"; }
+# the server side: ENABLE_* go to every file that holds them; /opt/db/.env (sourced last, wins) when there is no config file
+mkdir -p "$T/eng/db"; printf 'PRIVATE_IP=10.0.0.5\nENABLE_MYSQL=1\n' > "$T/eng/db/.env"; chmod 600 "$T/eng/db/.env"
+DB_DIR="$T/eng/db" DBM_CONFIG="$T/eng/none.conf" L engine_conf_files ENABLE_MYSQL | grep -qx "$T/eng/db/.env" \
+  && DB_DIR="$T/eng/db" DBM_CONFIG="$T/eng/none.conf" L set_engine_key ENABLE_MYSQL 0 && grep -qx 'ENABLE_MYSQL=0' "$T/eng/db/.env" && ls "$T/eng/db/.env.bak-"* >/dev/null 2>&1 \
+  && [ "$(stat -c %a "$T/eng/db/.env" 2>/dev/null || stat -f %Lp "$T/eng/db/.env")" = 600 ] \
+  || fail "set_engine_key .env only"
+n="$(find "$T/eng/db" -name '.env.bak-*' | wc -l)"; sleep 1; DB_DIR="$T/eng/db" DBM_CONFIG="$T/eng/none.conf" L set_engine_key ENABLE_MYSQL 0
+[ "$(find "$T/eng/db" -name '.env.bak-*' | wc -l)" = "$n" ] || fail "set_engine_key re-run made another backup"
+printf 'ENABLE_MYSQL=1\n' > "$T/eng/c.conf"; DB_DIR="$T/eng/db" DBM_CONFIG="$T/eng/c.conf" L set_engine_key ENABLE_MYSQL 0
+grep -qx 'ENABLE_MYSQL=0' "$T/eng/c.conf" && grep -qx 'ENABLE_MYSQL=0' "$T/eng/db/.env" \
+  && ok "engines apply writes ENABLE_* to /opt/db/.env (no config file) or to both; dated .bak, 600, a re-run changes nothing" || fail "set_engine_key both"
 src/shell/tunnels/db-tunnel.sh --env-file "$T/ws.env" --print postgres mysql | grep -qF -- '-L 127.0.0.1:25432:10.0.0.5:5432 -L 127.0.0.1:13306:10.0.0.5:3306 db-alias' \
   && ok "db-tunnel reads host, private IP and local ports from the .env" || fail "db-tunnel env-file"
 python3 tests/security/no-env-files.py --self-test >/dev/null && ok "no-env-files guard self-test" || fail "no-env-files"
