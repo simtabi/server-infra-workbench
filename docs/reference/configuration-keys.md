@@ -139,6 +139,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `PITR_REPO_PATH` | `/pgbackrest` |  |
 | `PITR_S3_URI_STYLE` | `host` | host (DigitalOcean Spaces, AWS S3) \| path (Garage, MinIO, SeaweedFS) |
 | `PITR_S3_CA_FILE` | (empty) | PEM CA of a private S3 endpoint (self-hosted Garage behind TLS); TLS is always verified |
+| `PITR_S3_HOST_IP` | (empty) | IPv4 for the endpoint host name inside the postgres container (a private name not in DNS) |
 | `PITR_FULL_CRON` | `30 2 * * 0` |  |
 | `PITR_DIFF_CRON` | `30 2 * * 1-6` |  |
 | `PGBACKREST_PKG` | `pgbackrest` |  |

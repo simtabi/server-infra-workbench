@@ -179,6 +179,7 @@ PITR_REPO_TYPE="${PITR_REPO_TYPE:-s3}"              # s3 | posix (posix: a local
 PITR_REPO_PATH="${PITR_REPO_PATH:-/pgbackrest}"
 PITR_S3_URI_STYLE="${PITR_S3_URI_STYLE:-host}"        # host (Spaces, AWS) | path (Garage, MinIO, SeaweedFS)
 PITR_S3_CA_FILE="${PITR_S3_CA_FILE:-}"              # PEM CA for a private S3 endpoint; TLS is always verified
+PITR_S3_HOST_IP="${PITR_S3_HOST_IP:-}"              # IPv4 the endpoint host name maps to in the container (a private name not in DNS)
 PITR_FULL_CRON="${PITR_FULL_CRON:-30 2 * * 0}"
 PITR_DIFF_CRON="${PITR_DIFF_CRON:-30 2 * * 1-6}"
 PGBACKREST_PKG="${PGBACKREST_PKG:-pgbackrest}"
@@ -239,7 +240,7 @@ Setup and updates
   env-init [flags] [--out F]  environment wizard (prompts; or --app --engines --envs --tenant-dbs
                               --protect --prd-location --pitr --offsite --tls --alert-email --allow env=CIDR
                               --dry-run). Missing value without a terminal: exit 2
-  upgrade|apply [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot]
+  upgrade|apply [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot] [--allow-unhealthy]
                               preflight -> diff -> confirm -> snapshot -> verified backup -> savepoint
                               -> apply (incl. role split, root@'%' removal) -> verify + doctor -> auto-rollback
   install                     first-time setup (keeps an existing .env and data)
@@ -272,6 +273,7 @@ Backups and recovery (docs/backups-and-recovery.md)
 
 Checks
   status | verify | doctor [--alert] | logs [service] | env [engine]
+  rebind-ip [--dry-run]       after a restore to a droplet with another private IP: bind the stack to PRIVATE_IP and start
 
 Monitoring, TLS and migrations (docs/tools/monitor.md, docs/recipes/)
   monitor-user [--rotate]     pg_monitor login for the exporters; password file $MONITOR_PASSWORD_FILE (600)
@@ -691,6 +693,10 @@ EOF
     if pitr_on; then
       [ "$PITR_REPO_TYPE" = posix ] && echo "      - pg_pitr:$PITR_REPO_PATH"
       echo "    env_file: [./postgres/pitr.env]"
+      if [ "$PITR_REPO_TYPE" = s3 ] && [ -n "$PITR_S3_HOST_IP" ]; then
+        local s3h="${OFFSITE_ENDPOINT#https://}"; s3h="${s3h%%/*}"; s3h="${s3h%%:*}"
+        echo "    extra_hosts: [\"$s3h:$PITR_S3_HOST_IP\"]"   # Docker DNS ignores the host's /etc/hosts
+      fi
     fi
     cat <<'EOF'
     healthcheck:
@@ -1116,6 +1122,29 @@ net_reset_if_changed() {
   docker ps -q --filter "network=$DOCKER_NETWORK" | xargs -r docker network disconnect -f "$DOCKER_NETWORK" 2>/dev/null || true
   docker network rm "$DOCKER_NETWORK" >/dev/null
 }
+# A stack from before the named network (manager < 1.4) sits on compose's "<project>_default". Recreating
+# postgres alone (start_stack does postgres first) makes compose remove that network while mysql, mariadb
+# and pgbouncer are still attached: "network db_default has active endpoints", up fails, upgrade rolls back.
+# Found by the live rehearsal on a snapshot clone; the container tests started from a fresh 1.4+ stack.
+# Move the whole project once: stop its containers (volumes stay), drop its other networks, then start.
+net_migrate_legacy() {
+  local c n project="" legacy=""
+  for c in $(docker ps -aq --filter "label=com.docker.compose.project.working_dir=$DB_DIR" 2>/dev/null); do
+    [ -n "$project" ] || project="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)"
+    for n in $(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c" 2>/dev/null); do
+      [ "$n" = "$DOCKER_NETWORK" ] || in_list "$n" "$legacy" || legacy="$legacy $n"
+    done
+  done
+  [ -n "$legacy" ] || return 0
+  warn "stack containers are on${legacy}, not $DOCKER_NETWORK: stopping the stack once to move it (data volumes stay)"
+  docker ps -aq --filter "label=com.docker.compose.project.working_dir=$DB_DIR" | xargs -r docker rm -f >/dev/null
+  for n in $legacy; do
+    # only networks this compose project created; anything else is left alone
+    [ "$(docker network inspect -f '{{index .Labels "com.docker.compose.project"}}' "$n" 2>/dev/null)" = "$project" ] \
+      && { docker network rm "$n" >/dev/null 2>&1 || warn "could not remove network $n (still in use?)"; }
+  done
+  return 0
+}
 up_wait() { # dc up --wait; on failure say why: state, OOM, the last health probes and a log tail per bad container
   dc up -d --wait "$@" && return 0
   local rc=$? c st
@@ -1135,6 +1164,7 @@ start_stack() { # $1 = extra build flags. postgres first, then roles, then the r
   if on "$ENABLE_POSTGRES"; then dc build --pull ${1:-}; fi
   # shellcheck disable=SC2046  # service names never contain spaces
   dc pull --ignore-buildable 2>/dev/null || dc pull $(dc config --services | grep -vx postgres || true)
+  net_migrate_legacy   # after build + pull, so the stack is down only for the restart
   if on "$ENABLE_POSTGRES"; then
     up_wait --wait-timeout 300 --no-deps postgres
     PG_SU=""; pg_converge
@@ -1168,6 +1198,27 @@ firewall() {
 }
 
 cmd_status() { need_stack; dc ps; }
+# rebind-ip: after a snapshot restore to a droplet with another private IP (disaster recovery, rehearsal
+# clone), the stack's .env still binds the old address, so Docker cannot publish the ports ("cannot assign
+# requested address") and nothing starts. Point the bind address at this host's configured IP and start.
+stack_bind_ip() { sed -n 's/^PRIVATE_IP=//p' "$DB_DIR/.env" 2>/dev/null | tail -1; }
+host_has_ip() { ip -4 -o addr 2>/dev/null | grep -q "inet ${1//./\\.}/"; }
+cmd_rebind_ip() { # [--dry-run]
+  need_stack
+  local dry=0 a old
+  for a in "$@"; do case "$a" in --dry-run) dry=1 ;; *) die "unknown rebind-ip option: $a" ;; esac; done
+  old="$(stack_bind_ip)"
+  [ -n "$old" ] || die "no PRIVATE_IP in $DB_DIR/.env; nothing to rebind (run upgrade)"
+  host_has_ip "$PRIVATE_IP" || die "PRIVATE_IP=$PRIVATE_IP from the config is not on this host; fix the config first"
+  if [ "$old" = "$PRIVATE_IP" ]; then echo "stack already binds $PRIVATE_IP; nothing to do"; return 0; fi
+  host_has_ip "$old" && die "the stack binds $old, which is also on this host; refusing to guess (set PRIVATE_IP in $DB_DIR/.env by hand)"
+  echo "stack binds $old (not on this host); the config and host say $PRIVATE_IP"
+  if [ "$dry" = 1 ]; then echo "dry run: would set PRIVATE_IP=$PRIVATE_IP in $DB_DIR/.env (copy kept as .env.bak.<ts>) and start the stack"; return 0; fi
+  cp -p "$DB_DIR/.env" "$DB_DIR/.env.bak.$(date +%Y%m%d-%H%M%S)"
+  set_env_key PRIVATE_IP "$PRIVATE_IP"
+  up_wait --wait-timeout 300 || die "stack did not become healthy on $PRIVATE_IP (old .env kept as .env.bak.*)"
+  echo "rebound $old -> $PRIVATE_IP; stack up"
+}
 
 cmd_verify() {
   need_stack; load_env
@@ -1712,6 +1763,7 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
     [ -n "$OFFSITE_BUCKET" ] || err "PITR_REPO_TYPE=s3 needs OFFSITE_BUCKET"
     [[ "$OFFSITE_ENDPOINT" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]] || err "PITR_REPO_TYPE=s3 needs OFFSITE_ENDPOINT=https://host[:port] (pgBackRest speaks HTTPS only)"
     [ -z "$PITR_S3_CA_FILE" ] || [ -r "$PITR_S3_CA_FILE" ] || err "PITR_S3_CA_FILE '$PITR_S3_CA_FILE' is not readable"
+    [ -z "$PITR_S3_HOST_IP" ] || [[ "$PITR_S3_HOST_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || err "PITR_S3_HOST_IP '$PITR_S3_HOST_IP' must be an IPv4 address"
   fi
   case "$OFFSITE" in none|s3) ;; *) err "OFFSITE must be none or s3" ;; esac
   [ "$OFFSITE" = none ] || [ -n "$OFFSITE_BUCKET" ] || err "OFFSITE=s3 needs OFFSITE_BUCKET"
@@ -1785,7 +1837,15 @@ preflight() {
   done < <(dc ps -a --format '{{.Service}}{{"\t"}}{{.State}}{{"\t"}}{{.Health}}')
   if [ "$bad" = 1 ]; then
     warn "some containers are not healthy before the upgrade"
-    ask_yn "Continue anyway (the upgrade may fix it; rollback returns to this state)?" n || die "aborted; nothing changed"
+    local sb; sb="$(stack_bind_ip)"
+    if [ -n "$sb" ] && [ "$sb" != "$PRIVATE_IP" ] && ! host_has_ip "$sb"; then
+      die "the stack binds $sb, which is not on this host (restored to a new droplet?). Run: rebind-ip --dry-run, then rebind-ip; then upgrade again"
+    fi
+    if [ "${UPG_DRY:-0}" = 1 ]; then echo "dry run: continuing to the plan (a real run needs a yes or --allow-unhealthy)"
+    elif [ "${ALLOW_UNHEALTHY:-0}" = 1 ]; then echo "continuing: --allow-unhealthy (rollback returns to this state)"
+    elif [ "$INTERACTIVE" = 1 ]; then
+      ask_yn "Continue anyway (the upgrade may fix it; rollback returns to this state)?" n || die "aborted; nothing changed"
+    else die "containers not healthy before the upgrade; pass --allow-unhealthy to continue without a terminal (the upgrade may fix it, e.g. after a restore to a new private IP)"; fi
   fi
   ports="$(dc ps --format '{{.Service}} {{.Ports}}')"
   while IFS= read -r line; do
@@ -1888,13 +1948,15 @@ rollback() {
 }
 
 LAST_BACKUP=""
-cmd_upgrade() { # [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot]
+cmd_upgrade() { # [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot] [--allow-unhealthy]
   need_root
   local dry=0 a
   for a in "$@"; do case "$a" in
     --dry-run) dry=1 ;; --yes|-y) FORCE=1 ;; --non-interactive) NONINTERACTIVE=1 ;;
     --snapshot) SNAP_MODE=yes ;; --snapshot-taken) SNAP_MODE=taken ;; --no-snapshot) SNAP_MODE=no ;;
+    --allow-unhealthy) ALLOW_UNHEALTHY=1 ;;
     *) die "unknown upgrade option: $a (see help)" ;; esac; done
+  UPG_DRY="$dry"
   if is_interactive; then INTERACTIVE=1; fi
   [ "$dry" = 1 ] || start_log upgrade
   banner upgrade
@@ -1904,12 +1966,17 @@ cmd_upgrade() { # [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-t
   preflight
   # a stack built with another image tag (old default or a custom one) gets the new tag; the old one is retired after success
   local prev_img; prev_img="$(sed -n 's/^PG_IMAGE=//p' "$DB_DIR/stack.env" 2>/dev/null)"
+  # a stack from before stack.env (installed version "unknown") names its image only on the container
+  [ -n "$prev_img" ] || prev_img="$(docker ps -a --filter "label=com.docker.compose.project.working_dir=$DB_DIR" \
+    --filter label=com.docker.compose.service=postgres --format '{{.Image}}' 2>/dev/null | head -1 || true)"
   [ -z "$prev_img" ] || [ "$prev_img" = "$PG_IMAGE" ] || in_list "$prev_img" "$PG_IMAGE_LEGACY" || PG_IMAGE_LEGACY="$PG_IMAGE_LEGACY $prev_img"
   local changes=0 cur; cur="$(installed_version)"
   progress_step "plan"
   if plan; then changes=1; fi
   if [ "$changes" = 0 ] && [ "$cur" = "$VERSION" ]; then
-    rm -rf "$PLAN_DIR"; echo "already up to date ($VERSION); nothing to do"; return 0
+    rm -rf "$PLAN_DIR"; echo "already up to date ($VERSION); nothing to do"
+    # the running stack already uses $PG_IMAGE (its upgrade passed), so an old tag is no rollback image
+    [ "$dry" = 1 ] || retire_legacy_image; return 0
   fi
   if [ "$dry" = 1 ]; then rm -rf "$PLAN_DIR"; echo "dry run: nothing changed"; return 0; fi
   if [ "$INTERACTIVE" = 1 ]; then ask_yn "Apply these changes ($cur -> $VERSION)?" n || { rm -rf "$PLAN_DIR"; die "aborted; nothing changed"; }
@@ -2384,7 +2451,13 @@ offsite_env() { # export tool credentials for one command (values never printed)
   [ -n "$OFFSITE_BUCKET" ] || die "OFFSITE_BUCKET is not set"
   export RCLONE_CONFIG_VSW_TYPE=s3 RCLONE_CONFIG_VSW_PROVIDER=Other RCLONE_CONFIG_VSW_ENDPOINT="$OFFSITE_ENDPOINT" \
     RCLONE_CONFIG_VSW_REGION="$OFFSITE_REGION" RCLONE_CONFIG_VSW_ACCESS_KEY_ID="$OFFSITE_ACCESS_KEY" \
-    RCLONE_CONFIG_VSW_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" RCLONE_CONFIG_VSW_NO_CHECK_BUCKET=true
+    RCLONE_CONFIG_VSW_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" RCLONE_CONFIG_VSW_NO_CHECK_BUCKET=true \
+    RCLONE_CONFIG=/dev/null   # remote from the env only; also silences "config file not found"
+  # a private endpoint's CA (PITR_S3_CA_FILE) is trusted by the off-site tools too; TLS stays verified
+  # (one variable per tool: rclone's S3 SDK refuses AWS_CA_BUNDLE with "unsupported transport")
+  if [ -n "$PITR_S3_CA_FILE" ] && [ -r "$PITR_S3_CA_FILE" ]; then
+    if [ "$OFFSITE_TOOL" = aws ]; then export AWS_CA_BUNDLE="$PITR_S3_CA_FILE"; else export RCLONE_CA_CERT="$PITR_S3_CA_FILE"; fi
+  fi
   export AWS_ACCESS_KEY_ID="$OFFSITE_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" AWS_DEFAULT_REGION="$OFFSITE_REGION"
 }
 remote_put() { # local remote-name
@@ -2468,8 +2541,10 @@ cmd_binlog_ship() {
 # ---- PITR: pgBackRest inside the postgres container -----------------------------
 pgbr() { dc exec -T -u postgres postgres pgbackrest --config=/etc/postgresql/vsw/pgbackrest.conf --stanza=main "$@"; }
 pgbr_version_ok() {
-  local v; v="$(dc exec -T postgres pgbackrest version 2>/dev/null | awk '{print $2}')"
-  [ -n "$v" ] || { echo "pgbackrest missing"; return 1; }
+  # "pgBackRest 2.x" only: a missing binary makes docker print "OCI runtime exec failed ..." on stdout,
+  # whose second word ("runtime") used to pass as a version
+  local v; v="$(dc exec -T postgres pgbackrest version 2>/dev/null | awk '$1 == "pgBackRest" {print $2}' || true)"
+  [[ "$v" =~ ^[0-9]+\.[0-9]+ ]] || { echo "pgbackrest missing from the postgres image (set PITR=pgbackrest, then run upgrade)"; return 1; }
   printf '%s\n%s\n' "$PGBACKREST_MIN_VERSION" "$v" | sort -V -C || { echo "pgbackrest $v < $PGBACKREST_MIN_VERSION"; return 1; }
   echo "pgbackrest $v"
 }
@@ -2478,7 +2553,7 @@ cmd_pitr() { # setup | backup [full|diff|incr] | status | restore --target "YYYY
   pitr_on || die "PITR is off (set PITR=pgbackrest, then upgrade)"
   local sub="${1:-status}"; shift || true
   case "$sub" in
-    setup) pgbr_version_ok || die "need pgBackRest >= $PGBACKREST_MIN_VERSION in the image (PGBACKREST_PKG)"
+    setup) pgbr_version_ok || die "need pgBackRest >= $PGBACKREST_MIN_VERSION in the image: run upgrade after setting PITR=pgbackrest (PGBACKREST_PKG pins the package)"
       pgbr stanza-create; pgbr check; pgbr --type=full backup; stamp pitr-backup full; echo "PITR ready" ;;
     backup) pgbr --type="${1:-diff}" backup && stamp pitr-backup "${1:-diff}" || { notify pitr fail "pgbackrest ${1:-diff} backup failed"; die "pgbackrest backup failed"; } ;;
     status) pgbr_version_ok || true; pgbr info ;;
@@ -2571,7 +2646,11 @@ doctor_host() {
     if ufw status verbose | grep 'Status: active' >/dev/null; then d_ok "ufw active"; else d_bad "ufw is not active"; fi
     ufw status verbose | grep 'deny (incoming)' >/dev/null && d_ok "ufw default deny incoming" || d_bad "ufw default incoming is not deny"
   else d_warn "ufw: unknown (needs root and ufw)"; fi
-  if systemctl is-enabled unattended-upgrades >/dev/null 2>&1; then d_ok "unattended-upgrades enabled"
+  # the apt-daily-upgrade timer runs it when APT::Periodic::Unattended-Upgrade is 1; the service unit is
+  # only a shutdown hook and is often disabled, so it is not the signal
+  if command -v unattended-upgrade >/dev/null 2>&1 && apt-config shell v APT::Periodic::Unattended-Upgrade 2>/dev/null | grep -q "='1'"; then
+    d_ok "unattended-upgrades enabled (APT::Periodic)"
+  elif systemctl is-enabled unattended-upgrades >/dev/null 2>&1; then d_ok "unattended-upgrades enabled"
   else d_warn "unattended-upgrades not enabled (apt install unattended-upgrades)"; fi
   [ -f /var/run/reboot-required ] && d_warn "reboot required (server update --reboot-window)" || d_ok "no reboot pending"
   local use; use="$(df -P "$DB_DIR" 2>/dev/null | awk 'NR==2 {gsub("%","",$5); print $5}')"
@@ -2685,10 +2764,14 @@ doctor_backups() {
   if pitr_on && stack_up postgres; then
     if pgbr info >/dev/null 2>&1; then
       x="$(pgbr info --output=json 2>/dev/null | grep -o '"status":{"code":[0-9]*' | head -1 | grep -o '[0-9]*$' || true)"
-      [ "${x:-1}" = 0 ] && d_ok "pgBackRest stanza ok" || d_bad "pgBackRest stanza not ok (pitr setup)"
-      [ "$(pg_val postgres "select coalesce(extract(epoch from now() - last_archived_time)::int, 999999) < 3600 from pg_stat_archiver")" = t ] && d_ok "WAL archiving within the last hour" || d_stale "WAL archiving is behind or failing (pg_stat_archiver)"
-      [ "$(pg_val postgres "select failed_count > 0 and coalesce(last_failed_time > last_archived_time, false) from pg_stat_archiver")" = t ] && d_bad "last WAL archive attempt failed"
-    else d_bad "PITR=pgbackrest but pgbackrest info fails (pitr setup)"; fi
+      # the upgrade that turns PITR on comes before "pitr setup" creates the stanza: a missing stanza
+      # is a warning there (d_stale), or the upgrade would roll itself back
+      if [ "${x:-1}" = 0 ]; then
+        d_ok "pgBackRest stanza ok"
+        [ "$(pg_val postgres "select coalesce(extract(epoch from now() - last_archived_time)::int, 999999) < 3600 from pg_stat_archiver")" = t ] && d_ok "WAL archiving within the last hour" || d_stale "WAL archiving is behind or failing (pg_stat_archiver)"
+        [ "$(pg_val postgres "select failed_count > 0 and coalesce(last_failed_time > last_archived_time, false) from pg_stat_archiver")" = t ] && d_bad "last WAL archive attempt failed"
+      else d_stale "pgBackRest stanza not set up or not ok (run: pitr setup)"; fi
+    else d_stale "PITR=pgbackrest but pgbackrest info fails (run: pitr setup)"; fi
   fi
   return 0
 }
@@ -3127,7 +3210,7 @@ case "$CMD" in help|-h|--help|init|env-init|env-sql|env-list|gfs-keep) ;; *) che
 case "$CMD" in help|-h|--help|init|env-init) ;; *) validate_envs ;; esac
 case "$CMD" in # mutating commands: one at a time
   upgrade|apply|install|reset|restore|backup|uninstall|create-db|create-user|grant|drop-db|drop-user|rotate-password|\
-  env-apply|role-split|purge-trash|engine|offsite|binlog-ship|pitr|restore-test|monitor-user|pg-major-upgrade|migrate-managed)
+  env-apply|role-split|rebind-ip|purge-trash|engine|offsite|binlog-ship|pitr|restore-test|monitor-user|pg-major-upgrade|migrate-managed)
     need_root; take_lock ;;
 esac
 case "$CMD" in
@@ -3135,6 +3218,7 @@ case "$CMD" in
   install)      cmd_install ;;
   reset)        cmd_reset "$@" ;;
   status)       cmd_status ;;
+  rebind-ip)    cmd_rebind_ip "$@" ;;
   verify)       cmd_verify ;;
   env)          cmd_env "$@" ;;
   init)         cmd_init "$@" ;;
@@ -3153,7 +3237,7 @@ case "$CMD" in
   env-sql)      cmd_env_sql "$@" ;;
   env-creds)    cmd_env_creds "$@" ;;
   purge-trash)  cmd_purge_trash "$@" ;;
-  doctor)       cmd_doctor "$@" ;;
+  doctor)       cmd_doctor "$@" || exit $? ;;   # a failed check is a result, not a script error (no ERR trap line)
   backup)       cmd_backup "$@" ;;
   restore)      cmd_restore "$@" ;;
   restore-test) cmd_restore_test "$@" ;;
