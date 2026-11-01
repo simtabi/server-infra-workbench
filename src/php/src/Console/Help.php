@@ -34,8 +34,10 @@ final class Help
                 workbench do alerts create --type cpu|memory|disk|load1|load5|load15|bandwidth-out --value N
                         [--window 5m|10m|30m|1h] [--below] --email a@x (--droplet ID | --tag T)   (write)
                 workbench do alerts delete <uuid> --force       (destructive)
-                workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image ubuntu-24-04-x64]
-                        [--vpc UUID] [--tag T[,T]] [--backups] [--user-data FILE]   create a droplet (write; idempotent by name)
+                workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I|latest]
+                        [--vpc UUID] [--tag T[,T]] [--backups] [--user-data FILE]   create a droplet (write; idempotent by name;
+                        image: --image, else VSW_DROPLET_IMAGE, else ubuntu-26-04-x64, the newest Ubuntu LTS;
+                        "latest" asks the API for the newest Ubuntu LTS)
                 workbench do firewalls                          cloud firewalls (WORLD-OPEN marks non-web ports open to all)
                 workbench do firewall-apply db|web --vpc VPC_ID|CIDR [--name N] [--ssh-from CIDR[,CIDR]]
                         [--ports 5432,6379] [--droplet ID[,ID]] [--tag T]   create or update a preset (write)

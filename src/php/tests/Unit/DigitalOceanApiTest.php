@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Simtabi\VpsServerWorkbench\Tests\Unit;
 
 use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\VpsServerWorkbench\DigitalOcean\Droplets;
 use Simtabi\VpsServerWorkbench\DigitalOcean\FirewallPreset;
 use Simtabi\VpsServerWorkbench\Exception\ValidationException;
 use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
@@ -139,7 +140,7 @@ final class DigitalOceanApiTest extends TestCase
     public function test_droplet_create_plan_requires_keys_and_is_idempotent_by_name(): void
     {
         $this->http->json(['droplets' => [], 'links' => []])->json(['droplet' => ['id' => 99, 'name' => 'web-02', 'status' => 'new']], 202);
-        $create = $this->do()->droplets()->create('web-02', 'nyc3', 's-2vcpu-4gb', 'ubuntu-24-04-x64', ['123', 'aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99'], 'vpc-uuid-1', ['web'], false, "#cloud-config\n");
+        $create = $this->do()->droplets()->create('web-02', 'nyc3', 's-2vcpu-4gb', Droplets::DEFAULT_IMAGE, ['123', 'aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99'], 'vpc-uuid-1', ['web'], false, "#cloud-config\n");
         $plan = $create->plan();
         self::assertSame([123, 'aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99'], $plan['payload']['ssh_keys']);
         self::assertSame('vpc-uuid-1', $plan['payload']['vpc_uuid']);
@@ -150,10 +151,29 @@ final class DigitalOceanApiTest extends TestCase
         self::assertSame('web-02', MockHttpClient::body($this->http->last())['name']);
 
         $this->http->json(['droplets' => [['id' => 5, 'name' => 'web-02']], 'links' => []]);
-        self::assertTrue($this->do()->droplets()->create('web-02', 'nyc3', 's-1vcpu-1gb', 'ubuntu-24-04-x64', [1])->isNoop());
+        self::assertTrue($this->do()->droplets()->create('web-02', 'nyc3', 's-1vcpu-1gb', Droplets::DEFAULT_IMAGE, [1])->isNoop());
 
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('without an SSH key');
-        $this->do()->droplets()->create('web-03', 'nyc3', 's-1vcpu-1gb', 'ubuntu-24-04-x64', []);
+        $this->do()->droplets()->create('web-03', 'nyc3', 's-1vcpu-1gb', Droplets::DEFAULT_IMAGE, []);
+    }
+
+    public function test_droplet_image_defaults_to_the_newest_ubuntu_lts_and_latest_asks_the_api(): void
+    {
+        self::assertSame('ubuntu-26-04-x64', Droplets::DEFAULT_IMAGE, 'bump DEFAULT_IMAGE (and the docs) when a new Ubuntu LTS ships');
+        self::assertSame(Droplets::DEFAULT_IMAGE, $this->do()->droplets()->resolveImage(null));
+        self::assertSame(Droplets::DEFAULT_IMAGE, $this->do()->droplets()->resolveImage(''));
+        self::assertSame('debian-13-x64', $this->do()->droplets()->resolveImage('debian-13-x64'));
+        self::assertSame([], $this->http->log(), 'no API call unless "latest" is asked for');
+
+        $this->http->json(['images' => [
+            ['slug' => 'ubuntu-24-04-x64'], ['slug' => 'ubuntu-25-10-x64'], ['slug' => 'ubuntu-28-04-x64'],
+            ['slug' => 'ubuntu-27-04-x64'], ['slug' => 'ubuntu-28-04-arm64'], ['slug' => null], ['slug' => 'debian-13-x64'],
+        ], 'links' => []]);
+        self::assertSame('ubuntu-28-04-x64', $this->do()->droplets()->resolveImage('latest'));
+        self::assertSame(['GET /v2/images?type=distribution&per_page=200'], $this->http->log());
+
+        $this->http->json(['images' => [['slug' => 'debian-13-x64']], 'links' => []]);
+        self::assertSame(Droplets::DEFAULT_IMAGE, $this->do()->droplets()->latestUbuntuLts(), 'falls back to the constant');
     }
 }

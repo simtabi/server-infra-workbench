@@ -14,7 +14,7 @@
 | Docker web | Caddy + php-fpm compose with automatic HTTPS |
 | Guided upgrade | manager 1.3.0 `upgrade`: preflight, diff, snapshot offer, verified backup, savepoint, apply, verify, auto-rollback, lock, redacted log |
 | Platform APIs | PHP 8.4 clients for DigitalOcean (droplets, snapshots, actions), Cloudflare (zones, DNS upsert/delete), Ploi (servers, sites, deploy), GCP (instances, snapshots, firewalls); pending actions, dry runs, audit log |
-| CLI | `bin/workbench`: shell tools, `do`/`cf`/`ploi`/`gcp` (incl. `do resize`, alerts, firewalls), `keys`, `configure` + profiles, `credentials`, `py` |
+| CLI | `bin/workbench`: shell tools, `do`/`cf`/`ploi`/`gcp` (incl. `do resize`, alerts, firewalls; `do droplet-create` defaults to the newest Ubuntu LTS, `ubuntu-26-04-x64`, [why](tools/cli.md#default-droplet-image)), `keys`, `configure` + profiles, `credentials`, `py` |
 | Server tools | `server init`, `harden`, `update --reboot-window`, `inventory`, `web diagnose [--fix]`, `env init\|check`, `fixkeys.sh` console recovery; [server tools](tools/server.md) |
 | Cross-region | `EXTRA_BIND_IPS`, `PEER_REGIONS`, `VPC_PEERING`, public bind only with `ALLOW_PUBLIC_BIND=1` + TLS; `doctor` and `check-db-reach` region/VPC checks; `net wireguard setup\|status\|remove`; [cross-region](cross-region.md) |
 | Monitoring (P2) | `bin/workbench monitor`: Beszel, Uptime Kuma, Netdata, Prometheus + Grafana + exporters, per role, loopback UIs, private agents, RAM gate; backup/restore-test textfile metrics and alert rules; `bin/workbench status`; [monitor](tools/monitor.md), [ADR 0012](adr/0012-monitoring-stack.md) |

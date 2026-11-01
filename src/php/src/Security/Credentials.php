@@ -95,6 +95,17 @@ final class Credentials
         return new Secret($value);
     }
 
+    /**
+     * A plain, non-secret setting (e.g. VSW_DROPLET_IMAGE) from the environment or the credentials file;
+     * null when unset or empty. Never use this for tokens: get() wraps those in a Secret.
+     */
+    public function setting(string $key): ?string
+    {
+        $value = $this->fromEnv($key) ?? $this->fileValues()[$key] ?? null;
+
+        return $value === null || $value === '' ? null : $value;
+    }
+
     public function file(): ?string
     {
         return $this->file;

@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (droplet image)
+
+- `workbench do droplet-create` defaults to the newest Ubuntu LTS, `ubuntu-26-04-x64` (was `ubuntu-24-04-x64`).
+  One source of truth, `Droplets::DEFAULT_IMAGE`; override with `--image`, or per workstation with
+  `VSW_DROPLET_IMAGE` (environment or credentials file). `--image latest` resolves the newest Ubuntu LTS from
+  `GET /v2/images`, falling back to the constant. A unit test keeps the help and docs in step with the constant
+  ([why](docs/tools/cli.md#default-droplet-image)).
+
 ### Added (P3: tests, examples, secret hygiene)
 
 - `tests/shell/wg-it.sh` in `make it`: a real WireGuard tunnel between two containers (ssh, kernel WireGuard

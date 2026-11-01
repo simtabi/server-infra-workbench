@@ -44,7 +44,7 @@ Requires PHP 8.4+ and `composer install --working-dir=src/php` (the dispatcher s
 | `workbench do snapshot <droplet-id> [--name N] [--wait] [--timeout S]` | **Write.** Snapshot a droplet (default name `workbench-<id>-<UTC time>`) |
 | `workbench do snapshot-delete <snapshot-id>` | **Destructive.** Needs `--force` |
 | `workbench do account` | Check the token (prints the account record) |
-| `workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I] [--vpc UUID] [--tag T] [--backups] [--user-data FILE]` | **Write.** Create a droplet; a no-op when one with that name exists. `--image` defaults to `ubuntu-24-04-x64`; pass `--image ubuntu-26-04-x64` to match servers already on 26.04 |
+| `workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I] [--vpc UUID] [--tag T] [--backups] [--user-data FILE]` | **Write.** Create a droplet; a no-op when one with that name exists. Image: `--image`, else `VSW_DROPLET_IMAGE`, else `ubuntu-26-04-x64` (the newest Ubuntu LTS); `--image latest` asks the API for the newest Ubuntu LTS ([why](#default-droplet-image)) |
 | `workbench do resize <id> --size S [--disk] [--timeout S]` | **Write, downtime.** Shut down (falls back to power off), resize, power back on (always attempted, even when the resize fails). CPU/RAM-only by default so you can size back down; `--disk` grows the disk permanently and needs `--force`. Snapshot first |
 | `workbench do alerts [list]` | Monitoring alert policies |
 | `workbench do alerts standard --email a@x (--droplet ID[,ID] \| --tag T)` | **Write.** CPU > 85% for 10m, memory > 90% for 10m, disk > 85% for 5m. Creates only the missing ones (matched by description), so it is safe to rerun |
@@ -114,6 +114,25 @@ bin/workbench cf dns upsert example.com A db 203.0.113.10 --ttl 300 --yes
 bin/workbench ploi deploy 42 1001 --yes
 bin/workbench gcp firewalls --project my-project
 ```
+
+### Default droplet image
+
+New droplets get the **newest Ubuntu LTS** (`ubuntu-26-04-x64` today). Why:
+
+- A new server should start on the release with the longest support window left; starting on an older
+  LTS only brings its upgrade date closer.
+- The default lives in one place, `Droplets::DEFAULT_IMAGE` in the PHP core, so the help, the docs and the
+  tests cannot disagree (a unit test fails when they do). Bump it when a new LTS ships (April of even years),
+  after `make it` passes on that release.
+- It is a constant, not a live lookup, so a dry run shows exactly what will be created and the default
+  never changes under you between a plan and the real run.
+
+| To get | Do |
+|---|---|
+| The default (newest LTS known to this release) | nothing |
+| A fixed image on this workstation, e.g. to match servers still on 24.04 | `VSW_DROPLET_IMAGE=ubuntu-24-04-x64` in the environment or the credentials file |
+| A different image for one droplet | `--image <slug>` (wins over the setting) |
+| Whatever is newest on DigitalOcean right now | `--image latest` or `VSW_DROPLET_IMAGE=latest` (one read-only `GET /v2/images`; falls back to the default) |
 
 In your own shell scripts, quote the area when it follows another word that bash treats as a keyword
 (`bin/workbench 'do' droplets`), or use the `digitalocean` alias; shellcheck flags a bare `do` (SC1010).

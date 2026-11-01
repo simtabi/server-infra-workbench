@@ -18,7 +18,58 @@ use Simtabi\VpsServerWorkbench\Support\Validate;
 
 final readonly class Droplets
 {
+    /**
+     * The image a new droplet gets when nothing else is asked for: the newest Ubuntu LTS DigitalOcean offers.
+     * The one place to bump when a new LTS ships (every April of an even year). Override per run with
+     * --image, per workstation with VSW_DROPLET_IMAGE, or pass "latest" to ask the API at create time.
+     */
+    public const string DEFAULT_IMAGE = 'ubuntu-26-04-x64';
+
+    /** The --image / VSW_DROPLET_IMAGE value that resolves the newest Ubuntu LTS from the API. */
+    public const string LATEST = 'latest';
+
+    /** Workstation setting (environment or credentials file; not a secret) for the default image. */
+    public const string IMAGE_ENV = 'VSW_DROPLET_IMAGE';
+
     public function __construct(private Transport $transport, private Actions $actions) {}
+
+    /**
+     * The image slug to create with: null means DEFAULT_IMAGE, "latest" asks the API
+     * (latestUbuntuLts()), anything else is used as given (create() validates it).
+     */
+    public function resolveImage(?string $image): string
+    {
+        $image = $image === null ? '' : trim($image);
+
+        return match ($image) {
+            '' => self::DEFAULT_IMAGE,
+            self::LATEST => $this->latestUbuntuLts(),
+            default => $image,
+        };
+    }
+
+    /**
+     * The newest Ubuntu LTS x64 distribution image DigitalOcean lists (ubuntu-YY-04-x64, YY even).
+     * Read-only (GET /v2/images); falls back to DEFAULT_IMAGE when the list has no such slug.
+     */
+    public function latestUbuntuLts(): string
+    {
+        $best = null;
+        $bestYear = -1;
+        foreach ($this->transport->paginate('/v2/images', ['type' => 'distribution', 'per_page' => 200], new DigitalOceanPaginator('images')) as $row) {
+            $slug = $row['slug'] ?? null;
+            if (! is_string($slug) || preg_match('/^ubuntu-(\d{2})-04-x64$/', $slug, $m) !== 1) {
+                continue;
+            }
+            $year = (int) $m[1];
+            if ($year % 2 === 0 && $year > $bestYear) {
+                $best = $slug;
+                $bestYear = $year;
+            }
+        }
+
+        return $best ?? self::DEFAULT_IMAGE;
+    }
 
     /** @return list<Droplet> */
     public function list(?string $tag = null): array
@@ -94,7 +145,7 @@ final readonly class Droplets
         }
         foreach (['region' => $region, 'size' => $size, 'image' => $image] as $what => $value) {
             if (preg_match('/^[a-z0-9][a-z0-9.-]{0,63}$/', $value) !== 1) {
-                throw new ValidationException(sprintf('%s "%s" must be a DigitalOcean slug (e.g. nyc3, s-2vcpu-4gb, ubuntu-24-04-x64)', $what, $value));
+                throw new ValidationException(sprintf('%s "%s" must be a DigitalOcean slug (e.g. nyc3, s-2vcpu-4gb, %s)', $what, $value, self::DEFAULT_IMAGE));
             }
         }
         if ($sshKeys === []) {

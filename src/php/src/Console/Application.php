@@ -9,6 +9,7 @@ use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Droplet;
 use Simtabi\VpsServerWorkbench\DigitalOcean\Data\Firewall;
 use Simtabi\VpsServerWorkbench\DigitalOcean\Data\UptimeAlert;
 use Simtabi\VpsServerWorkbench\DigitalOcean\Data\UptimeCheck;
+use Simtabi\VpsServerWorkbench\DigitalOcean\Droplets;
 use Simtabi\VpsServerWorkbench\DigitalOcean\FirewallPreset;
 use Simtabi\VpsServerWorkbench\DigitalOcean\Monitoring;
 use Simtabi\VpsServerWorkbench\DigitalOcean\RunningAction;
@@ -143,7 +144,7 @@ final class Application
                 $in->arg(1, 'name'),
                 $in->value('region') ?? throw new ValidationException('--region is required (e.g. nyc3)'),
                 $in->value('size') ?? throw new ValidationException('--size is required (e.g. s-2vcpu-4gb; see: workbench plans)'),
-                $in->value('image') ?? 'ubuntu-24-04-x64',
+                $do()->droplets()->resolveImage($in->value('image') ?? $this->providers->credentials()->setting(Droplets::IMAGE_ENV)),
                 $in->list('ssh-keys'),
                 $in->value('vpc'),
                 $in->list('tag'),

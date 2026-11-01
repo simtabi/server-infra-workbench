@@ -8,6 +8,7 @@ use GuzzleHttp\Psr7\Response;
 use Simtabi\VpsServerWorkbench\Console\Application;
 use Simtabi\VpsServerWorkbench\Console\Output;
 use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
+use Simtabi\VpsServerWorkbench\DigitalOcean\Droplets;
 use Simtabi\VpsServerWorkbench\Security\Credentials;
 use Simtabi\VpsServerWorkbench\Tests\Fixtures\FakeKeys;
 use Simtabi\VpsServerWorkbench\Tests\Fixtures\FakeSshRunner;
@@ -35,11 +36,12 @@ final class ConsoleNewCommandsTest extends TestCase
         $this->ssh = new FakeSshRunner;
     }
 
-    private function app(): Application
+    /** @param array<string, string> $settings extra environment (non-secret settings) */
+    private function app(array $settings = []): Application
     {
         $this->stdout = self::memory();
         $this->stderr = self::memory();
-        $env = ['DIGITALOCEAN_TOKEN' => self::fake('do'), 'PLOI_API_TOKEN' => self::fake('ploi'), 'HCLOUD_TOKEN' => self::fake('hcloud')];
+        $env = ['DIGITALOCEAN_TOKEN' => self::fake('do'), 'PLOI_API_TOKEN' => self::fake('ploi'), 'HCLOUD_TOKEN' => self::fake('hcloud')] + $settings;
 
         return new Application(
             new ProviderFactory($this->options(), new Credentials('/nonexistent/credentials', $env), null, $this->ssh, [], '/tmp'),
@@ -270,5 +272,30 @@ final class ConsoleNewCommandsTest extends TestCase
         self::assertSame(0, $this->app()->run(['keys', '--dry-run', '--config', '/nonexistent/k.json']));
         self::assertStringContainsString('DRY RUN', $this->out());
         self::assertSame(['GET /v1/ssh_keys?per_page=50'], $this->http->log());
+    }
+
+    public function test_droplet_create_image_comes_from_flag_then_setting_then_the_newest_lts_default(): void
+    {
+        $this->http->json(['droplets' => [], 'links' => []]);
+        self::assertSame(0, $this->app()->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--dry-run']));
+        self::assertStringContainsString('"image":"'.Droplets::DEFAULT_IMAGE.'"', $this->out());
+
+        $this->http->json(['droplets' => [], 'links' => []]);
+        self::assertSame(0, $this->app(['VSW_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--dry-run']));
+        self::assertStringContainsString('"image":"ubuntu-24-04-x64"', $this->out());
+
+        $this->http->json(['images' => [['slug' => 'ubuntu-26-04-x64'], ['slug' => 'ubuntu-28-04-x64']], 'links' => []])->json(['droplets' => [], 'links' => []]);
+        self::assertSame(0, $this->app(['VSW_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--image', 'latest', '--dry-run']));
+        self::assertStringContainsString('"image":"ubuntu-28-04-x64"', $this->out());
+    }
+
+    public function test_help_and_docs_name_the_current_default_image(): void
+    {
+        self::assertSame(0, $this->app()->run(['do', '--help']));
+        self::assertStringContainsString(Droplets::DEFAULT_IMAGE, $this->out());
+        $root = dirname(__DIR__, 4);
+        foreach (['docs/tools/cli.md', 'config/credentials.env.example'] as $doc) {
+            self::assertStringContainsString(Droplets::DEFAULT_IMAGE, (string) file_get_contents($root.'/'.$doc), $doc);
+        }
     }
 }
