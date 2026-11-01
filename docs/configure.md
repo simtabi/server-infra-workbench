@@ -37,7 +37,7 @@ bin/workbench profile diff dev-budget production-single
 ## Run the wizard
 
 ```bash
-bin/workbench configure                     # asks: profile, client, app, region, envs, RAM, IP, storage, PDF, email
+bin/workbench configure                     # asks: profile, client, app, cloud, region, envs, RAM, IP, storage, PDF, email
 ```
 
 Press Enter to keep the value in brackets. At the end you can add any other `KEY=VALUE`, one per line.
