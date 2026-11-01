@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added (manager 1.6.0: database users, engine toggles, local clients)
+
+- Master login per engine ([users and privileges](docs/databases/users-and-privileges.md),
+  [ADR 0015](docs/adr/0015-master-users-and-engine-toggles.md)): MySQL/MariaDB get a named admin
+  (`MYSQL_ADMIN_USER` / `MARIADB_ADMIN_USER`, default `siwo_admin`) limited to `MY_ADMIN_HOSTS` (default the
+  Docker network and `VPC_CIDR`; `%` and `/0` refused) with `MY_ADMIN_PRIVS` and `MY_ADMIN_GRANT_OPTION`;
+  `root` stays server-local. Passwords are generated into `/opt/db/.env` (600), re-synced on every converge and
+  never printed. `admin-creds <engine> --out F` writes one master login to a new 600 file.
+- `engines [status]` and `engines apply [--set ENABLE_<ENGINE>=0|1]... [--dry-run] [--purge]`: switch engines
+  on or off on a running server touching only the changed services (backup first; the others keep their
+  containers, checked); volumes kept unless `--purge` with a typed confirmation. `engine enable|disable` now
+  runs through it. `bin/siwo db engines status|plan|apply` does the same from the `SIWO_DB_ENABLE_*` toggles in
+  the workstation `.env` (no password is sent).
+- Every manager key can be written `SIWO_DB_<KEY>` (environment or config file); the plain key wins.
+- `DB_READONLY_USER=1` makes every `create-db` add `<name>_ro`; `MY_OWNER_PRIVS`, `MY_RW_PRIVS`, `MY_RO_PRIVS`
+  are configurable (global and dangerous privileges refused).
+- `.env-example` (tracked) for the workstation `.env`: engine toggles, master users, privilege settings, SSH
+  tunnel host and local ports, placeholders only. `make env-check` (first step of `make ci`) and the
+  `no-env-files` pre-commit hook fail when a `.env` or credentials file is tracked or staged.
+- `db-tunnel.sh --env-file F` reads `SIWO_DB_SSH_HOST`, `SIWO_DB_PRIVATE_IP` and `SIWO_DB_LOCAL_*` from `.env`.
+- Docs: [Connecting local DB clients](docs/databases/connecting-local-clients.md) (TablePlus, DBeaver,
+  DataGrip/PhpStorm, psql/mysql over `ssh -L`), [Users and privileges](docs/databases/users-and-privileges.md).
+- Tests: `tests/shell/db-users-it.sh` (`make it`): master users, idempotent `create-db`/`create-user`,
+  grants, and MySQL + MariaDB switched off with Postgres answering queries throughout (same container),
+  re-enable with data back, `--purge`.
+
+### Changed (manager 1.6.0)
+
+- `create-db` and `create-user` are idempotent: only what is missing is created; an existing login keeps its
+  password and gets its grants re-applied (no credentials file is written for it). An owner that is a
+  superuser or a master login, or an existing database whose schema `public` belongs to another login, is
+  refused.
+- `.gitignore` regrouped: env files (`.env`, `.env.*`, `*.local`; templates kept), credentials and `--out`
+  files, keys, dumps and backups, the local client folder, logs, dependency and tool caches, Python venvs,
+  OS/IDE files, live-test state.
+
 ### Changed (project renamed: server-infra-workbench)
 
 - The project is now `server-infra-workbench` (was `vps-server-workbench`); it covers far more than one VPS

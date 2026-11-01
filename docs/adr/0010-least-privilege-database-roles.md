@@ -1,6 +1,6 @@
 # 0010. Least-privilege database roles (the 1.4.0 role split)
 
-- Status: Accepted
+- Status: Accepted, extended by [0015](0015-master-users-and-engine-toggles.md) (MySQL/MariaDB master users)
 - Date: 2026-10-31
 
 ## Context

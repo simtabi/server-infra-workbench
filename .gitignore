@@ -1,32 +1,100 @@
-# secrets / runtime state: NEVER commit.
+# .gitignore - nothing secret, client-specific or generated is ever committed.
+# Check a path: git check-ignore -v <path>. CI and the pre-commit hook also fail on a staged .env (make env-check).
+
+# ---- env files and local config: NEVER commit (passwords live only in .env and on the servers) ----
 .env
+.env.*
 *.env
-!*.env.example
+*.env.local
+*.local
 *.conf.local
-*.bak.*
-db-env-backup-*
+# templates stay tracked
+!.env-example
+!.env.example
+!*.example
+!*.env.example
+
+# ---- generated credentials and secrets (create-db/create-user/rotate-password/admin-creds --out FILE, 0600) ----
+*.creds
+*.creds.*
+*-creds.txt
+*.credentials
+*.pass
+*.secret
+*.secrets
+secrets/
+.secrets/
+
+# ---- keys and certificates ----
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+id_ecdsa*
+id_dsa*
+
+# ---- backups, dumps and runtime state ----
 backups/
+db-env-backup-*
+*.bak
+*.bak.*
+*.bak-*
 *.sql
 *.sql.gz
-
-# os / editor / tooling
-.DS_Store
-*.swp
-.idea/
-.vscode/
-.claude/
-__pycache__/
-*.pyc
-.venv/
-*.egg-info/
-src/php/vendor/
-src/php/.phpunit.cache/
-src/php/.phpstan.cache/
-
-# local inventories pulled back from servers (bin/siwo server inventory --pull)
+*.dump
+*.dump.gz
+*.tar.gz.enc
 /inventory/
+# live tests (tests/live, docs/live-tests.md) keep their state outside the repo; ignore any left here
+.live/
+live-state/
+*.tfstate
+*.tfstate.*
 
-# client-specific setups and identifiers stay local (see local/README.md)
+# ---- client-specific setups and identifiers stay local (see local/README.md) ----
 /local/*
 !/local/README.md
 /.client-denylist
+
+# ---- logs ----
+*.log
+logs/
+npm-debug.log*
+
+# ---- dependencies and caches ----
+vendor/
+node_modules/
+src/php/.phpunit.cache/
+.phpunit.cache/
+.phpunit.result.cache
+src/php/.phpstan.cache/
+.phpstan.cache/
+.php-cs-fixer.cache
+.pint.cache
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.cache/
+
+# ---- OS and editors ----
+.DS_Store
+._*
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+.claude/
+*.code-workspace

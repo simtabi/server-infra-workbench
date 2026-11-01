@@ -136,8 +136,9 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `verify` | no | no | health, extensions, logins for each enabled engine |
 | `doctor [--alert]` | no | no | host, exposure, roles and isolation, MySQL hardening, TLS, environments, backups, off-site, restore test, PITR, RAM; `--alert` notifies on problems |
 | `env [engine]` | no | no | prints the `DB_*` lines (contains the password) |
-| `create-db <name> [engine] [--owner U] [--tenants] [--extensions a,b] [--readonly-user] [--out F]` | creates a database + owner user | no | admin-owned database, least-privilege login ([privileges](../reference/privileges.md)), PgBouncer-ready, prints the `DB_*` lines once |
-| `create-user <u> <db> [engine] [--readonly] [--out F]` | creates a user | no | read-write (default) or read-only on one database |
+| `create-db <name> [engine] [--owner U] [--tenants] [--extensions a,b] [--readonly-user] [--out F]` | creates a database + owner user | no | admin-owned database, least-privilege login ([privileges](../reference/privileges.md)), PgBouncer-ready, prints the `DB_*` lines once; idempotent (only what is missing; existing logins keep their password) |
+| `create-user <u> <db> [engine] [--readonly\|--readwrite] [--out F]` | creates a user | no | read-write (default) or read-only on one database; idempotent |
+| `admin-creds <postgres\|mysql\|mariadb> --out F` | no (writes a 600 file) | no | the engine's master login (`DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`) to a new file; never printed ([users](../databases/users-and-privileges.md#master-users)) |
 | `grant <u> <db> [engine] [--readonly\|--readwrite]` | changes grants | no | adds access to another database |
 | `rotate-password <u> [engine] [--out F]` | changes a password | no | new random password, printed once |
 | `list-dbs [engine\|all]` / `list-users [engine\|all]` | no | no | databases with owner and size; login users and the DBs they can reach |
@@ -153,7 +154,9 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `env-apply` | creates databases and roles | no | `<app>_<env>` databases, roles, grants, `pg_hba`; idempotent |
 | `env-list` / `env-sql <env> [engine]` / `env-creds <env> [engine] [--out F]` | no | no | the layout; SQL for a prd host this tool doesn't manage; an env's `DB_*` lines |
 | `purge-trash [--dry-run]` | **drops** soft-dropped databases older than `TRASH_DAYS` | no | also removes dumps of dropped MySQL/MariaDB databases after `DROPPED_DUMP_DAYS` |
-| `engine enable\|disable <engine> [--delete-volume] [--dry-run]` | starts / stops an engine | `Type ENABLE` / `DISABLE` | edits the config, converges, RAM check |
+| `engines [status]` | no | no | per engine: `ENABLE_*` setting, container state, port, data volume |
+| `engines apply [--set ENABLE_<ENGINE>=0\|1]... [--dry-run] [--purge]` | starts / stops engines (backs up first) | `Type APPLY` (or `--yes`); `--purge`: `DELETE-<volume>` | touches only the changed services; the others keep their containers (no restart, no downtime); volumes kept unless `--purge` |
+| `engine enable\|disable <engine> [--delete-volume] [--dry-run]` | starts / stops one engine | `Type APPLY` | same as `engines apply --set ENABLE_<ENGINE>=1\|0` |
 | `role-split [--rollback]` | changes roles | `Type SPLIT` / `ROLLBACK` | the 1.4.0 Postgres role split by hand (`upgrade` does it) |
 | `tls-ca [--out F]` | no | no | prints (or writes) the public CA certificate for `TLS_MODE=verify-full` clients; the key never leaves the server |
 | `monitor-user [--rotate]` | creates a role | no | `vsw_monitor` with `pg_monitor`, connection limit 5, password in `MONITOR_PASSWORD_FILE` (600, never printed); idempotent |
@@ -252,15 +255,29 @@ then install it with `remote-run.sh --config` or `sudo install -m 600 FILE /etc/
 
 ### Engines
 Each engine can be switched off in the config: `ENABLE_POSTGRES`, `ENABLE_PGBOUNCER`,
-`ENABLE_MYSQL`, `ENABLE_MARIADB` (`1`/`0`, all `1` by default). A disabled engine gets
-no container, published port, firewall rule, backup or check. PgBouncer needs
-Postgres. Turning an engine off later and running `install` removes its container
-(`--remove-orphans`) but keeps its volume until `uninstall --purge`.
+`ENABLE_MYSQL`, `ENABLE_MARIADB`, `ENABLE_ADMINER` (`1`/`0`; all but Adminer `1` by default). A disabled engine
+gets no container, published port, firewall rule, backup or check. PgBouncer needs Postgres.
+
+On a running server change them with `engines apply` (1.6.0+), not by editing the file and re-running
+`install`: it backs up, stops and removes only the engines turned off, starts and converges only the ones
+turned on, writes the setting to the config file, and checks that the other containers are the same ones, so
+Postgres keeps serving while MySQL and MariaDB go away. Volumes are kept (turning an engine back on brings
+its data back) until `engines apply --purge`. From the workstation, `bin/siwo db engines` applies the
+`SIWO_DB_ENABLE_*` toggles in `.env`. Details: [Users and privileges](../databases/users-and-privileges.md#turning-engines-on-and-off).
+
+```bash
+sudo /root/docker-db-server-manager.sh engines
+sudo /root/docker-db-server-manager.sh engines apply --set ENABLE_MYSQL=0 --set ENABLE_MARIADB=0 --dry-run
+sudo /root/docker-db-server-manager.sh engines apply --set ENABLE_MYSQL=0 --set ENABLE_MARIADB=0
+```
 
 ### `create-db <name> [engine]`
 Creates database `<name>` owned by a new user `<name>` with a random password, on one engine
 (default: the first enabled of postgres, mysql, mariadb). Names: `a-z 0-9 _`, max 63 (Postgres) or 32
-(MySQL/MariaDB). An existing user is refused, so re-running is safe.
+(MySQL/MariaDB). Idempotent (1.6.0+): only the missing database, owner or read-only login is created; an
+existing login keeps its password and gets its grants re-applied, and no credentials are written for it. An
+owner that is a superuser or a master login is refused. How it fits together:
+[Users and privileges](../databases/users-and-privileges.md).
 
 - **Isolation:** the database is owned by `PG_ADMIN_USER` (so the app can't drop it) and `PUBLIC` loses
   `CONNECT`, so app users can't open each other's databases. The owner login gets DDL in schema `public` and
@@ -317,9 +334,16 @@ sudo /root/docker-db-server-manager.sh purge-trash --dry-run
 ```
 
 ### `engine enable|disable <engine>`
-Turns `postgres`, `pgbouncer`, `mysql`, `mariadb` or `adminer` on or off: prints a plan (`--dry-run` stops
-there), checks RAM, edits the config key, starts or removes the container and converges. `disable` backs up first and keeps the
-volume unless `--delete-volume` (a second typed confirmation).
+Turns `postgres`, `pgbouncer`, `mysql`, `mariadb` or `adminer` on or off; the same as
+`engines apply --set ENABLE_<ENGINE>=1|0` (see [Engines](#engines)): a plan (`--dry-run` stops there), a backup
+before a data engine stops, only that container touched, the volume kept unless `--delete-volume` (a second
+typed confirmation).
+
+### `admin-creds <engine> --out FILE`
+Writes the master login of `postgres` (`PG_ADMIN_USER`, direct port: PgBouncer refuses superusers), `mysql` or
+`mariadb` (`MYSQL_ADMIN_USER` / `MARIADB_ADMIN_USER`) to a new 600 file; it refuses to overwrite a file and
+never prints the password. See [Users and privileges](../databases/users-and-privileges.md#master-users) and
+[Connecting local DB clients](../databases/connecting-local-clients.md).
 
 ### `role-split [--rollback]`
 The 1.4.0 Postgres role split by hand: backs up, ends `PG_USER`'s sessions for a few seconds, moves its objects

@@ -72,11 +72,17 @@ set -euo pipefail
 trap 'echo "!! ERROR: line $LINENO: \"$BASH_COMMAND\" failed" >&2' ERR
 
 TOOL_NAME="Docker DB Server Setup Manager"
-VERSION="1.5.0"
+VERSION="1.6.0"
 
 # ---- configuration ------------------------------------------------------------
 # A config file is KEY=VALUE lines. It only fills in variables the environment
 # has not already set, so `sudo PRIVATE_IP=... ./script reset` always wins.
+# SIWO_DB_<KEY> (the naming of the workbench .env, see .env-example) is the same setting as <KEY>,
+# in the environment and in the file; <KEY> wins when both are set.
+for _v in $(compgen -e); do
+  case "$_v" in SIWO_DB_?*) _k="${_v#SIWO_DB_}"
+    [[ "$_k" =~ ^[A-Z][A-Z0-9_]*$ ]] && [ -z "${!_k+x}" ] && export "$_k=${!_v}" ;; esac
+done; unset _v _k
 DBM_CONFIG="${DBM_CONFIG:-/etc/docker-db-server-manager.conf}"
 for ((i = 1; i <= $#; i++)); do
   if [ "${!i}" = "--config" ]; then j=$((i + 1)); DBM_CONFIG="${!j:-}"; DBM_CONFIG_EXPLICIT=1; fi
@@ -85,7 +91,8 @@ if [ -f "$DBM_CONFIG" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%%#*}"; line="${line%"${line##*[![:space:]]}"}"
     [[ "$line" =~ ^[A-Z_][A-Z0-9_]*= ]] || continue
-    k="${line%%=*}"; v="${line#*=}"; v="${v%\"}"; v="${v#\"}"
+    k="${line%%=*}"; k="${k#SIWO_DB_}"; v="${line#*=}"; v="${v%\"}"; v="${v#\"}"
+    [ -n "$k" ] || continue
     [ -z "${!k+x}" ] && printf -v "$k" '%s' "$v" && export "${k?}"
   done < "$DBM_CONFIG"
 elif [ -n "${DBM_CONFIG_EXPLICIT:-}" ]; then
@@ -138,6 +145,15 @@ PG_APP_CREATEDB="${PG_APP_CREATEDB:-1}"
 PGBOUNCER_AUTH_USER="${PGBOUNCER_AUTH_USER:-pgbouncer_auth}"
 PGBOUNCER_ADMIN_USER="${PGBOUNCER_ADMIN_USER:-pgbouncer_admin}"
 PGBOUNCER_POOL_MODE="${PGBOUNCER_POOL_MODE:-session}"
+# ---- master (admin) users and app privileges (1.6.0, docs/databases/users-and-privileges.md) ----
+# Named MySQL/MariaDB admin for tunnels and DB clients (root stays socket/127.0.0.1/compose-net only).
+# Its password is generated into $DB_DIR/.env (MYSQL_ADMIN_PASSWORD / MARIADB_ADMIN_PASSWORD), never printed.
+MYSQL_ADMIN_USER="${MYSQL_ADMIN_USER:-siwo_admin}"       # none = no named admin
+MARIADB_ADMIN_USER="${MARIADB_ADMIN_USER:-siwo_admin}"   # none = no named admin
+MY_ADMIN_HOSTS="${MY_ADMIN_HOSTS:-}"                     # CIDRs the admin may log in from; empty = DOCKER_SUBNET + VPC_CIDR
+MY_ADMIN_PRIVS="${MY_ADMIN_PRIVS:-ALL PRIVILEGES}"       # on *.*
+MY_ADMIN_GRANT_OPTION="${MY_ADMIN_GRANT_OPTION:-1}"      # 1 = WITH GRANT OPTION (the admin can create app users)
+DB_READONLY_USER="${DB_READONLY_USER:-0}"                # 1 = create-db also makes <owner>_ro (like --readonly-user)
 DOCKER_NETWORK="${DOCKER_NETWORK:-vsw_db}"          # compose network with a fixed subnet
 DOCKER_SUBNET="${DOCKER_SUBNET:-172.30.88.0/24}"    # pg_hba + MySQL root host use it
 TLS_MODE="${TLS_MODE:-off}"                         # off | require | verify-full (self-signed CA made on the server; verify-full: clients check the CA + host)
@@ -248,7 +264,12 @@ Setup and updates
                               -> apply (incl. role split, root@'%' removal) -> verify + doctor -> auto-rollback
   install                     first-time setup (keeps an existing .env and data)
   reset [--force-prod]        DESTRUCTIVE: new passwords, empty databases (type RESET; --force-prod with a protected env)
+  engines [status]             per engine: ENABLE_* setting, container state, port, data volume (read-only)
+  engines apply [--set ENABLE_<ENGINE>=0|1]... [--dry-run] [--purge]
+                              start/stop engines to match ENABLE_*: only the changed services are touched
+                              (no restart of the others); volumes kept unless --purge (typed confirmation)
   engine enable|disable <postgres|pgbouncer|mysql|mariadb|adminer> [--delete-volume] [--dry-run]
+                              one engine; same as engines apply --set ENABLE_<ENGINE>=1|0
   role-split [--rollback]     the 1.4.0 Postgres role split by hand (upgrade does it for you)
 
 Environments (APP set; docs/database-environments.md)
@@ -258,9 +279,11 @@ Environments (APP set; docs/database-environments.md)
 
 Databases and users (privilege model: docs/reference/privileges.md)
   create-db <name> [engine] [--owner U] [--readonly-user] [--tenants] [--extensions a,b] [--out F]
+                              idempotent: re-run re-applies grants; existing logins keep their password
   create-user <user> <db> [engine] [--readonly|--readwrite] [--out F]
   grant <user> <db> [engine] [--readonly|--readwrite]
   rotate-password <user> [engine] [--out F]
+  admin-creds <postgres|mysql|mariadb> --out F   the master (admin) login, to a 600 file only (never printed)
   drop-db <name> [engine] [--force-prod] | drop-user <user> [engine] [--force-prod]
   list-dbs [engine|all] | list-users [engine|all]
 
@@ -316,6 +339,7 @@ need_stack() {
   [ -f stack.env ] || write_stack_env   # stacks installed before stack.env existed
 }
 dc() { (cd "$DB_DIR" && docker compose --env-file .env --env-file stack.env "$@"); }   # works from any cwd
+# shellcheck source=/dev/null  # the server .env (never a repo file)
 load_env() { set -a; . "$DB_DIR/.env"; set +a; }
 
 detect_ip() {
@@ -349,25 +373,36 @@ ensure_docker() {
   docker compose version
 }
 
+# secret_new KEY: the value for a new secret. A password given in the config file or the environment
+# (e.g. SIWO_DB_PG_ADMIN_PASSWORD in the workbench .env) is used once, when the key is first written;
+# empty (the default and the recommendation) = a fresh random one. Never printed either way.
+secret_new() {
+  local v="${!1:-}"
+  if [ -z "$v" ]; then openssl rand -hex 24; return 0; fi
+  [[ "$v" =~ ^[A-Za-z0-9._-]{16,128}$ ]] \
+    || die "$1 from the config/environment must be 16-128 characters of A-Z a-z 0-9 . _ - (leave it empty to generate one)"
+  printf '%s\n' "$v"
+}
 new_env() {
+  local k; for k in PG_PASSWORD MYSQL_ROOT_PASSWORD MARIADB_ROOT_PASSWORD $ENV_KEYS; do secret_new "$k" >/dev/null; done   # a bad seed dies here, before any write
   (umask 077; cat > "$DB_DIR/.env" <<EOF
 PRIVATE_IP=$PRIVATE_IP
-PG_PASSWORD=$(openssl rand -hex 24)
-MYSQL_ROOT_PASSWORD=$(openssl rand -hex 24)
-MARIADB_ROOT_PASSWORD=$(openssl rand -hex 24)
+PG_PASSWORD=$(secret_new PG_PASSWORD)
+MYSQL_ROOT_PASSWORD=$(secret_new MYSQL_ROOT_PASSWORD)
+MARIADB_ROOT_PASSWORD=$(secret_new MARIADB_ROOT_PASSWORD)
 EOF
   )
   chmod 600 "$DB_DIR/.env"
   ensure_env_keys
 }
 
-# Secrets added in 1.4.0 are appended to an existing .env (never rotated, never printed).
-ENV_KEYS="PG_ADMIN_PASSWORD PGBOUNCER_AUTH_PASSWORD PGBOUNCER_ADMIN_PASSWORD"
+# Secrets added since 1.4.0 are appended to an existing .env (never rotated, never printed).
+ENV_KEYS="PG_ADMIN_PASSWORD PGBOUNCER_AUTH_PASSWORD PGBOUNCER_ADMIN_PASSWORD MYSQL_ADMIN_PASSWORD MARIADB_ADMIN_PASSWORD"
 ensure_env_keys() { # [file]
-  local f="${1:-$DB_DIR/.env}" k added=""
+  local f="${1:-$DB_DIR/.env}" k v added=""
   [ -f "$f" ] || return 0
   for k in $ENV_KEYS; do
-    grep -q "^$k=" "$f" || { (umask 077; printf '%s=%s\n' "$k" "$(openssl rand -hex 24)" >> "$f"); added="$added $k"; }
+    grep -q "^$k=" "$f" || { v="$(secret_new "$k")" || exit 1; (umask 077; printf '%s=%s\n' "$k" "$v" >> "$f"); added="$added $k"; }
   done
   chmod 600 "$f"
   [ -z "$added" ] || echo "added to $(basename "$f"):$added (generated, not shown)"
@@ -1122,8 +1157,37 @@ my_converge() { # engine
   if [ "$e" = mariadb ] && [ "$MARIADB_ED25519" = 1 ]; then
     printf "INSTALL SONAME 'auth_ed25519';\n" | my_q "$e" 2>/dev/null || true
   fi
+  my_admin_converge "$e"
   echo "$e: root on localhost, 127.0.0.1, $net only; local_infile=0$([ "$e" = mariadb ] && echo ', secure_file_priv set')$(tls_on && echo ', TLS required')"
   [ -z "$APP" ] || env_apply_engine "$e"
+}
+# The named MySQL/MariaDB admin (MYSQL_ADMIN_USER / MARIADB_ADMIN_USER): the login for DB clients over a
+# tunnel and for admin work; root stays inside the server. Password from $DB_DIR/.env (generated).
+my_admin_user() { if [ "$1" = mysql ]; then echo "$MYSQL_ADMIN_USER"; else echo "$MARIADB_ADMIN_USER"; fi; }
+my_admin_pwkey() { if [ "$1" = mysql ]; then echo MYSQL_ADMIN_PASSWORD; else echo MARIADB_ADMIN_PASSWORD; fi; }
+my_admin_hosts() { # MySQL host parts the admin may log in from
+  local c h out=""; for c in ${MY_ADMIN_HOSTS:-$DOCKER_SUBNET $VPC_CIDR}; do for h in ${c//,/ }; do out="$out $(my_host_of "$h")"; done; done
+  echo "${out# }"
+}
+my_admin_sql() { # engine user password -> idempotent CREATE + ALTER (password = .env) + GRANT on every admin host
+  local h go=""; [ "$MY_ADMIN_GRANT_OPTION" = 1 ] && go=" WITH GRANT OPTION"
+  for h in $(my_admin_hosts); do
+    printf "CREATE USER IF NOT EXISTS '%s'@'%s' IDENTIFIED BY %s;\n" "$2" "$h" "$(sql_lit "$3")"
+    printf "ALTER USER '%s'@'%s' IDENTIFIED BY %s;\n" "$2" "$h" "$(sql_lit "$3")"
+    printf "GRANT %s ON *.* TO '%s'@'%s'%s;\n" "$MY_ADMIN_PRIVS" "$2" "$h" "$go"
+  done
+}
+my_admin_converge() { # engine
+  local e="$1" u k pw h keep; u="$(my_admin_user "$e")"; [ "$u" = none ] && return 0
+  k="$(my_admin_pwkey "$e")"; pw="${!k:-}"
+  [ -n "$pw" ] || { ensure_env_keys >/dev/null; load_env; pw="${!k:-}"; }
+  [ -n "$pw" ] || { warn "$k missing from $DB_DIR/.env; $e admin $u not created"; return 0; }
+  my_admin_sql "$e" "$u" "$pw" | my_q "$e"
+  keep=" $(my_admin_hosts) "
+  for h in $(printf "select host from mysql.user where user='%s';\n" "$u" | my_q "$e"); do
+    case "$keep" in *" $h "*) ;; *) printf "DROP USER '%s'@'%s';\n" "$u" "$h" | my_q "$e"; echo "$e: removed $u@'$h' (not in MY_ADMIN_HOSTS)" ;; esac
+  done
+  echo "$e: admin $u from $(my_admin_hosts) ($MY_ADMIN_PRIVS$([ "$MY_ADMIN_GRANT_OPTION" = 1 ] && echo ', grant option'); password in $DB_DIR/.env $k)"
 }
 converge() { pg_converge; my_converge mysql; my_converge mariadb; pgbouncer_reload; }
 
@@ -1517,7 +1581,7 @@ valid_ident() { # name, what
 }
 valid_exts() { local x; for x in $1; do [[ "$x" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "bad extension name: $x"; done; }
 protected_db() { case "$1" in postgres|template0|template1|mysql|sys|information_schema|performance_schema|"$PG_DB") return 0 ;; esac; return 1; }
-protected_user() { case "$1" in postgres|root|mysql|mariadb.sys|mysql.sys|mysql.session|mysql.infoschema|healthcheck|vsw_migrate|"$PG_USER"|"$PG_ADMIN_USER"|"$PGBOUNCER_AUTH_USER"|"$PGBOUNCER_ADMIN_USER"|"${MONITOR_USER:-$PG_USER}") return 0 ;; esac; return 1; }
+protected_user() { case "$1" in postgres|root|mysql|mariadb.sys|mysql.sys|mysql.session|mysql.infoschema|healthcheck|vsw_migrate|"$PG_USER"|"$PG_ADMIN_USER"|"$PGBOUNCER_AUTH_USER"|"$PGBOUNCER_ADMIN_USER"|"${MONITOR_USER:-$PG_USER}"|"$MYSQL_ADMIN_USER"|"$MARIADB_ADMIN_USER") return 0 ;; esac; return 1; }
 new_password() { openssl rand -hex 24; }
 my_db_pat() { printf '%s' "${1//_/\\_}"; }   # GRANT treats _ and % as wildcards: escape _
 
@@ -1594,9 +1658,16 @@ pg_role_sql() { # user password createdb(0/1) -> CREATE or ALTER a least-privile
 # MySQL/MariaDB grants: only on `db`.* (and `db\_%`.* with tenants). No global privileges,
 # no GRANT OPTION, FILE, SUPER or PROCESS. DROP on db.* also allows DROP DATABASE of that
 # one database (MySQL cannot split the two); see privileges.md.
-MY_OWNER_PRIVS="SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES, CREATE VIEW, SHOW VIEW, TRIGGER, CREATE ROUTINE, ALTER ROUTINE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES, EVENT"
-MY_RW_PRIVS="SELECT, INSERT, UPDATE, DELETE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES, SHOW VIEW"
-MY_RO_PRIVS="SELECT, SHOW VIEW"
+MY_OWNER_PRIVS="${MY_OWNER_PRIVS:-SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES, CREATE VIEW, SHOW VIEW, TRIGGER, CREATE ROUTINE, ALTER ROUTINE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES, EVENT}"
+MY_RW_PRIVS="${MY_RW_PRIVS:-SELECT, INSERT, UPDATE, DELETE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES, SHOW VIEW}"
+MY_RO_PRIVS="${MY_RO_PRIVS:-SELECT, SHOW VIEW}"
+my_privs_ok() { # privilege list: database-level only, never ALL, GRANT OPTION or a global/admin privilege
+  local p u; u="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+  [[ "$u" =~ ^[A-Z][A-Z\ ,]*$ ]] || return 1
+  for p in ALL GRANT FILE SUPER PROCESS SHUTDOWN RELOAD REPLICATION "CREATE USER" "CREATE TABLESPACE" "SHOW DATABASES"; do
+    case ",$u," in *"$p"*) return 1 ;; esac
+  done; return 0
+}
 my_grant_sql() { # user db mode(owner|rw|ro) [tenant-pattern-db] [host]
   local privs h="${5:-$MY_APP_HOST}"
   case "$3" in owner) privs="$MY_OWNER_PRIVS" ;; rw) privs="$MY_RW_PRIVS" ;; *) privs="$MY_RO_PRIVS" ;; esac
@@ -1638,24 +1709,34 @@ cmd_list_users() { # [engine|all]
 }
 
 # create-db <name> [engine] [--owner U] [--readonly-user] [--tenants] [--extensions a,b] [--out FILE]
-# Every database gets its default app user (same name unless --owner), always.
+# Every database gets its own owner login (same name unless --owner), never a superuser.
+# Idempotent: re-running creates only what is missing and re-applies the grants. An existing
+# login keeps its password (rotate-password gives a new one); only new passwords are shown.
 cmd_create_db() {
   parse_user_args "$@"
   local name="${U_POS[0]:-}"; [ -n "$name" ] || die "usage: create-db <name> [engine] [--owner USER] [--readonly-user] [--tenants] [--extensions citext,hstore] [--out FILE]"
   local owner="${U_OWNER:-$name}" ro_user=$U_ROUSER tenants=$U_TENANTS
+  [ "$DB_READONLY_USER" = 1 ] && ro_user=1
   valid_ident "$name" database; valid_ident "$owner" user; valid_exts "$U_EXT"
   protected_db "$name" && die "$name is reserved"
   protected_user "$owner" && die "$owner is reserved"
   [ -z "$U_EXT" ] || [ "$U_ENGINE" = postgres ] || die "--extensions is for postgres only"
   need_root; need_stack; load_env
-  local pw x; pw="$(new_password)"
+  local pw="" x db_new=1 user_new=1 sowner
   case "$U_ENGINE" in
     postgres)
-      [ -z "$(pg_val postgres "select 1 from pg_database where datname='$name'")" ] || die "database $name already exists in postgres"
-      pg_role_exists "$owner" && die "role $owner already exists in postgres (pick --owner)"
+      [ -z "$(pg_val postgres "select 1 from pg_database where datname='$name'")" ] || db_new=0
+      if pg_role_exists "$owner"; then user_new=0; pg_refuse_super "$owner"; else pw="$(new_password)"; fi
+      if [ "$db_new" = 0 ]; then # never take over a database another app owns
+        sowner="$(pg_val "$name" "select pg_get_userbyid(nspowner) from pg_namespace where nspname='public'")"
+        case "$sowner" in "$owner"|"$(pg_su)"|pg_database_owner|postgres) ;;
+          *) die "database $name exists and its schema belongs to $sowner, not $owner (use --owner $sowner)" ;; esac
+      fi
       pg_role_sql "$owner" "$pw" "$tenants" | pg_q
-      { printf 'CREATE DATABASE "%s" OWNER "%s";\n' "$name" "$(pg_su)"
-        printf 'REVOKE ALL ON DATABASE "%s" FROM PUBLIC;\n' "$name"; } | pg_q
+      if [ "$db_new" = 1 ]; then
+        { printf 'CREATE DATABASE "%s" OWNER "%s";\n' "$name" "$(pg_su)"
+          printf 'REVOKE ALL ON DATABASE "%s" FROM PUBLIC;\n' "$name"; } | pg_q
+      fi
       pg_grant_sql "$owner" "$name" owner | pg_q "$name"
       # template1 already gave it PG_EXTENSIONS; --extensions adds more (needs superuser, so done here)
       if [ -n "$U_EXT" ]; then
@@ -1664,40 +1745,70 @@ cmd_create_db() {
       echo "# extensions in $name: $(pg_val "$name" "select string_agg(extname, ' ' order by extname) from pg_extension")"
       pgbouncer_reload ;;
     mysql|mariadb)
-      my_user_exists "$owner" "$U_ENGINE" && die "user $owner already exists in $U_ENGINE (pick --owner)"
-      { printf 'CREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n' "$name"
-        my_user_sql "$owner" "$pw"
+      [ "$(printf "select count(*) from information_schema.schemata where schema_name='%s';\n" "$name" | my_q "$U_ENGINE")" = 0 ] || db_new=0
+      if my_user_exists "$owner" "$U_ENGINE"; then user_new=0; else pw="$(new_password)"; fi
+      { printf 'CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n' "$name"
+        [ "$user_new" = 0 ] || my_user_sql "$owner" "$pw"
         my_grant_sql "$owner" "$name" owner "$([ "$tenants" = 1 ] && echo "$name")"; } | my_q "$U_ENGINE" ;;
   esac
   local out="$U_OUT"
-  echo "# database $name ($U_ENGINE): default app user $owner$([ "$tenants" = 1 ] && echo ", may create tenant DBs (${name}_*)")"
-  print_creds "$U_ENGINE" "$name" "$owner" "$pw"
+  echo "# database $name ($U_ENGINE): $([ "$db_new" = 1 ] && echo created || echo 'already existed'); owner $owner$([ "$tenants" = 1 ] && echo ", may create tenant DBs (${name}_*)")"
+  if [ "$user_new" = 1 ]; then print_creds "$U_ENGINE" "$name" "$owner" "$pw"
+  else echo "# $owner already existed: grants re-applied, password unchanged (new one: rotate-password $owner $U_ENGINE --out FILE)"; fi
   if [ "$ro_user" = 1 ]; then
     [ -z "$out" ] || U_OUT="$out.readonly"
     cmd_create_user "${owner}_ro" "$name" "$U_ENGINE" --readonly ${U_OUT:+--out "$U_OUT"}
   fi
 }
+pg_refuse_super() { # role: an existing role used as an app login must not be a superuser (we would not demote it silently)
+  [ "$(pg_val postgres "select rolsuper::int from pg_roles where rolname='$1'")" = 0 ] \
+    || die "role $1 is a superuser; refusing to use it as an app login (pick another name)"
+}
 
-cmd_create_user() { # <user> <db> [engine] [--readonly|--readwrite] [--out FILE]
+cmd_create_user() { # <user> <db> [engine] [--readonly|--readwrite] [--out FILE]   (idempotent: existing users keep their password)
   parse_user_args "$@"
   local u="${U_POS[0]:-}" d="${U_POS[1]:-}" mode
   [ -n "$u" ] && [ -n "$d" ] || die "usage: create-user <user> <db> [engine] [--readonly|--readwrite] [--out FILE]"
   valid_ident "$u" user; valid_ident "$d" database; protected_user "$u" && die "$u is reserved"
   mode="$([ "$U_RO" = 1 ] && echo ro || echo rw)"
   need_root; need_stack; load_env
-  local pw; pw="$(new_password)"
+  local pw="" new=1
   case "$U_ENGINE" in
     postgres)
-      pg_role_exists "$u" && die "role $u already exists"
+      if pg_role_exists "$u"; then new=0; pg_refuse_super "$u"; else pw="$(new_password)"; fi
       pg_role_sql "$u" "$pw" 0 | pg_q
       pg_grant_sql "$u" "$d" "$mode" | pg_q "$d"
       pgbouncer_reload ;;
     mysql|mariadb)
-      my_user_exists "$u" "$U_ENGINE" && die "user $u already exists in $U_ENGINE"
-      { my_user_sql "$u" "$pw"; my_grant_sql "$u" "$d" "$mode"; } | my_q "$U_ENGINE" ;;
+      my_user_exists "$u" "$U_ENGINE" && new=0
+      [ "$new" = 0 ] || pw="$(new_password)"
+      { [ "$new" = 0 ] || my_user_sql "$u" "$pw"; my_grant_sql "$u" "$d" "$mode"; } | my_q "$U_ENGINE" ;;
   esac
   echo "# user $u on $d ($U_ENGINE): $([ "$U_RO" = 1 ] && echo read-only || echo 'read-write rows (no DDL)')"
-  print_creds "$U_ENGINE" "$d" "$u" "$pw"
+  if [ "$new" = 1 ]; then print_creds "$U_ENGINE" "$d" "$u" "$pw"
+  else echo "# $u already existed: grants re-applied, password unchanged (new one: rotate-password $u $U_ENGINE --out FILE)"; fi
+}
+
+# admin-creds <engine> --out FILE: the engine's master login (Postgres PG_ADMIN_USER, MySQL/MariaDB
+# *_ADMIN_USER) for a DB client over an SSH tunnel. Written to a 600 file only, never to the terminal.
+cmd_admin_creds() {
+  parse_user_args "$@"
+  [ -n "$U_OUT" ] || die "usage: admin-creds <postgres|mysql|mariadb> --out FILE (written 600; the password is never printed)"
+  need_root; need_stack; load_env
+  local u k port conn="$U_ENGINE"
+  case "$U_ENGINE" in
+    postgres) u="$PG_ADMIN_USER" k=PG_ADMIN_PASSWORD port="$PG_PORT" conn=pgsql ;;
+    mysql|mariadb) u="$(my_admin_user "$U_ENGINE")"; k="$(my_admin_pwkey "$U_ENGINE")"
+      [ "$u" != none ] || die "$U_ENGINE has no named admin (*_ADMIN_USER=none); root is server-local only"
+      port="$([ "$U_ENGINE" = mysql ] && echo "$MYSQL_PORT" || echo "$MARIADB_PORT")"
+      [ -n "${!k:-}" ] || die "$k is not in $DB_DIR/.env yet: run upgrade (or engines apply) first" ;;
+  esac
+  [ -e "$U_OUT" ] && die "refusing to overwrite $U_OUT"
+  (umask 077; printf 'DB_CONNECTION=%s\nDB_HOST=%s\nDB_PORT=%s\nDB_USERNAME=%s\nDB_PASSWORD=%s\n# master login: SSH tunnel only (docs/databases/connecting-local-clients.md). Delete this file when done: shred -u FILE\n' \
+    "$conn" "$PRIVATE_IP" "$port" "$u" "${!k}" > "$U_OUT"); chmod 600 "$U_OUT"
+  [ -z "${SUDO_USER:-}" ] || chown "$SUDO_USER" "$U_OUT" 2>/dev/null || true
+  echo "# $U_ENGINE master login ($u) written to $U_OUT (600, not shown). Copy it with scp, then: shred -u $U_OUT"
+  [ "$U_ENGINE" != postgres ] || ! on "$ENABLE_PGBOUNCER" || echo "# Postgres admin: connect to $PG_PORT directly (PgBouncer $PGBOUNCER_PORT refuses superusers)"
 }
 
 cmd_grant() { # <user> <db> [engine] [--readonly|--readwrite]
@@ -1868,6 +1979,18 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
   [ "$OFFSITE" = none ] || [ -n "$OFFSITE_BUCKET" ] || err "OFFSITE=s3 needs OFFSITE_BUCKET"
   case "$PGBOUNCER_POOL_MODE" in session|transaction) ;; *) err "PGBOUNCER_POOL_MODE must be session or transaction" ;; esac
   case "$PG_APP_CREATEDB" in 0|1) ;; *) err "PG_APP_CREATEDB must be 0 or 1" ;; esac
+  for v in DB_READONLY_USER MY_ADMIN_GRANT_OPTION; do case "${!v}" in 0|1) ;; *) err "$v must be 0 or 1" ;; esac; done
+  for v in MYSQL_ADMIN_USER MARIADB_ADMIN_USER; do
+    [ "${!v}" = none ] || { [[ "${!v}" =~ ^[a-z_][a-z0-9_]{0,31}$ ]] && [ "${!v}" != root ]; } || err "$v '${!v}' must match [a-z_][a-z0-9_]* (max 32), not root (none = no named admin)"
+  done
+  for v in ${MY_ADMIN_HOSTS//,/ }; do
+    valid_cidr "$v" || valid_ipv4 "$v" || err "MY_ADMIN_HOSTS entry '$v' is not an IPv4 address or CIDR"
+    case "$v" in 0.0.0.0*|*/0) err "MY_ADMIN_HOSTS must not contain $v (any host)" ;; esac
+  done
+  [[ "$MY_ADMIN_PRIVS" =~ ^[A-Z][A-Z\ ,_]*$ ]] || err "MY_ADMIN_PRIVS '$MY_ADMIN_PRIVS' is not a privilege list"
+  for v in MY_OWNER_PRIVS MY_RW_PRIVS MY_RO_PRIVS; do
+    my_privs_ok "${!v}" || err "$v must list database-level privileges only (no ALL, GRANT OPTION, FILE, SUPER, PROCESS, RELOAD, SHUTDOWN, REPLICATION, CREATE USER)"
+  done
   valid_cidr "$DOCKER_SUBNET" || err "DOCKER_SUBNET '$DOCKER_SUBNET' is not a CIDR"
   for v in PG_ADMIN_USER PGBOUNCER_AUTH_USER PGBOUNCER_ADMIN_USER; do [[ "${!v}" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || err "$v '${!v}' is not a valid role name"; done
   [ "$PG_ADMIN_USER" != "$PG_USER" ] || err "PG_ADMIN_USER must differ from PG_USER"
@@ -2967,7 +3090,16 @@ doctor_mysql() { # engine
   [ "$x" = 0 ] && d_ok "no root@'%'" || d_bad "root@'%' exists (upgrade removes it)"
   x="$(printf "select @@local_infile;\n" | my_q "$e")"; [ "$x" = 0 ] && d_ok "local_infile=0" || d_bad "local_infile is on"
   if [ "$e" = mariadb ]; then x="$(printf "select @@secure_file_priv;\n" | my_q "$e")"; [ -n "$x" ] && [ "$x" != NULL ] && d_ok "secure_file_priv=$x" || d_bad "secure_file_priv is empty (any directory)"; fi
-  x="$(printf "select group_concat(concat(user,'@',host)) from mysql.user where user not in ('root','mysql.sys','mysql.session','mysql.infoschema','mariadb.sys','healthcheck','') and (Super_priv='Y' or File_priv='Y' or Process_priv='Y' or Grant_priv='Y' or Select_priv='Y' or Insert_priv='Y' or Drop_priv='Y' or Create_user_priv='Y' or Shutdown_priv='Y');\n" | my_q "$e")"
+  # the master login (MYSQL_/MARIADB_ADMIN_USER) is the one expected holder of global privileges, on MY_ADMIN_HOSTS only
+  local au ah="" h mx=""; au="$(my_admin_user "$e")"
+  if [ "$au" != none ]; then
+    for h in $(my_admin_hosts); do ah="$ah${ah:+,}'$h'"; done
+    mx=" and not (user='$au' and host in ($ah))"
+    x="$(printf "select group_concat(host order by host) from mysql.user where user='%s';\n" "$au" | my_q "$e")"
+    if [ -z "$x" ] || [ "$x" = NULL ]; then d_bad "master $au missing (install or upgrade creates it)"
+    else d_ok "master $au from: $x"; fi
+  fi
+  x="$(printf "select group_concat(concat(user,'@',host)) from mysql.user where user not in ('root','mysql.sys','mysql.session','mysql.infoschema','mariadb.sys','healthcheck','') and (Super_priv='Y' or File_priv='Y' or Process_priv='Y' or Grant_priv='Y' or Select_priv='Y' or Insert_priv='Y' or Drop_priv='Y' or Create_user_priv='Y' or Shutdown_priv='Y')%s;\n" "$mx" | my_q "$e")"
   [ -z "$x" ] || [ "$x" = NULL ] && d_ok "no app user has global privileges or GRANT OPTION" || d_bad "users with global privileges: $x"
   x="$(printf "select group_concat(distinct concat(user,'@',host)) from mysql.db where Grant_priv='Y' and user not in ('root','mysql.sys','mariadb.sys');\n" | my_q "$e")"
   [ -z "$x" ] || [ "$x" = NULL ] && d_ok "no database-level GRANT OPTION" || d_bad "database-level GRANT OPTION: $x"
@@ -3262,45 +3394,130 @@ set_conf_key() { # key value: edit the manager config file in place (600, backup
   local f="$DBM_CONFIG"; [ -f "$f" ] || die "no config file $f (init > $f first)"
   cp -p "$f" "$f.bak-$(date +%Y%m%d-%H%M%S)"
   local t; t="$(mktemp "$f.XXXX")"; chmod 600 "$t"
-  grep -v "^$1=" "$f" > "$t" || true; printf '%s=%s\n' "$1" "$2" >> "$t"; mv "$t" "$f"
+  grep -vE "^(SIWO_DB_)?$1=" "$f" > "$t" || true; printf '%s=%s\n' "$1" "$2" >> "$t"; mv "$t" "$f"
 }
-cmd_engine() { # enable|disable <engine> [--delete-volume] [--dry-run]
+# engines status | apply: switch engines on/off without downtime for the others. Removal stops and
+# removes only that container (by id; the compose file is regenerated afterwards); additions start only
+# that service (--no-deps). The containers left alone are checked to be the same ones afterwards.
+ENGINE_SVCS="postgres pgbouncer mysql mariadb adminer"
+engine_var() { case "$1" in postgres) echo ENABLE_POSTGRES ;; pgbouncer) echo ENABLE_PGBOUNCER ;; mysql) echo ENABLE_MYSQL ;; mariadb) echo ENABLE_MARIADB ;; adminer) echo ENABLE_ADMINER ;; esac; }
+engine_volume() { case "$1" in postgres) echo "$(basename "$DB_DIR")_pg_data" ;; mysql) echo "$(basename "$DB_DIR")_mysql_data" ;; mariadb) echo "$(basename "$DB_DIR")_mariadb_data" ;; esac; }
+engine_svc_port() { case "$1" in postgres) echo "$PG_PORT" ;; pgbouncer) echo "$PGBOUNCER_PORT" ;; mysql) echo "$MYSQL_PORT" ;; mariadb) echo "$MARIADB_PORT" ;; adminer) echo "127.0.0.1:$ADMINER_PORT" ;; esac; }
+svc_cid() { docker ps -aq --no-trunc --filter "label=com.docker.compose.project=$(basename "$DB_DIR")" --filter "label=com.docker.compose.service=$1" 2>/dev/null | head -n1; }
+svc_state() { local c; c="$(svc_cid "$1")"; [ -n "$c" ] || { echo absent; return 0; }
+  docker inspect -f '{{.State.Status}}{{if .State.Health}}/{{.State.Health.Status}}{{end}}' "$c" 2>/dev/null || echo unknown; }
+svc_running() { case "$(svc_state "$1")" in running*) return 0 ;; esac; return 1; }
+engines_status() {
+  local s v vol vs
+  printf '%-10s %-7s %-20s %-16s %s\n' ENGINE CONFIG CONTAINER PORT "DATA VOLUME"
+  for s in $ENGINE_SVCS; do
+    v="$(engine_var "$s")"; vol="$(engine_volume "$s")"; vs=-
+    [ -z "$vol" ] || { if docker volume inspect "$vol" >/dev/null 2>&1; then vs="$vol (kept)"; else vs="$vol (none)"; fi; }
+    printf '%-10s %-7s %-20s %-16s %s\n' "$s" "$(on "${!v}" && echo on || echo off)" "$(svc_state "$s")" "$(engine_svc_port "$s")" "$vs"
+  done
+}
+firewall_prune() { # drop the VPC allow rule of each disabled engine's port (never one an enabled engine uses)
+  command -v ufw >/dev/null 2>&1 || return 0
+  local s v p; for s in postgres pgbouncer mysql mariadb; do
+    v="$(engine_var "$s")"; on "${!v}" && continue; p="$(engine_svc_port "$s")"
+    in_list "$p" "$(enabled_ports | tr '\n' ' ')" && continue
+    if ufw status | grep -Eq "^${p}/tcp[[:space:]]+ALLOW( IN)?[[:space:]]+${VPC_CIDR//./\\.}"; then
+      ufw delete allow proto tcp from "$VPC_CIDR" to any port "$p" >/dev/null && echo "ufw: removed $p/tcp ($s is off)"
+    fi
+  done
+}
+cmd_engines() { # [status] | apply [--set ENABLE_X=0|1]... [--dry-run] [--purge]
+  local act="${1:-status}" dry=0 purge=0 a k val sets=() u
+  u="usage: engines [status] | engines apply [--set ENABLE_<ENGINE>=0|1]... [--dry-run] [--purge]"
+  [ $# -eq 0 ] || shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry=1 ;;
+      --purge|--delete-volume) purge=1 ;;
+      --set) a="${2:-}"; shift; k="${a%%=*}"; val="${a#*=}"
+        case "$k" in ENABLE_POSTGRES|ENABLE_PGBOUNCER|ENABLE_MYSQL|ENABLE_MARIADB|ENABLE_ADMINER) ;; *) die "--set takes ENABLE_POSTGRES|ENABLE_PGBOUNCER|ENABLE_MYSQL|ENABLE_MARIADB|ENABLE_ADMINER=0|1 (got '$a')" ;; esac
+        case "$val" in 0|1) ;; *) die "--set $k: the value must be 0 or 1" ;; esac
+        sets+=("$k=$val") ;;
+      --set=*) set -- --set "${1#--set=}" "${@:2}"; continue ;;
+      *) die "$u" ;;
+    esac; shift
+  done
+  case "$act" in status|apply) ;; *) die "$u" ;; esac
   need_root; need_stack; load_env
-  local act="${1:-}" e="${2:-}" del=0 dry=0 a v; shift 2 || true
-  for a in "$@"; do case "$a" in --delete-volume) del=1 ;; --dry-run) dry=1 ;; *) die "unknown option $a" ;; esac; done
-  case "$e" in postgres) v=ENABLE_POSTGRES ;; pgbouncer) v=ENABLE_PGBOUNCER ;; mysql) v=ENABLE_MYSQL ;; mariadb) v=ENABLE_MARIADB ;; adminer) v=ENABLE_ADMINER ;;
-    *) die "usage: engine enable|disable postgres|pgbouncer|mysql|mariadb|adminer [--delete-volume] [--dry-run]" ;; esac
+  local s v orig="" conf=""
+  for s in $ENGINE_SVCS; do v="$(engine_var "$s")"; orig="$orig $v=${!v}"; done
+  for a in "${sets[@]+"${sets[@]}"}"; do printf -v "${a%%=*}" '%s' "${a#*=}"; done
+  check_engines
+  if [ "$act" = status ]; then engines_status; return 0; fi
+  # plan: settings that change, containers to remove (dependents first), services to start
+  for a in "${sets[@]+"${sets[@]}"}"; do in_list "$a" "$orig" || conf="$conf $a"; done
+  [ -z "$conf" ] || [ -f "$DBM_CONFIG" ] || [ "$dry" = 1 ] || die "no config file $DBM_CONFIG to record$conf (init > $DBM_CONFIG first)"
+  local stop="" start="" keep="" data_stop=""
+  for s in adminer pgbouncer mysql mariadb postgres; do v="$(engine_var "$s")"
+    on "${!v}" || { [ -z "$(svc_cid "$s")" ] || stop="$stop $s"; }; done
+  for s in postgres pgbouncer mysql mariadb adminer; do v="$(engine_var "$s")"
+    on "${!v}" && ! svc_running "$s" && start="$start $s"; done
+  for s in $ENGINE_SVCS; do in_list "$s" "$stop $start" || [ -z "$(svc_cid "$s")" ] || keep="$keep $s"; done
+  for s in $stop; do [ -z "$(engine_volume "$s")" ] || data_stop="$data_stop $s"; done
+  local purge_list=""   # --purge: the volumes of every engine that ends up off (stopped now or earlier)
+  if [ "$purge" = 1 ]; then for s in postgres mysql mariadb; do v="$(engine_var "$s")"
+    on "${!v}" || ! docker volume inspect "$(engine_volume "$s")" >/dev/null 2>&1 || purge_list="$purge_list $s"; done; fi
+  echo "engines plan ($DB_DIR):"
+  for a in $conf; do echo "  config  set $a in $DBM_CONFIG"; done
+  [ -z "$data_stop" ] || echo "  backup  a verified backup first (data of:$data_stop)"
+  for s in $stop; do echo "  stop    $s: stop + remove its container$( [ -z "$(engine_volume "$s")" ] || [ "$purge" = 1 ] || echo ", keep volume $(engine_volume "$s")")"; done
+  for s in $purge_list; do echo "  purge   DELETE volume $(engine_volume "$s") ($s data; typed confirmation)"; done
+  for s in $start; do echo "  start   $s$( [ -n "$(engine_volume "$s")" ] && echo " (reuses volume $(engine_volume "$s") if present)")"; done
+  echo "  keep    ${keep# }${keep:+ (same containers, not restarted)}"
+  if [ -z "$conf$stop$start$purge_list" ]; then echo "nothing to change"; return 0; fi
+  if [ -n "$start" ]; then
+    local need have; need="$(engine_ram_mb)"; have="$(host_ram_mb)"
+    [ "$have" = 0 ] || [ "$have" -ge "$((need * 90 / 100))" ] || warn "RAM ${have}MB < ${need}MB needed with$start on; consider: bin/siwo do resize <droplet> --size $(size_for_mb "$need")"
+  fi
+  if [ "$dry" = 1 ]; then echo "dry run: nothing changed"; return 0; fi
+  confirm APPLY
+  [ "$LOCK_HELD" = 1 ] || take_lock
+  local before="" c
+  for s in $keep; do before="$before $s=$(svc_cid "$s")"; done
+  if [ -n "$data_stop" ]; then # back up with the engines as they are now (cmd_backup reads ENABLE_*)
+    ( for a in $orig; do printf -v "${a%%=*}" '%s' "${a#*=}"; done; cmd_backup ) || die "backup failed; nothing changed"
+  fi
+  for s in $stop; do c="$(svc_cid "$s")"; [ -n "$c" ] || continue
+    docker stop -t 60 "$c" >/dev/null && docker rm "$c" >/dev/null && echo "removed the $s container"
+  done
+  for a in $conf; do set_conf_key "${a%%=*}" "${a#*=}"; done
+  ensure_env_keys; write_files
+  for s in $start; do
+    [ "$s" != postgres ] || dc build postgres
+    up_wait --wait-timeout 300 --no-deps "$s"
+    case "$s" in postgres) PG_SU=""; pg_converge ;; mysql|mariadb) my_converge "$s" ;; pgbouncer) pgbouncer_reload ;; esac
+  done
+  firewall; firewall_prune
+  for a in $before; do s="${a%%=*}"
+    if [ "$(svc_cid "$s")" = "${a#*=}" ] && svc_running "$s"; then echo "untouched: $s (same container, still running)"
+    else warn "$s was restarted or replaced during engines apply; check: docker ps"; fi
+  done
+  if [ "$purge" = 1 ]; then
+    local vol; for s in $purge_list; do vol="$(engine_volume "$s")"
+      docker volume inspect "$vol" >/dev/null 2>&1 || continue
+      echo "The data volume $vol will be DELETED. The backup $(newest_backup) is the only copy afterwards."
+      if [ "${WORKBENCH_CONFIRM:-}" = "DELETE $vol" ]; then :; elif [ "$INTERACTIVE" = 1 ]; then ask_word "DELETE-$vol"; else die "type DELETE-$vol interactively (or WORKBENCH_CONFIRM='DELETE $vol')"; fi
+      docker volume rm "$vol" >/dev/null && echo "deleted volume $vol"
+    done
+  elif [ -n "$data_stop" ]; then echo "volumes kept: engines apply --set ENABLE_<ENGINE>=1 brings the data back"; fi
+  stamp engines "$(engines)"
+  ( set -e; cmd_doctor ) >/dev/null 2>&1 || warn "doctor reported problems: run doctor"
+  engines_status
+}
+cmd_engine() { # enable|disable <engine> [--delete-volume] [--dry-run]: one engine through engines apply
+  local act="${1:-}" e="${2:-}" v; shift 2 || true
+  v="$(engine_var "$e")"
+  [ -n "$v" ] || die "usage: engine enable|disable postgres|pgbouncer|mysql|mariadb|adminer [--delete-volume] [--dry-run]"
   case "$act" in
-    disable)
-      on "${!v}" || { echo "$e is already disabled"; return 0; }
-      [ "$e" = postgres ] && on "$ENABLE_PGBOUNCER" && die "disable pgbouncer first"
-      echo "plan: back up, set $v=0 in $DBM_CONFIG, remove the $e container, KEEP its volume$([ "$del" = 1 ] && echo ', then delete the volume after a separate typed confirmation'), run doctor"
-      [ "$dry" = 1 ] && return 0
-      confirm DISABLE
-      cmd_backup
-      set_conf_key "$v" 0; printf -v "$v" 0
-      write_files; dc up -d --wait --remove-orphans; firewall
-      if [ "$del" = 1 ]; then
-        local vol; vol="$(basename "$DB_DIR")_$( case "$e" in postgres) echo pg_data ;; mysql) echo mysql_data ;; mariadb) echo mariadb_data ;; *) echo none ;; esac )"
-        if [ "$vol" != "$(basename "$DB_DIR")_none" ] && docker volume inspect "$vol" >/dev/null 2>&1; then
-          echo "The data volume $vol will be DELETED. The backup $(newest_backup) is the only copy afterwards."
-          if [ "${WORKBENCH_CONFIRM:-}" = "DELETE $vol" ]; then :; elif [ "$INTERACTIVE" = 1 ]; then ask_word "DELETE-$vol"; else die "type DELETE-$vol interactively (or WORKBENCH_CONFIRM='DELETE $vol')"; fi
-          docker volume rm "$vol" && echo "deleted volume $vol"
-        fi
-      else echo "volume kept (engine enable $e brings the data back)"; fi ;;
-    enable)
-      on "${!v}" && { echo "$e is already enabled"; return 0; }
-      [ "$e" = pgbouncer ] && ! on "$ENABLE_POSTGRES" && die "enable postgres first"
-      local need have; printf -v "$v" 1; need="$(engine_ram_mb)"; have="$(host_ram_mb)"; printf -v "$v" 0
-      [ "$have" = 0 ] || [ "$have" -ge "$((need * 90 / 100))" ] || warn "RAM ${have}MB < ${need}MB needed with $e on; consider: bin/siwo do resize <droplet> --size $(size_for_mb "$need")"
-      echo "plan: set $v=1 in $DBM_CONFIG, start $e (existing volume reused), converge, run doctor"
-      [ "$dry" = 1 ] && return 0
-      confirm ENABLE
-      set_conf_key "$v" 1; printf -v "$v" 1
-      ensure_env_keys; write_files; start_stack; firewall ;;
-    *) die "usage: engine enable|disable <engine>" ;;
+    enable) cmd_engines apply --set "$v=1" "$@" ;;
+    disable) cmd_engines apply --set "$v=0" "$@" ;;
+    *) die "usage: engine enable|disable <engine> [--delete-volume] [--dry-run]" ;;
   esac
-  ( set -e; cmd_doctor ) || warn "doctor reported problems (see above)"
 }
 
 cmd_init() { # [file]: starter config for this host, no secrets
@@ -3479,6 +3696,8 @@ case "$CMD" in
   binlog-replay) cmd_binlog_replay "$@" ;;
   pitr)         cmd_pitr "$@" ;;
   engine)       cmd_engine "$@" ;;
+  engines)      cmd_engines "$@" ;;
+  admin-creds)  cmd_admin_creds "$@" ;;
   gfs-keep)     gfs_keep "$*" ;;
   cron-install) cmd_cron_install ;;
   cron-remove)  cmd_cron_remove ;;

@@ -10,7 +10,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 
 | Key | Default | Notes |
 |---|---|---|
-| `ENABLE_POSTGRES` | `1` | A disabled engine gets no container, port, firewall rule, backup or check. PgBouncer needs Postgres. |
+| `ENABLE_POSTGRES` | `1` | A disabled engine gets no container, port, firewall rule, backup or check. PgBouncer needs Postgres. Change them on a running server with `engines apply --set ENABLE_X=0` (only that service stops, the others keep running; its data volume is kept unless --purge). |
 | `ENABLE_PGBOUNCER` | `1` |  |
 | `ENABLE_MYSQL` | `1` |  |
 | `ENABLE_MARIADB` | `1` |  |
@@ -104,6 +104,20 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `BINLOG_DAYS` | `7` | MySQL/MariaDB binlog retention on the server |
 | `STATE_DIR` | `/var/lib/server-infra-workbench/db` | status stamps for doctor/monitoring |
 | `DOCKER_GROUP_ALLOW` | (empty) | users allowed in the docker group; doctor warns about any other non-root member |
+
+## master users and app privileges
+
+| Key | Default | Notes |
+|---|---|---|
+| `MYSQL_ADMIN_USER` | `siwo_admin` | named MySQL master for DB clients over a tunnel (none = root only, server-local) |
+| `MARIADB_ADMIN_USER` | `siwo_admin` | same for MariaDB |
+| `MY_ADMIN_HOSTS` | (empty) | CIDRs the MySQL/MariaDB master may log in from (empty = DOCKER_SUBNET + VPC_CIDR; never 0.0.0.0/0) |
+| `MY_ADMIN_PRIVS` | `ALL PRIVILEGES` | the master's privileges on *.* |
+| `MY_ADMIN_GRANT_OPTION` | `1` | 1 = the master may grant (create app users from a DB client) |
+| `DB_READONLY_USER` | `0` | 1 = create-db also creates <owner>_ro (as --readonly-user) |
+| `MY_OWNER_PRIVS` | `SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES, CREATE VIEW, SHOW VIEW, TRIGGER, CREATE ROUTINE, ALTER ROUTINE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES, EVENT` | a database owner on `db`.* (database-level only) |
+| `MY_RW_PRIVS` | `SELECT, INSERT, UPDATE, DELETE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES, SHOW VIEW` | create-user --readwrite (rows, no DDL) |
+| `MY_RO_PRIVS` | `SELECT, SHOW VIEW` | create-user --readonly |
 
 ## monitoring
 

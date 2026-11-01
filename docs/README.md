@@ -13,6 +13,8 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | [Configuration](configuration.md) | config files, precedence, platform credentials, what is written where |
 | [Architecture](architecture.md) | droplets, VPC, `eth0` vs `eth1`, ports, where files live |
 | [Repository structure](structure.md) | where things are, where new things go, old to new paths |
+| [Database users and privileges](databases/users-and-privileges.md) | how databases, owners, master and read-only logins are created and linked; `admin-creds`; turning engines on/off without downtime |
+| [Connecting local DB clients](databases/connecting-local-clients.md) | TablePlus, DBeaver, DataGrip/PhpStorm, psql/mysql over an SSH tunnel; ports and which login to use |
 | [Database environments](database-environments.md) | one app, several environments (tst/dev/stg/prd): isolation, topologies, set-up flow, guard rails |
 | [Backups and recovery](backups-and-recovery.md) | backup layers, retention, off-site, PITR, restore tests, which restore to use |
 | [Servers in different regions](cross-region.md) | web and DB in different regions: same region, VPC peering, WireGuard, public TLS, managed DB |
@@ -64,7 +66,7 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 | [Set up SSH access](recipes/set-up-ssh-access.md) | keys, sudo, Termius; "which machine am I on?" |
 | [Configure a Ploi web server](recipes/configure-a-ploi-web-server.md) | shared `.env`, `DB_*` updates, Laravel + Postgres notes |
 | [Run daemons](recipes/run-daemons.md) | queue worker and scheduler under Supervisor |
-| [Connect to databases](recipes/connect-to-databases.md) | TablePlus/psql over SSH, web to DB, Adminer, Redis, off-site backups, deploy key, mail, MongoDB |
+| [Connect to databases](recipes/connect-to-databases.md) | every connection path (clients: [Connecting local DB clients](databases/connecting-local-clients.md)), web to DB, Adminer, Redis, off-site backups, deploy key, mail, MongoDB |
 | [Upgrade a legacy DB server](recipes/upgrade-a-legacy-db-server.md) | a server set up with an earlier version of the manager |
 | [Roll out a manager upgrade](recipes/roll-out-a-manager-upgrade.md) | applying a new manager version to a live server with `upgrade` |
 

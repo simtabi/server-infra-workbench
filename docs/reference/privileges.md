@@ -1,6 +1,7 @@
 # Privilege model
 
-What each database login can do, on every engine the manager runs (Postgres, MySQL, MariaDB). The manager
+What each database login can do, on every engine the manager runs (Postgres, MySQL, MariaDB). How the logins
+are created and linked to their databases: [Users and privileges](../databases/users-and-privileges.md). The manager
 applies this in `install`, `upgrade`, `create-db`, `create-user`, `grant` and `env-apply`, and `doctor` checks
 it. The reasons are in [ADR 0010](../adr/0010-least-privilege-database-roles.md).
 
@@ -23,7 +24,7 @@ environment listed in `TENANT_ENVS` for the environment layout ([naming](naming.
 
 | Login | Attributes | Grants |
 |---|---|---|
-| admin (`PG_ADMIN_USER`, default `vsw_admin`) | `SUPERUSER`; used by the manager, backups and admin work. `pg_hba` allows it only from the compose subnet and `VPC_CIDR`; its password stays in `/opt/db/.env` | owns every database, so only it can `DROP DATABASE` |
+| admin / master (`PG_ADMIN_USER`, default `vsw_admin`) | `SUPERUSER`; used by the manager, backups and admin work. `pg_hba` allows it only from the compose subnet and `VPC_CIDR`; its password stays in `/opt/db/.env` | owns every database, so only it can `DROP DATABASE` |
 | app (`PG_USER`, or `<app>_<env>_app`) | `LOGIN NOSUPERUSER NOCREATEROLE NOREPLICATION NOBYPASSRLS`, plus `CREATEDB` only when tenants are on | `CONNECT, TEMPORARY` on its database; owns schema `public` (or is a member of `<app>_<env>_owner`, which does) |
 | read-only (`<owner>_ro` from `create-db --readonly-user`, or `<app>_<env>_ro`) | `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` | `CONNECT`, `USAGE` on `public`, `SELECT` on tables and sequences, plus default privileges for new tables |
 | migrator (`<app>_<env>_migrator`, only with `ENV_MIGRATOR=1`) | as app, never `CREATEDB` | member of `_owner`; the app login then gets DML only |
@@ -43,12 +44,16 @@ environment listed in `TENANT_ENVS` for the environment layout ([naming](naming.
 | Login | Grants |
 |---|---|
 | `root` | `localhost`, `127.0.0.1` and the compose subnet only. `root@'%'` is removed by `upgrade` and never created on new installs |
+| master (`MYSQL_ADMIN_USER` / `MARIADB_ADMIN_USER`, default `siwo_admin`; 1.6.0+) | `MY_ADMIN_PRIVS` (default `ALL PRIVILEGES`) on `*.*`, `WITH GRANT OPTION` when `MY_ADMIN_GRANT_OPTION=1`; one account per `MY_ADMIN_HOSTS` entry (default the compose subnet and `VPC_CIDR`, never `%`); password in `/opt/db/.env`, read with `admin-creds` |
 | app (`<user>@'MY_APP_HOST'`) | on `` `db`.* `` only: `SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES, CREATE VIEW, SHOW VIEW, TRIGGER, CREATE ROUTINE, ALTER ROUTINE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES, EVENT` |
 | app with tenants | the same list again on `` `db\_t\_%`.* `` (the underscores are escaped, so the pattern matches only that prefix) |
 | `--readwrite` user | `SELECT, INSERT, UPDATE, DELETE, EXECUTE, CREATE TEMPORARY TABLES, LOCK TABLES, SHOW VIEW` |
 | read-only | `SELECT, SHOW VIEW` |
 
-- No global privileges, `GRANT OPTION`, `FILE`, `SUPER` or `PROCESS` for any app or read-only user.
+- No global privileges, `GRANT OPTION`, `FILE`, `SUPER` or `PROCESS` for any app or read-only user. The three
+  sets are configurable (`MY_OWNER_PRIVS`, `MY_RW_PRIVS`, `MY_RO_PRIVS`); the manager refuses `ALL`, `GRANT`,
+  `FILE`, `SUPER`, `PROCESS`, `SHUTDOWN`, `RELOAD`, `REPLICATION`, `CREATE USER`, `CREATE TABLESPACE` and
+  `SHOW DATABASES` in them.
 - `local_infile=0`; MariaDB also sets `secure_file_priv`.
 - **Note:** in MySQL and MariaDB, `DROP` on `` `db`.* `` also allows `DROP DATABASE db`. There is no privilege
   that allows dropping tables but not the schema. Protected environments rely on the backup taken before
