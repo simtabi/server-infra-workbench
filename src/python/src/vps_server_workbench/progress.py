@@ -36,7 +36,9 @@ def eta(elapsed: float, done: int, total: int) -> int | None:
 
 
 class Progress:
-    def __init__(self, stream: TextIO, mode: str, color: bool = False, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self, stream: TextIO, mode: str, color: bool = False, clock: Callable[[], float] = time.monotonic
+    ) -> None:
         if mode not in (TTY, PLAIN, OFF):
             raise ValueError(f"mode must be tty, plain or off, got {mode!r}")
         self.stream, self.mode, self.color, self.clock = stream, mode, color, clock
@@ -44,7 +46,9 @@ class Progress:
         self._bar_decile = -1
 
     @classmethod
-    def detect(cls, stream: TextIO | None = None, env: Mapping[str, str] | None = None, isatty: bool | None = None) -> Progress:
+    def detect(
+        cls, stream: TextIO | None = None, env: Mapping[str, str] | None = None, isatty: bool | None = None
+    ) -> Progress:
         stream = stream or sys.stderr
         env = os.environ if env is None else env
         tty = stream.isatty() if isatty is None else isatty
@@ -81,11 +85,13 @@ class Progress:
         if self.mode == PLAIN:
             self._w(f"  ..    {label}\n")
         elif self.mode == TTY:
+
             def spin() -> None:
                 i = 0
                 while not stop.wait(0.2 if i else 0):
                     self._w(f"\r  {_FRAMES[i % 4]} {label}  {duration(self.clock() - t0)} ")
                     i += 1
+
             spinner = threading.Thread(target=spin, daemon=True)
             spinner.start()
         try:
@@ -110,7 +116,9 @@ class Progress:
         done = min(max(0, done), total)
         pct, el = done * 100 // total, now - self._bar_t0
         left = eta(el, done, total)
-        tail = f"{pct:3d}% {done}/{total} {label}  {duration(el)}" + ("" if left is None else f" eta {duration(left)}")
+        tail = f"{pct:3d}% {done}/{total} {label}  {duration(el)}" + (
+            "" if left is None else f" eta {duration(left)}"
+        )
         if self.mode == TTY:
             fill = done * 24 // total
             self._w(f"\r  [{'#' * fill}{'-' * (24 - fill)}] {tail}\033[K" + ("\n" if done == total else ""))

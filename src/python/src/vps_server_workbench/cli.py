@@ -14,7 +14,9 @@ def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="workbench py", description="vps-server-workbench Python helpers")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="command", required=True)
-    sub.add_parser("plans", help="droplet plans per region available through Ploi (see: plans --help)", add_help=False)
+    sub.add_parser(
+        "plans", help="droplet plans per region available through Ploi (see: plans --help)", add_help=False
+    )
     ping = sub.add_parser("ping", help="TCP check of a host:port, or DB_HOST/DB_PORT from an env file")
     ping.add_argument("host", nargs="?")
     ping.add_argument("port", nargs="?")

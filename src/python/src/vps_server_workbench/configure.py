@@ -82,7 +82,8 @@ def _git_ignored(path: Path, root: Path) -> bool | None:
     try:
         rc = subprocess.run(  # noqa: S603
             ["git", "-C", str(root), "check-ignore", "-q", "--no-index", str(path.resolve())],  # noqa: S607
-            capture_output=True, check=False,
+            capture_output=True,
+            check=False,
         ).returncode
     except OSError:
         return path.resolve().is_relative_to((root / "local").resolve())
@@ -111,13 +112,24 @@ def _plan_files(r: P.Resolved, out_dir: Path, stamp: str) -> dict[Path, str]:
 
 
 def _same_ignoring_stamps(a: str, b: str) -> bool:
-    strip = lambda t: [ln for ln in t.splitlines() if "written by `bin/workbench configure`" not in ln  # noqa: E731
-                       and "added by `bin/workbench configure`" not in ln]
+    def strip(t: str) -> list[str]:
+        return [
+            ln
+            for ln in t.splitlines()
+            if "written by `bin/workbench configure`" not in ln
+            and "added by `bin/workbench configure`" not in ln
+        ]
+
     return strip(a) == strip(b)
 
 
-ENGINE_CMD = {"ENABLE_POSTGRES": "postgres", "ENABLE_PGBOUNCER": "pgbouncer", "ENABLE_MYSQL": "mysql",
-              "ENABLE_MARIADB": "mariadb", "ENABLE_ADMINER": "adminer"}
+ENGINE_CMD = {
+    "ENABLE_POSTGRES": "postgres",
+    "ENABLE_PGBOUNCER": "pgbouncer",
+    "ENABLE_MYSQL": "mysql",
+    "ENABLE_MARIADB": "mariadb",
+    "ENABLE_ADMINER": "adminer",
+}
 
 
 def engines_turned_off(previous: str | None, r: P.Resolved) -> list[str]:
@@ -137,8 +149,10 @@ def next_commands(r: P.Resolved, out_dir: Path, turned_off: list[str] | None = N
     if turned_off:
         cmds.append("# engines turned off: disable them on the server FIRST (backs up, keeps the volume)")
         for e in turned_off:
-            cmds += [f"ssh DB_HOST 'sudo /root/docker-db-server-manager.sh engine disable {e} --dry-run'",
-                     f"ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh engine disable {e}'"]
+            cmds += [
+                f"ssh DB_HOST 'sudo /root/docker-db-server-manager.sh engine disable {e} --dry-run'",
+                f"ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh engine disable {e}'",
+            ]
     if v["DB_MODE"] != "managed":
         cmds += [
             "# DB droplet (DB_HOST = your SSH alias): back up the live config, then install the new one",
@@ -169,14 +183,22 @@ def next_commands(r: P.Resolved, out_dir: Path, turned_off: list[str] | None = N
             "-g root /tmp/monitor.conf /etc/vsw-monitor.conf && rm /tmp/monitor.conf'",
         ]
         if role == "db" and v["DB_MODE"] != "managed" and "prometheus" in P.monitor_stacks(v):
-            cmds.append("ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh monitor-user'   # exporter login (password stays on the node)")
+            cmds.append(
+                "ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh monitor-user'   # exporter login (password stays on the node)"
+            )
         cmds.append(f"ssh -t {host} 'sudo /tmp/vsw-monitor-src/monitor.sh plan'")
     if v["STORAGE"] == "spaces" or v["OFFSITE"] == "s3":
-        cmds.append("# DO control panel: create the Spaces bucket(s) and a key limited to them (docs/tools/addons.md)")
+        cmds.append(
+            "# DO control panel: create the Spaces bucket(s) and a key limited to them (docs/tools/addons.md)"
+        )
     if v["DO_ALERTS"] == "1" or v["UPTIME_CHECKS"] == "1":
-        cmds.append("bin/workbench do uptime --help   # alert policies and uptime checks (plan first, then --yes)")
+        cmds.append(
+            "bin/workbench do uptime --help   # alert policies and uptime checks (plan first, then --yes)"
+        )
     if v["DB_MODE"] != "managed":
-        cmds.append("ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh upgrade --dry-run'   # last: shows every change")
+        cmds.append(
+            "ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh upgrade --dry-run'   # last: shows every change"
+        )
     return cmds
 
 
@@ -196,8 +218,10 @@ def run_configure(args: argparse.Namespace) -> int:
         prev_profile, prev_over = previous_overrides(prev)
         overrides = {**prev_over, **overrides}
         profile = profile or prev_profile
-        print(f"keeping earlier overrides from {prev}: " + (" ".join(f"{k}={v}" for k, v in prev_over.items()
-                                                                     if k != "CLIENT") or "none"))
+        print(
+            f"keeping earlier overrides from {prev}: "
+            + (" ".join(f"{k}={v}" for k, v in prev_over.items() if k != "CLIENT") or "none")
+        )
     interactive = not args.non_interactive
     if interactive:
         print("profiles:")
@@ -218,8 +242,9 @@ def run_configure(args: argparse.Namespace) -> int:
                 if not extra:
                     break
                 overrides.update(_overrides([extra]))
-            r = P.resolve(profile, {k: v for k, v in overrides.items() if v != r.values.get(k) or k == "CLIENT"},
-                          root)
+            r = P.resolve(
+                profile, {k: v for k, v in overrides.items() if v != r.values.get(k) or k == "CLIENT"}, root
+            )
     except ValueError as exc:
         print(f"configure: {exc}", file=sys.stderr)
         return 2
@@ -240,14 +265,18 @@ def run_configure(args: argparse.Namespace) -> int:
 
     out_dir = Path(args.out_dir) if args.out_dir else root / "local" / client
     if _git_ignored(out_dir, root) is False:
-        print(f"configure: {out_dir} is inside the repo but not git-ignored; refusing (use local/<client>/)",
-              file=sys.stderr)
+        print(
+            f"configure: {out_dir} is inside the repo but not git-ignored; refusing (use local/<client>/)",
+            file=sys.stderr,
+        )
         return 1
     stamp = time.strftime("%Y-%m-%d %H:%M %Z")
     db_conf = out_dir / "db-server.conf"
     turned_off = engines_turned_off(db_conf.read_text(encoding="utf-8") if db_conf.is_file() else None, r)
     for e in turned_off:
-        print(f"  warn  {e} was enabled in {db_conf}; disable it on the server before installing the new file")
+        print(
+            f"  warn  {e} was enabled in {db_conf}; disable it on the server before installing the new file"
+        )
     files = _plan_files(r, out_dir, stamp)
     pending: dict[Path, str] = {}
     for path, text in files.items():
@@ -293,7 +322,9 @@ def run_profile(args: argparse.Namespace) -> int:
         if args.action == "list":
             for name in P.available(root):
                 prof = P.load(name, root)
-                print(f"{name:24} v{prof.get('PROFILE_VERSION', '?'):3} {prof.get('PROFILE_DESCRIPTION', '')}")
+                print(
+                    f"{name:24} v{prof.get('PROFILE_VERSION', '?'):3} {prof.get('PROFILE_DESCRIPTION', '')}"
+                )
             return 0
         if args.action == "table":
             sys.stdout.write(P.markdown_table(root))
@@ -338,12 +369,19 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--profile", help="profile name (see: workbench profile list)")
     c.add_argument("--client", help="client name; files go to local/<client>/")
     c.add_argument("--set", action="append", metavar="KEY=VALUE", help="override a setting (repeatable)")
-    c.add_argument("--keep", action="store_true",
-                   help="start from the overrides (and profile) in the earlier local/<client>/workbench.conf")
+    c.add_argument(
+        "--keep",
+        action="store_true",
+        help="start from the overrides (and profile) in the earlier local/<client>/workbench.conf",
+    )
     c.add_argument("--non-interactive", action="store_true", help="no prompts; needs --profile and --client")
-    c.add_argument("--out-dir", help="write here instead of local/<client>/ (must be git-ignored or outside the repo)")
+    c.add_argument(
+        "--out-dir", help="write here instead of local/<client>/ (must be git-ignored or outside the repo)"
+    )
     c.add_argument("--dry-run", action="store_true", help="validate and show diffs, write nothing")
-    c.add_argument("--yes", action="store_true", help="overwrite existing files without asking (backups are kept)")
+    c.add_argument(
+        "--yes", action="store_true", help="overwrite existing files without asking (backups are kept)"
+    )
     pr = sub.add_parser("profile", help="list | show NAME [--check] | diff A [B] | table")
     pr.add_argument("action", choices=("list", "show", "diff", "table"))
     pr.add_argument("names", nargs="*")

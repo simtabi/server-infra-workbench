@@ -15,6 +15,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   installed on the server.
 
 ### Fixed (final audit, 2026-11)
+- Python style gate never ran: ruff was optional and absent locally and in CI, and the code had drifted (89 findings, 8 files unformatted). Now formatted and clean under ruff 0.17.3, E501 left to the formatter, and CI installs ruff so `make py-lint` enforces it. Real fixes among the findings: `ApiClient` refuses any non-HTTPS URL (including API pagination links) before it builds a request with the bearer token, and errors chain their cause (`raise ... from`).
 - Tests that read a file mode tried BSD `stat -f %Lp` first. GNU `stat -f` means filesystem status and exits 0, so on Linux (CI) the mode check compared garbage. They now try `stat -c %a` first, like the tools.
 - MySQL healthcheck pinged the socket, which the image's temporary init server (`--skip-networking`) answers: the container went healthy, then restarted under the first hardening query (`ERROR 2002`, an intermittent install failure seen in db-features-it). It now pings over TCP (127.0.0.1), which only the final server answers; MariaDB already used `healthcheck.sh --connect`.
 - server-it accepts `permitrootlogin prohibit-password` from `sshd -T`: OpenSSH 10 on Ubuntu 26.04 prints the canonical name, OpenSSH 9 printed the old alias `without-password`.

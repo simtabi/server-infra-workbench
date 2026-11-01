@@ -24,4 +24,5 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S"]
-ignore = ["S101"]
+# E501: `ruff format` owns line length; what it leaves long are prose strings (help text, comments)
+ignore = ["S101", "E501"]

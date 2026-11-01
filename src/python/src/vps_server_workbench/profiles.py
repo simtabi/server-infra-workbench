@@ -18,14 +18,45 @@ META = ("PROFILE_VERSION", "PROFILE_DESCRIPTION")
 
 # Keys written to /etc/docker-db-server-manager.conf (DB_PRIVATE_IP becomes PRIVATE_IP + EXPECTED_PRIVATE_IP).
 DB_KEYS = (
-    "APP", "PG_USER", "PG_DB", "ENABLE_POSTGRES", "ENABLE_PGBOUNCER", "ENABLE_MYSQL", "ENABLE_MARIADB",
-    "ENABLE_ADMINER", "PG_APP_CREATEDB", "TLS_MODE", "ENVS", "TENANT_ENVS", "PROTECTED_ENVS", "PRD_LOCATION",
-    "ENV_MIGRATOR", "RETENTION", "PITR", "OFFSITE", "OFFSITE_ENDPOINT", "OFFSITE_REGION", "OFFSITE_BUCKET",
-    "ALERT_EMAIL", "VPC_CIDR",
+    "APP",
+    "PG_USER",
+    "PG_DB",
+    "ENABLE_POSTGRES",
+    "ENABLE_PGBOUNCER",
+    "ENABLE_MYSQL",
+    "ENABLE_MARIADB",
+    "ENABLE_ADMINER",
+    "PG_APP_CREATEDB",
+    "TLS_MODE",
+    "ENVS",
+    "TENANT_ENVS",
+    "PROTECTED_ENVS",
+    "PRD_LOCATION",
+    "ENV_MIGRATOR",
+    "RETENTION",
+    "PITR",
+    "OFFSITE",
+    "OFFSITE_ENDPOINT",
+    "OFFSITE_REGION",
+    "OFFSITE_BUCKET",
+    "ALERT_EMAIL",
+    "VPC_CIDR",
 )
 BOOL_KEYS = (
-    "ENABLE_POSTGRES", "ENABLE_PGBOUNCER", "ENABLE_MYSQL", "ENABLE_MARIADB", "ENABLE_ADMINER", "PG_APP_CREATEDB",
-    "ENV_MIGRATOR", "LOAD_BALANCER", "WIREGUARD", "STRICT", "HARDEN", "DO_ALERTS", "UPTIME_CHECKS", "GOTENBERG",
+    "ENABLE_POSTGRES",
+    "ENABLE_PGBOUNCER",
+    "ENABLE_MYSQL",
+    "ENABLE_MARIADB",
+    "ENABLE_ADMINER",
+    "PG_APP_CREATEDB",
+    "ENV_MIGRATOR",
+    "LOAD_BALANCER",
+    "WIREGUARD",
+    "STRICT",
+    "HARDEN",
+    "DO_ALERTS",
+    "UPTIME_CHECKS",
+    "GOTENBERG",
     "MONITOR_ALLOW_TIGHT",
 )
 INT_KEYS = ("DB_DROPLET_MB", "WEB_DROPLET_MB", "DEDICATED_DROPLET_MB", "WEB_NODES", "MIN_DB_MB")
@@ -41,16 +72,35 @@ ENUMS = {
     "STORAGE_ROLE": ("web", "db", "dedicated"),
 }
 DO_REGIONS = (
-    "nyc1", "nyc2", "nyc3", "sfo1", "sfo2", "sfo3", "ams2", "ams3", "sgp1", "lon1", "fra1", "tor1", "blr1",
-    "syd1", "atl1", "ric1",
+    "nyc1",
+    "nyc2",
+    "nyc3",
+    "sfo1",
+    "sfo2",
+    "sfo3",
+    "ams2",
+    "ams3",
+    "sgp1",
+    "lon1",
+    "fra1",
+    "tor1",
+    "blr1",
+    "syd1",
+    "atl1",
+    "ric1",
 )
 SPACES_REGIONS = ("nyc3", "sfo2", "sfo3", "ams3", "sgp1", "lon1", "fra1", "tor1", "blr1", "syd1", "atl1")
 ENV_NAMES = ("tst", "dev", "trn", "stg", "prd")
 
 # RAM planning estimates in MB. Engines mirror engine_ram_mb() in docker-db-server-manager.sh.
 RAM_OS = 512
-RAM_ENGINE = {"ENABLE_POSTGRES": 1024, "ENABLE_PGBOUNCER": 64, "ENABLE_MYSQL": 1024, "ENABLE_MARIADB": 768,
-              "ENABLE_ADMINER": 64}
+RAM_ENGINE = {
+    "ENABLE_POSTGRES": 1024,
+    "ENABLE_PGBOUNCER": 64,
+    "ENABLE_MYSQL": 1024,
+    "ENABLE_MARIADB": 768,
+    "ENABLE_ADMINER": 64,
+}
 RAM_PITR = 128
 RAM_WEB_APP = 1024  # nginx + PHP-FPM + queue worker + scheduler on a small Ploi node
 RAM_ADDON = {"gotenberg": 1024, "garage": 256, "seaweedfs": 512, "rustfs": 512}
@@ -59,8 +109,13 @@ MONITOR_STACKS = ("beszel", "kuma", "netdata", "prometheus")
 RAM_MONITOR_HUB = {"beszel": 64, "kuma": 192, "netdata": 256, "prometheus": 600}
 RAM_MONITOR_AGENT = {"beszel": 32, "netdata": 256, "prometheus": 120}
 MONITOR_HEAVY = ("netdata", "prometheus")
-SIZES = ((1024, "s-1vcpu-1gb"), (2048, "s-1vcpu-2gb"), (4096, "s-2vcpu-4gb"), (8192, "s-4vcpu-8gb"),
-         (16384, "s-8vcpu-16gb"))
+SIZES = (
+    (1024, "s-1vcpu-1gb"),
+    (2048, "s-1vcpu-2gb"),
+    (4096, "s-2vcpu-4gb"),
+    (8192, "s-4vcpu-8gb"),
+    (16384, "s-8vcpu-16gb"),
+)
 SELF_HOSTED_STORAGE = ("garage", "seaweedfs", "rustfs")
 _NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 _APP = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
@@ -218,9 +273,11 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
 
     for k, val in v.items():
         if _UNSAFE.search(val):
-            err(f"{k}: quotes, $, backticks, backslashes and newlines are not allowed (the files are sourced by bash)")
+            err(
+                f"{k}: quotes, $, backticks, backslashes and newlines are not allowed (the files are sourced by bash)"
+            )
     if v.get("RETENTION") and not all(_RET.match(t) for t in v["RETENTION"].split()):
-        err("RETENTION must look like \"daily=7 weekly=4 monthly=12 yearly=2\"")
+        err('RETENTION must look like "daily=7 weekly=4 monthly=12 yearly=2"')
     if v.get("ALERT_EMAIL") and not _EMAIL.match(v["ALERT_EMAIL"]):
         err(f"ALERT_EMAIL {v['ALERT_EMAIL']!r} is not an email address")
     for k in BOOL_KEYS:
@@ -262,10 +319,14 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
         elif v["PEER_REGION"] not in DO_REGIONS:
             err(f"PEER_REGION {v['PEER_REGION']!r} is not a DigitalOcean region")
         if not wg or (vpc and not wg.subnet_of(vpc)):
-            err(f"WIREGUARD_CIDR {v['WIREGUARD_CIDR']} must lie inside VPC_CIDR {v['VPC_CIDR']} (the DB only accepts VPC_CIDR)")
+            err(
+                f"WIREGUARD_CIDR {v['WIREGUARD_CIDR']} must lie inside VPC_CIDR {v['VPC_CIDR']} (the DB only accepts VPC_CIDR)"
+            )
         info("cross-region: expect extra latency per query (estimate: a few ms to tens of ms by region pair)")
     elif v["PEER_REGION"]:
-        err("PEER_REGION is set but WIREGUARD=0: DigitalOcean VPCs are regional, cross-region traffic needs WireGuard")
+        err(
+            "PEER_REGION is set but WIREGUARD=0: DigitalOcean VPCs are regional, cross-region traffic needs WireGuard"
+        )
 
     # engines and environments
     on = lambda k: v[k] == "1"  # noqa: E731
@@ -289,11 +350,17 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
         err("ENVS needs APP (databases are named <app>_<env>)")
     prd_here = "prd" in envs and v["PRD_LOCATION"] == "local"
     if "prd" in envs and v["PRD_LOCATION"] != "local" and v["DB_MODE"] == "self":
-        warn("ENVS has prd but PRD_LOCATION is not local: prd databases will not be created on this DB droplet")
+        warn(
+            "ENVS has prd but PRD_LOCATION is not local: prd databases will not be created on this DB droplet"
+        )
     if prd_here and "prd" not in _envs(v, "PROTECTED_ENVS"):
         err("prd lives on this DB droplet but is not in PROTECTED_ENVS")
     if prd_here and len(envs) > 1:
-        advise("prd shares the DB droplet with " + " ".join(e for e in envs if e != "prd") + "; give prd its own droplet")
+        advise(
+            "prd shares the DB droplet with "
+            + " ".join(e for e in envs if e != "prd")
+            + "; give prd its own droplet"
+        )
     if prd_here and v["PITR"] == "off" and v["DB_MODE"] == "self":
         advise("prd without point-in-time recovery: set PITR=pgbackrest")
     if v["OFFSITE"] == "none" and v["DB_MODE"] != "managed":
@@ -321,14 +388,18 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
     if v["DB_MODE"] == "replica":
         info("DB_MODE=replica: the replica is set up by hand (docs/high-availability.md)")
     if v["DB_MODE"] == "managed":
-        info("DB_MODE=managed: no db-server.conf is written; point DB_HOST at the managed cluster's private host")
+        info(
+            "DB_MODE=managed: no db-server.conf is written; point DB_HOST at the managed cluster's private host"
+        )
 
     # add-ons
     for addon, role in addons_placed(v):
         if role == "db" and v["DB_MODE"] == "managed":
             err(f"{addon} role db, but DB_MODE=managed has no DB droplet; use web or dedicated")
         if role == "web" and int(v["WEB_NODES"]) > 1 and addon in SELF_HOSTED_STORAGE:
-            err(f"{addon} on the web role with {v['WEB_NODES']} web nodes: each node would hold different files")
+            err(
+                f"{addon} on the web role with {v['WEB_NODES']} web nodes: each node would hold different files"
+            )
     if v["STORAGE"] == "rustfs":
         if "prd" in envs or v["STRICT"] == "1":
             err("STORAGE=rustfs is experimental: dev/test only, never with prd or STRICT profiles")
@@ -337,7 +408,9 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
     if v["STORAGE"] == "spaces":
         info("STORAGE=spaces: create the bucket and a key scoped to it in the DO control panel")
     if v["STORAGE"] in SELF_HOSTED_STORAGE:
-        info(f"{v['STORAGE']} holds data on a droplet: plan an off-node copy (stacks/addons/README.md#backups)")
+        info(
+            f"{v['STORAGE']} holds data on a droplet: plan an off-node copy (stacks/addons/README.md#backups)"
+        )
 
     # monitoring
     stacks = monitor_stacks(v)
@@ -352,8 +425,10 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
         on_db = monitor_placed(v).get("db")
         heavy = [st for st in stacks if st in MONITOR_HEAVY and (st == "netdata" or on_db == "both")]
         if heavy and on_db:
-            err(f"{','.join(heavy)} next to the database on a {v['DB_DROPLET_MB']} MB node: monitor.sh refuses it "
-                "(MONITOR_HUB=web/dedicated, drop netdata, or MONITOR_ALLOW_TIGHT=1)")
+            err(
+                f"{','.join(heavy)} next to the database on a {v['DB_DROPLET_MB']} MB node: monitor.sh refuses it "
+                "(MONITOR_HUB=web/dedicated, drop netdata, or MONITOR_ALLOW_TIGHT=1)"
+            )
     for u in v.get("MONITOR_PROBE_URLS", "").split():
         if not re.match(r"^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/\S*)?$", u):
             err(f"MONITOR_PROBE_URLS: '{u}' is not an http(s) URL")
@@ -364,14 +439,22 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
     for role, (need, have, items) in ram_plan(v).items():
         what = ", ".join(items)
         if need > have:
-            err(f"{role} node needs ~{need} MB ({what}) but has {have} MB: use {size_for(need)} or move something")
+            err(
+                f"{role} node needs ~{need} MB ({what}) but has {have} MB: use {size_for(need)} or move something"
+            )
         elif need > have * 0.85:
             warn(f"{role} node is tight: ~{need} of {have} MB ({what})")
         else:
             info(f"{role} node: ~{need} of {have} MB ({what}) (estimate)")
-    if v.get("STORAGE") in SELF_HOSTED_STORAGE and v["STORAGE_ROLE"] == "web" and int(v["WEB_DROPLET_MB"]) <= 2048:
+    if (
+        v.get("STORAGE") in SELF_HOSTED_STORAGE
+        and v["STORAGE_ROLE"] == "web"
+        and int(v["WEB_DROPLET_MB"]) <= 2048
+    ):
         alt = "the db node" if not (on("ENABLE_MYSQL") or on("ENABLE_MARIADB")) else "a dedicated droplet"
-        advise(f"{v['STORAGE']} on a {v['WEB_DROPLET_MB']} MB web node competes with PHP; use {alt} (STORAGE_ROLE)")
+        advise(
+            f"{v['STORAGE']} on a {v['WEB_DROPLET_MB']} MB web node competes with PHP; use {alt} (STORAGE_ROLE)"
+        )
     return out
 
 
@@ -458,7 +541,7 @@ def render_monitor(r: Resolved, role: str, stamp: str) -> str:
     stacks = monitor_stacks(v)
     lines = [
         f"# /etc/vsw-monitor.conf for the {role} node - written by `bin/workbench configure` ({r.profile} v{r.version}, {stamp})",
-        f"# install: monitor.sh plan && monitor.sh install   (no secrets here; monitor.sh generates them on the node)",
+        "# install: monitor.sh plan && monitor.sh install   (no secrets here; monitor.sh generates them on the node)",
         f"MONITOR_STACKS={','.join(stacks)}",
         f"MONITOR_ROLE={mode}",
         f"MONITOR_NODE_NAME={role}",
@@ -467,7 +550,9 @@ def render_monitor(r: Resolved, role: str, stamp: str) -> str:
         lines.append("MONITOR_ALLOW_TIGHT=1")
     if mode == "both":
         ips = {"db": v.get("DB_PRIVATE_IP", ""), "web": v.get("WEB_PRIVATE_IP", "")}
-        targets = [f"{rl}={ips.get(rl) or rl.upper() + '_PRIVATE_IP'}" for rl in monitor_placed(v) if rl != role]
+        targets = [
+            f"{rl}={ips.get(rl) or rl.upper() + '_PRIVATE_IP'}" for rl in monitor_placed(v) if rl != role
+        ]
         if targets:
             lines.append(f"MONITOR_TARGETS={_q(' '.join(targets))}   # fill in any *_PRIVATE_IP placeholder")
         if "prometheus" in stacks and "db" in monitor_placed(v) and role != "db":
@@ -479,12 +564,21 @@ def render_monitor(r: Resolved, role: str, stamp: str) -> str:
         if ip:
             lines.append(f"MONITOR_AGENT_BIND={ip}")
     if "beszel" in stacks and mode == "agent":
-        lines.append("MONITOR_BESZEL_KEY_FILE=/etc/vsw-monitor/beszel-hub.pub   # from `monitor beszel-key` on the hub")
+        lines.append(
+            "MONITOR_BESZEL_KEY_FILE=/etc/vsw-monitor/beszel-hub.pub   # from `monitor beszel-key` on the hub"
+        )
     return "\n".join(lines) + "\n"
 
 
-ORDER = ("dev-budget", "staging", "production-single", "production-ha", "mysql-app", "multi-engine",
-         "cross-region-wireguard")
+ORDER = (
+    "dev-budget",
+    "staging",
+    "production-single",
+    "production-ha",
+    "mysql-app",
+    "multi-engine",
+    "cross-region-wireguard",
+)
 
 
 def markdown_table(root: Path | None = None) -> str:
@@ -493,12 +587,16 @@ def markdown_table(root: Path | None = None) -> str:
     base = defaults(root)
     res = {n: resolve(n, root=root) for n in names}
     keys = [k for k in base if k not in META and any(res[n].values.get(k) != base[k] for n in names)]
-    rows = ["| Setting | `_defaults` | " + " | ".join(f"`{n}`" for n in names) + " |",
-            "|---|---|" + "---|" * len(names)]
+    rows = [
+        "| Setting | `_defaults` | " + " | ".join(f"`{n}`" for n in names) + " |",
+        "|---|---|" + "---|" * len(names),
+    ]
     for k in keys:
         cells = [base[k] or "(empty)"]
         for n in names:
             val, src = res[n].values.get(k, ""), res[n].source.get(k)
-            cells.append("·" if val == base[k] else ("derived" if src == "derived" else f"**{val or '(empty)'}**"))
+            cells.append(
+                "·" if val == base[k] else ("derived" if src == "derived" else f"**{val or '(empty)'}**")
+            )
         rows.append(f"| `{k}` | " + " | ".join(cells) + " |")
     return "\n".join(rows) + "\n"

@@ -32,6 +32,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
+      # ruff is optional locally (make py-lint skips it with a note); CI pins it so the style gate always runs
+      - name: Install ruff
+        run: python -m pip install --disable-pip-version-check -q ruff==0.17.3
       - name: Cache Composer packages
         uses: actions/cache@v6
         with:

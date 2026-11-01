@@ -28,6 +28,7 @@ Template: config/ploi-do-plan-finder.env.example (copy it outside the repo):
     bin/workbench plans --env-file ~/.config/vps-server-workbench/plans.env \
         --regions atl1,nyc3 --min-memory-mb 2048 --output-format markdown
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,8 +38,9 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 
 from vps_server_workbench.progress import Progress
 
@@ -79,18 +81,26 @@ class ApiClient:
 
     def get(self, path_or_url: str) -> dict:
         url = path_or_url if path_or_url.startswith("http") else f"{self.base_url}/{path_or_url.lstrip('/')}"
-        req = urllib.request.Request(url, headers={
-            "Authorization": f"Bearer {self.token}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        })
+        # the bearer token goes on every request, including pagination links from the API: HTTPS only
+        if urllib.parse.urlsplit(url).scheme != "https":
+            raise PlanFinderError(f"Refusing a non-HTTPS URL (the API token would be sent in clear): {url}")
+        req = urllib.request.Request(  # noqa: S310 - https only, checked above
+            url,
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # noqa: S310 - https checked above
                 return json.load(resp)
         except urllib.error.HTTPError as e:
-            raise PlanFinderError(f"{url} returned HTTP {e.code}: {e.read().decode(errors='replace')[:300]}")
+            raise PlanFinderError(
+                f"{url} returned HTTP {e.code}: {e.read().decode(errors='replace')[:300]}"
+            ) from e
         except urllib.error.URLError as e:
-            raise PlanFinderError(f"Could not reach {url}: {e.reason}")
+            raise PlanFinderError(f"Could not reach {url}: {e.reason}") from e
 
 
 class PloiDoPlanFinder:
@@ -117,67 +127,67 @@ class PloiDoPlanFinder:
         self._results: list[PlanOption] = []
 
     # ------------------------------------------------------------ configuration
-    def with_tokens(self, ploi: str, digitalocean: str) -> "PloiDoPlanFinder":
+    def with_tokens(self, ploi: str, digitalocean: str) -> PloiDoPlanFinder:
         self._ploi_token, self._do_token = ploi, digitalocean
         return self
 
-    def with_endpoints(self, ploi: str | None = None, digitalocean: str | None = None) -> "PloiDoPlanFinder":
+    def with_endpoints(self, ploi: str | None = None, digitalocean: str | None = None) -> PloiDoPlanFinder:
         self._ploi_url = ploi or self._ploi_url
         self._do_url = digitalocean or self._do_url
         return self
 
-    def timeout(self, seconds: int) -> "PloiDoPlanFinder":
+    def timeout(self, seconds: int) -> PloiDoPlanFinder:
         self._timeout = seconds
         return self
 
-    def provider(self, name_contains: str) -> "PloiDoPlanFinder":
+    def provider(self, name_contains: str) -> PloiDoPlanFinder:
         self._provider = name_contains
         return self
 
-    def credential(self, credential_id: int | str | None) -> "PloiDoPlanFinder":
+    def credential(self, credential_id: int | str | None) -> PloiDoPlanFinder:
         self._credential_id = str(credential_id or "")
         return self
 
-    def in_regions(self, *slugs: str) -> "PloiDoPlanFinder":
+    def in_regions(self, *slugs: str) -> PloiDoPlanFinder:
         self._regions |= {s.strip() for s in slugs if s and s.strip()}
         return self
 
-    def excluding_regions(self, *slugs: str) -> "PloiDoPlanFinder":
+    def excluding_regions(self, *slugs: str) -> PloiDoPlanFinder:
         self._excluded |= {s.strip() for s in slugs if s and s.strip()}
         return self
 
-    def plans_matching(self, text: str) -> "PloiDoPlanFinder":
+    def plans_matching(self, text: str) -> PloiDoPlanFinder:
         self._plan_filter = text or ""
         return self
 
-    def min_vcpus(self, n: int) -> "PloiDoPlanFinder":
+    def min_vcpus(self, n: int) -> PloiDoPlanFinder:
         self._min_vcpus = n
         return self
 
-    def max_vcpus(self, n: int) -> "PloiDoPlanFinder":
+    def max_vcpus(self, n: int) -> PloiDoPlanFinder:
         self._max_vcpus = n
         return self
 
-    def min_memory(self, mb: int) -> "PloiDoPlanFinder":
+    def min_memory(self, mb: int) -> PloiDoPlanFinder:
         self._min_memory = mb
         return self
 
-    def max_memory(self, mb: int) -> "PloiDoPlanFinder":
+    def max_memory(self, mb: int) -> PloiDoPlanFinder:
         self._max_memory = mb
         return self
 
-    def max_price(self, usd_per_month: float) -> "PloiDoPlanFinder":
+    def max_price(self, usd_per_month: float) -> PloiDoPlanFinder:
         self._max_price = usd_per_month
         return self
 
-    def sort_by(self, key: str) -> "PloiDoPlanFinder":
+    def sort_by(self, key: str) -> PloiDoPlanFinder:
         if key not in self.SORT_KEYS:
             raise PlanFinderError(f"sort_by must be one of {', '.join(self.SORT_KEYS)}")
         self._sort = key
         return self
 
     # ------------------------------------------------------------ fetching
-    def fetch(self, progress: Progress | None = None) -> "PloiDoPlanFinder":
+    def fetch(self, progress: Progress | None = None) -> PloiDoPlanFinder:
         if not self._ploi_token or not self._do_token:
             raise PlanFinderError("Both a Ploi and a DigitalOcean API token are required.")
         progress = progress or Progress.off()
@@ -194,7 +204,7 @@ class PloiDoPlanFinder:
             regions = self._do_regions(do)
         return self.load(providers, sizes, regions)
 
-    def load(self, providers: list[dict], sizes: list[dict], regions: dict[str, dict]) -> "PloiDoPlanFinder":
+    def load(self, providers: list[dict], sizes: list[dict], regions: dict[str, dict]) -> PloiDoPlanFinder:
         """Build results from raw API data (handy for tests or cached responses)."""
         self._results = [opt for prov in providers for opt in self._combine(prov, sizes, regions)]
         key = self.SORT_KEYS[self._sort]
@@ -232,8 +242,10 @@ class PloiDoPlanFinder:
             s.get("available", False)
             and s["slug"] in ploi_plans
             and (not self._plan_filter or self._plan_filter in s["slug"])
-            and cpu >= self._min_vcpus and (not self._max_vcpus or cpu <= self._max_vcpus)
-            and mem >= self._min_memory and (not self._max_memory or mem <= self._max_memory)
+            and cpu >= self._min_vcpus
+            and (not self._max_vcpus or cpu <= self._max_vcpus)
+            and mem >= self._min_memory
+            and (not self._max_memory or mem <= self._max_memory)
             and (not self._max_price or price <= self._max_price)
         )
 
@@ -256,19 +268,21 @@ class PloiDoPlanFinder:
             for reg in s.get("regions", []):
                 if not self._region_passes(reg, pregions, regions):
                     continue
-                out.append(PlanOption(
-                    ploi_credential=prov.get("label") or prov.get("name") or "",
-                    ploi_credential_id=prov.get("id"),
-                    region=reg,
-                    region_name=pregions[reg].get("name") or regions.get(reg, {}).get("name", reg),
-                    plan=s["slug"],
-                    vcpus=s.get("vcpus", 0),
-                    memory_mb=s.get("memory", 0),
-                    disk_gb=s.get("disk", 0),
-                    transfer_tb=s.get("transfer", 0),
-                    price_monthly=s.get("price_monthly") or 0,
-                    description=s.get("description", ""),
-                ))
+                out.append(
+                    PlanOption(
+                        ploi_credential=prov.get("label") or prov.get("name") or "",
+                        ploi_credential_id=prov.get("id"),
+                        region=reg,
+                        region_name=pregions[reg].get("name") or regions.get(reg, {}).get("name", reg),
+                        plan=s["slug"],
+                        vcpus=s.get("vcpus", 0),
+                        memory_mb=s.get("memory", 0),
+                        disk_gb=s.get("disk", 0),
+                        transfer_tb=s.get("transfer", 0),
+                        price_monthly=s.get("price_monthly") or 0,
+                        description=s.get("description", ""),
+                    )
+                )
         return out
 
     # ------------------------------------------------------------ results
@@ -288,7 +302,7 @@ class PloiDoPlanFinder:
             return "No plan/region combinations match your filters.\n"
         return getattr(self, f"_render_{fmt}")()
 
-    def save(self, path: str, fmt: str = "table") -> "PloiDoPlanFinder":
+    def save(self, path: str, fmt: str = "table") -> PloiDoPlanFinder:
         with open(path, "w", newline="") as f:
             f.write(self.render(fmt))
         return self
@@ -306,20 +320,30 @@ class PloiDoPlanFinder:
     def _render_markdown(self) -> str:
         lines = []
         for region, opts in self.by_region().items():
-            lines += [f"## {region} ({opts[0].region_name})", "",
-                      "| Plan | vCPU | RAM | Disk | $/mo | Type |", "|---|---|---|---|---|---|"]
-            lines += [f"| {o.plan} | {o.vcpus} | {o.memory_label} | {o.disk_gb}GB | {o.price_monthly:.2f} | {o.description} |"
-                      for o in opts]
+            lines += [
+                f"## {region} ({opts[0].region_name})",
+                "",
+                "| Plan | vCPU | RAM | Disk | $/mo | Type |",
+                "|---|---|---|---|---|---|",
+            ]
+            lines += [
+                f"| {o.plan} | {o.vcpus} | {o.memory_label} | {o.disk_gb}GB | {o.price_monthly:.2f} | {o.description} |"
+                for o in opts
+            ]
             lines.append("")
         return "\n".join(lines) + "\n"
 
     def _render_table(self) -> str:
         lines = []
         for region, opts in self.by_region().items():
-            lines += [f"== {region} ({opts[0].region_name}) ==",
-                      f"{'Plan':<28}{'vCPU':>5}{'RAM':>9}{'Disk':>8}{'$/mo':>10}  Type"]
-            lines += [f"{o.plan:<28}{o.vcpus:>5}{o.memory_label:>9}{str(o.disk_gb) + 'GB':>8}{o.price_monthly:>10.2f}  {o.description}"
-                      for o in opts]
+            lines += [
+                f"== {region} ({opts[0].region_name}) ==",
+                f"{'Plan':<28}{'vCPU':>5}{'RAM':>9}{'Disk':>8}{'$/mo':>10}  Type",
+            ]
+            lines += [
+                f"{o.plan:<28}{o.vcpus:>5}{o.memory_label:>9}{str(o.disk_gb) + 'GB':>8}{o.price_monthly:>10.2f}  {o.description}"
+                for o in opts
+            ]
             lines.append("")
         return "\n".join(lines) + "\n"
 
@@ -328,25 +352,25 @@ class Config:
     """Reads settings from defaults, a .env file, the environment, and CLI flags."""
 
     SETTINGS = {
-        "PLOI_API_TOKEN":     ("", str, "Ploi API token (read access is enough)"),
-        "DO_API_TOKEN":       ("", str, "DigitalOcean API token (read scope is enough)"),
-        "PLOI_API_URL":       ("https://ploi.io/api", str, "Ploi API base URL"),
-        "DO_API_URL":         ("https://api.digitalocean.com/v2", str, "DigitalOcean API base URL"),
-        "PLOI_PROVIDER":      ("digitalocean", str, "Match Ploi providers whose name contains this text"),
+        "PLOI_API_TOKEN": ("", str, "Ploi API token (read access is enough)"),
+        "DO_API_TOKEN": ("", str, "DigitalOcean API token (read scope is enough)"),
+        "PLOI_API_URL": ("https://ploi.io/api", str, "Ploi API base URL"),
+        "DO_API_URL": ("https://api.digitalocean.com/v2", str, "DigitalOcean API base URL"),
+        "PLOI_PROVIDER": ("digitalocean", str, "Match Ploi providers whose name contains this text"),
         "PLOI_CREDENTIAL_ID": ("", str, "Only use this Ploi credential id (blank = all matching)"),
-        "REGIONS":            ("", str, "Comma-separated region slugs to include, e.g. nyc3,atl1"),
-        "EXCLUDE_REGIONS":    ("", str, "Comma-separated region slugs to skip"),
-        "PLAN_FILTER":        ("", str, "Only plans whose slug contains this text, e.g. -intel"),
-        "MIN_VCPUS":          (0, int, "Minimum vCPUs"),
-        "MAX_VCPUS":          (0, int, "Maximum vCPUs (0 = no limit)"),
-        "MIN_MEMORY_MB":      (0, int, "Minimum RAM in MB"),
-        "MAX_MEMORY_MB":      (0, int, "Maximum RAM in MB (0 = no limit)"),
-        "MAX_PRICE":          (0.0, float, "Maximum monthly price in USD (0 = no limit)"),
-        "SORT_BY":            ("price", str, "price, memory, vcpus or plan"),
-        "OUTPUT_FORMAT":      ("table", str, "table, markdown, csv or json"),
-        "OUTPUT_FILE":        ("", str, "Write output to this file instead of the screen"),
-        "TIMEOUT":            (30, int, "HTTP timeout in seconds"),
-        "ENV_FILE":           (".env", str, "Path to a .env file to load"),
+        "REGIONS": ("", str, "Comma-separated region slugs to include, e.g. nyc3,atl1"),
+        "EXCLUDE_REGIONS": ("", str, "Comma-separated region slugs to skip"),
+        "PLAN_FILTER": ("", str, "Only plans whose slug contains this text, e.g. -intel"),
+        "MIN_VCPUS": (0, int, "Minimum vCPUs"),
+        "MAX_VCPUS": (0, int, "Maximum vCPUs (0 = no limit)"),
+        "MIN_MEMORY_MB": (0, int, "Minimum RAM in MB"),
+        "MAX_MEMORY_MB": (0, int, "Maximum RAM in MB (0 = no limit)"),
+        "MAX_PRICE": (0.0, float, "Maximum monthly price in USD (0 = no limit)"),
+        "SORT_BY": ("price", str, "price, memory, vcpus or plan"),
+        "OUTPUT_FORMAT": ("table", str, "table, markdown, csv or json"),
+        "OUTPUT_FILE": ("", str, "Write output to this file instead of the screen"),
+        "TIMEOUT": (30, int, "HTTP timeout in seconds"),
+        "ENV_FILE": (".env", str, "Path to a .env file to load"),
     }
 
     def __init__(self, values: dict):
@@ -380,11 +404,19 @@ class Config:
         return values
 
     @classmethod
-    def from_sources(cls, argv: list[str] | None = None) -> "Config":
-        parser = argparse.ArgumentParser(prog="workbench plans", description="List DigitalOcean plans you can create per region through Ploi.")
+    def from_sources(cls, argv: list[str] | None = None) -> Config:
+        parser = argparse.ArgumentParser(
+            prog="workbench plans",
+            description="List DigitalOcean plans you can create per region through Ploi.",
+        )
         for name, (default, typ, help_) in cls.SETTINGS.items():
-            parser.add_argument("--" + name.lower().replace("_", "-"), dest=name, type=typ, default=None,
-                                help=f"{help_} [env {name}, default {default!r}]")
+            parser.add_argument(
+                "--" + name.lower().replace("_", "-"),
+                dest=name,
+                type=typ,
+                default=None,
+                help=f"{help_} [env {name}, default {default!r}]",
+            )
         args = vars(parser.parse_args(argv))
         env_file = cls.read_env_file(args["ENV_FILE"] or os.environ.get("ENV_FILE") or ".env")
 
@@ -394,7 +426,7 @@ class Config:
             try:
                 values[name] = default if raw in (None, "") else typ(raw)
             except ValueError:
-                raise PlanFinderError(f"{name} must be a {typ.__name__}, got {raw!r}")
+                raise PlanFinderError(f"{name} must be a {typ.__name__}, got {raw!r}") from None
         return cls(values)
 
     def build_finder(self) -> PloiDoPlanFinder:
@@ -408,8 +440,10 @@ class Config:
             .in_regions(*self.list("REGIONS"))
             .excluding_regions(*self.list("EXCLUDE_REGIONS"))
             .plans_matching(self["PLAN_FILTER"])
-            .min_vcpus(self["MIN_VCPUS"]).max_vcpus(self["MAX_VCPUS"])
-            .min_memory(self["MIN_MEMORY_MB"]).max_memory(self["MAX_MEMORY_MB"])
+            .min_vcpus(self["MIN_VCPUS"])
+            .max_vcpus(self["MAX_VCPUS"])
+            .min_memory(self["MIN_MEMORY_MB"])
+            .max_memory(self["MAX_MEMORY_MB"])
             .max_price(self["MAX_PRICE"])
             .sort_by(self["SORT_BY"])
         )
@@ -431,4 +465,3 @@ def main(argv: list[str] | None = None) -> int:
     except PlanFinderError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-

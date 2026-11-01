@@ -38,7 +38,7 @@ make py-test    # PYTHONPATH=src/python/src python3 -m unittest discover -s src/
 ```
 
 Both skip with a note when Python 3.12+ is missing, so `make ci` still runs everywhere. Ruff settings
-are in `src/python/pyproject.toml`.
+are in `src/python/pyproject.toml`; CI installs ruff (pinned in `.github/workflows/ci.yml`) so the style check always runs there.
 
 ## Adding a command
 

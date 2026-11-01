@@ -5,7 +5,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 
 from vps_server_workbench import cli
-from vps_server_workbench.plan_finder import Config, PlanFinderError, PloiDoPlanFinder
+from vps_server_workbench.plan_finder import ApiClient, Config, PlanFinderError, PloiDoPlanFinder
 
 PROVIDERS = [
     {
@@ -19,12 +19,39 @@ PROVIDERS = [
     }
 ]
 SIZES = [
-    {"slug": "s-1vcpu-1gb", "available": True, "vcpus": 1, "memory": 1024, "disk": 25, "transfer": 1,
-     "price_monthly": 6, "description": "Basic", "regions": ["nyc3", "atl1", "sfo3"]},
-    {"slug": "s-2vcpu-4gb", "available": True, "vcpus": 2, "memory": 4096, "disk": 80, "transfer": 4,
-     "price_monthly": 24, "description": "Basic", "regions": ["nyc3"]},
-    {"slug": "c-4", "available": True, "vcpus": 4, "memory": 8192, "disk": 50, "transfer": 5,
-     "price_monthly": 84, "description": "CPU", "regions": ["nyc3"]},
+    {
+        "slug": "s-1vcpu-1gb",
+        "available": True,
+        "vcpus": 1,
+        "memory": 1024,
+        "disk": 25,
+        "transfer": 1,
+        "price_monthly": 6,
+        "description": "Basic",
+        "regions": ["nyc3", "atl1", "sfo3"],
+    },
+    {
+        "slug": "s-2vcpu-4gb",
+        "available": True,
+        "vcpus": 2,
+        "memory": 4096,
+        "disk": 80,
+        "transfer": 4,
+        "price_monthly": 24,
+        "description": "Basic",
+        "regions": ["nyc3"],
+    },
+    {
+        "slug": "c-4",
+        "available": True,
+        "vcpus": 4,
+        "memory": 8192,
+        "disk": 50,
+        "transfer": 5,
+        "price_monthly": 84,
+        "description": "CPU",
+        "regions": ["nyc3"],
+    },
 ]
 REGIONS = {"nyc3": {"slug": "nyc3", "name": "New York 3"}, "atl1": {"slug": "atl1", "name": "Atlanta 1"}}
 
@@ -32,8 +59,10 @@ REGIONS = {"nyc3": {"slug": "nyc3", "name": "New York 3"}, "atl1": {"slug": "atl
 class PlanFinderTest(unittest.TestCase):
     def test_only_pairs_both_apis_agree_on(self):
         r = PloiDoPlanFinder().load(PROVIDERS, SIZES, REGIONS).results()
-        self.assertEqual({(o.region, o.plan) for o in r},
-                         {("nyc3", "s-1vcpu-1gb"), ("atl1", "s-1vcpu-1gb"), ("nyc3", "s-2vcpu-4gb")})
+        self.assertEqual(
+            {(o.region, o.plan) for o in r},
+            {("nyc3", "s-1vcpu-1gb"), ("atl1", "s-1vcpu-1gb"), ("nyc3", "s-2vcpu-4gb")},
+        )
 
     def test_filters_and_render(self):
         f = PloiDoPlanFinder().in_regions("nyc3").min_memory(2048).load(PROVIDERS, SIZES, REGIONS)
@@ -57,6 +86,14 @@ class PlanFinderTest(unittest.TestCase):
             self.assertEqual(c["SORT_BY"], "memory")
         finally:
             os.unlink(fh.name)
+
+    def test_api_client_refuses_non_https_before_sending_the_token(self):
+        # raised before any request is built, so nothing touches the network
+        tok = "t-" + os.urandom(4).hex()
+        with self.assertRaisesRegex(PlanFinderError, "non-HTTPS"):
+            ApiClient("https://api.example.test/v1", tok).get("http://api.example.test/v1/sizes?page=2")
+        with self.assertRaisesRegex(PlanFinderError, "non-HTTPS"):
+            ApiClient("http://api.example.test", tok).get("sizes")
 
     def test_cli_routes_plans_without_tokens_to_an_error(self):
         env = {k: os.environ.pop(k) for k in ("PLOI_API_TOKEN", "DO_API_TOKEN") if k in os.environ}
