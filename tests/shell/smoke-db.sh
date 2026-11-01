@@ -156,4 +156,27 @@ L mm_load_target "$T/tgt.env" 2>"$T/e" && fail "644 target file accepted" || gre
 chmod 600 "$T/tgt.env"; out="$(TGT="$T/tgt.env" L eval 'mm_load_target "$TGT"; echo "$TARGET_HOST $TARGET_PORT $TARGET_SSLMODE ${TARGET_PASSWORD:0:4}"' 2>&1 || true)"
 [ "$out" = 'db-x.example.com 25060 require p$(t' ] && [ ! -e "$T/pwned" ] && [ ! -e "$T/pwned2" ] \
   && ok "mm_load_target: 600 only, strict KEY=VALUE (no shell execution), managed-DB defaults" || fail "mm_load_target: $out"
+# --- log-errors (read-only Postgres log summary; docs/plan/postgres-log-quoting-errors.md) ------
+pw="$(gen 16)"
+{ echo "2026-10-31 11:47:46.403 UTC [1] ERROR:  syntax error at or near \"\\\" at character 53"
+  printf '%s\n' "2026-10-31 11:47:46.403 UTC [1] STATEMENT:  select datname from pg_database where datname<>\\x27template1\\x27"
+  echo "2026-10-31 11:47:47.100 UTC [2] ERROR:  syntax error at or near \"\\\" at character 91"
+  printf '%s\n' "2026-10-31 11:47:47.100 UTC [2] STATEMENT:  select 1 where 'a'=\\x27b\\x27"
+  echo "2026-10-31 11:50:00.000 UTC [3] LOG:  checkpoint complete"
+  echo "2026-10-31 12:00:00.000 UTC [4] ERROR:  syntax error at or near \"PASSWORD\" at character 9"
+  echo "2026-10-31 12:00:00.000 UTC [4] STATEMENT:  alter role x PASSWORD '$pw' valid"
+  echo "2026-10-31 12:01:00.000 UTC [5] FATAL:  password authentication failed for user \"app\""
+  echo "2026-10-31 12:01:00.000 UTC [5] DETAIL:  Connection matched file \"/etc/hba\" line 3 from 10.1.2.3"; } > "$T/pglog"
+if L log_errors_summary t < "$T/pglog" > "$T/le.out"; then fail "log-errors: errors found but exit 0"; fi
+grep -q '4 error(s) in 3 group(s)' "$T/le.out" && grep -q '2x  shell-quoting' "$T/le.out" && grep -q 'character N' "$T/le.out" \
+  && grep -q 'auth' "$T/le.out" && grep -q '<ip>' "$T/le.out" && ! grep -q "$pw" "$T/le.out" && ! grep -q template1 "$T/le.out" \
+  && ok "log-errors groups, classifies \\x27 as shell-quoting, masks literals/passwords/IPs, exit 1" || { cat "$T/le.out"; fail "log-errors"; }
+printf '2026-10-31 11:50:00.000 UTC [3] LOG:  checkpoint complete\n' | L log_errors_summary t | grep -q 'no errors' && ok "log-errors: clean log -> exit 0" || fail "log-errors clean"
+[ "$(L log_errors_since 7d)" = 168h ] && [ -z "$(L log_errors_since all)" ] && ! L log_errors_since 'x;y' 2>/dev/null \
+  && ok "log-errors --since: 7d -> 168h, all, junk refused" || fail "log-errors since"
+out="$(L eval 'trap - ERR; D_WARN=0; ENABLE_POSTGRES=1; cmd_log_errors() { log_errors_summary postgres < "'"$T/pglog"'"; }; doctor_pg_log; echo "warn=$D_WARN"')"
+printf '%s' "$out" | grep -q 'warn  postgres log: 4 error(s) in 3 group(s)' && printf '%s' "$out" | grep -q 'warn=1' \
+  && ok "doctor warns (not fails) on Postgres log errors in the last 24 h" || fail "doctor_pg_log: $out"
+# regression: no SQL in the toolkit may carry a literal \x27 (the 2026-10-31 log errors); redact() is perl, not SQL
+if rg -n '(=|<>|\(|,)\s*\\x27[A-Za-z0-9_%]' src/shell bin 2>/dev/null | grep -v 'redact()' >&2; then fail "\\x27 in SQL"; else ok "no literal \\x27 in toolkit SQL"; fi
 echo "smoke-db: all $pass checks passed"

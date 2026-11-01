@@ -273,6 +273,7 @@ Backups and recovery (docs/backups-and-recovery.md)
 
 Checks
   status | verify | doctor [--alert] | logs [service] | env [engine]
+  log-errors [--since 24h|7d|all] [--service postgres|pgbouncer]   read-only: grouped, masked ERROR/FATAL summary (exit 1 = errors)
   rebind-ip [--dry-run]       after a restore to a droplet with another private IP: bind the stack to PRIVATE_IP and start
 
 Monitoring, TLS and migrations (docs/tools/monitor.md, docs/recipes/)
@@ -1296,6 +1297,87 @@ cmd_cron_install() {
 }
 cmd_cron_remove() { need_root; rm -f "$CRON_FILE" "$LOGROTATE_FILE"; echo "removed $CRON_FILE"; }
 cmd_logs() { need_stack; dc logs -f --tail=200 "$@"; }
+
+# log-errors: read-only summary of ERROR/FATAL/PANIC lines in the Postgres (or PgBouncer) log, grouped,
+# classified and masked (string literals, passwords, IPs). Uses `docker logs`, so it needs no stack.env
+# and writes nothing. Exit 0 = none in the window, 1 = errors found (cron/monitor friendly).
+# Background: docs/plan/postgres-log-quoting-errors.md
+log_errors_since() { # 30m|24h|7d|all|YYYY-MM-DD -> a docker --since value ("" = all)
+  case "$1" in
+    all) echo "" ;;
+    *[0-9]d) [[ "$1" =~ ^[0-9]+d$ ]] || return 1; echo "$(( ${1%d} * 24 ))h" ;;
+    *) [[ "$1" =~ ^([0-9]+[smh]|[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9:]+Z?)?)$ ]] || return 1; echo "$1" ;;
+  esac
+}
+log_errors_summary() { # $1 = label; log lines on stdin
+  awk -v label="$1" '
+    function mask(s) {
+      if (s ~ /[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd].*(\047|\\x27|SCRAM|md5)/) { sub(/[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd].*/, "password <masked>", s) }
+      gsub(/\\x27[^\\]*\\x27/, "\\x27?\\x27", s)
+      gsub(/\047[^\047]*\047/, "\047?\047", s)
+      gsub(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/, "<ip>", s)
+      s = longs(s, "[A-Za-z0-9+/=_-]+", 32, "<long>")
+      return length(s) > 160 ? substr(s, 1, 157) "..." : s
+    }
+    function longs(s, re, min, rep,   out, t) { # replace runs of re that are >= min chars (no {n,} in mawk)
+      out = ""
+      while (match(s, re)) { t = substr(s, RSTART, RLENGTH); out = out substr(s, 1, RSTART - 1) (RLENGTH >= min ? rep : t); s = substr(s, RSTART + RLENGTH) }
+      return out s
+    }
+    function classify(m, st) {
+      if (st ~ /\\x27|\\047/) return "shell-quoting"
+      if (m ~ /password authentication failed|no pg_hba.conf entry|SSL off|certificate/) return "auth"
+      if (m ~ /permission denied|must be owner|must be superuser/) return "privilege"
+      if (m ~ /does not exist/) return "missing-object"
+      if (m ~ /syntax error|invalid input syntax/) return "sql-syntax"
+      if (m ~ /deadlock|could not serialize|canceling statement|lock timeout/) return "concurrency"
+      if (m ~ /out of memory|No space left|could not write|too many connections|remaining connection slots/) return "resource"
+      return "other"
+    }
+    function stamp(line,   t) { t = line; if (match(t, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][ T][0-9][0-9]:[0-9][0-9]:[0-9][0-9]/)) return substr(t, RSTART, RLENGTH); return "?" }
+    / (ERROR|FATAL|PANIC): / {
+      m = $0; sub(/^.* (ERROR|FATAL|PANIC): +/, "", m); raw = m; lvl = $0; sub(/: .*/, "", lvl); sub(/.* /, "", lvl)
+      gsub(/character [0-9]+/, "character N", m); m = longs(m, "\"[^\"]*\"", 26, "\"...\""); m = lvl ": " mask(m)
+      cur = m; ts = stamp($0); total++
+      if (!(m in cnt)) { order[++n] = m; first[m] = ts; cls[m] = classify(raw, "") }
+      cnt[m]++; last[m] = ts; pend = 1; next
+    }
+    pend && /(STATEMENT|DETAIL): / {
+      s = $0; sub(/^.* (STATEMENT|DETAIL): +/, "", s)
+      if (!(cur in stmt) || stmt[cur] == "") stmt[cur] = mask(s)
+      if (s ~ /\\x27|\\047/) quot[cur] = 1
+      next
+    }
+    { pend = 0 }
+    END {
+      if (!total) { printf "log-errors: %s: no errors\n", label; exit 0 }
+      printf "log-errors: %s: %d error(s) in %d group(s)\n", label, total, n
+      for (i = 1; i <= n; i++) {
+        m = order[i]; c = quot[m] ? "shell-quoting" : cls[m]
+        printf "  %5dx  %-14s %s\n", cnt[m], c, m
+        printf "          first %s, last %s (log time, UTC)\n", first[m], last[m]
+        if (stmt[m] != "") printf "          e.g. %s\n", stmt[m]
+        if (c == "shell-quoting") print "          why: a client sent \\x27 literally (shell quoting in an ad-hoc psql/ssh command); the statement was rejected, nothing changed. Use psql variables or a quoted heredoc (docs/plan/postgres-log-quoting-errors.md)"
+        else if (c == "auth") print "          why: a login was refused (wrong password, pg_hba rule or TLS); check the client env and pg_hba"
+        else if (c == "privilege") print "          why: a role lacks a privilege; check grants (doctor, list-users)"
+        else if (c == "missing-object") print "          why: the client names a database/table/role that does not exist (migrations, wrong env?)"
+        else if (c == "sql-syntax") print "          why: the client sent invalid SQL; find the caller by the statement text"
+      }
+      exit 1
+    }'
+}
+cmd_log_errors() { # [--since 24h|7d|all|YYYY-MM-DD] [--service postgres|pgbouncer]
+  local since=24h svc=postgres a ds cid
+  while [ $# -gt 0 ]; do case "$1" in
+    --since) since="${2:-}"; shift ;; --service) svc="${2:-}"; shift ;;
+    *) die "unknown log-errors option: $1 (log-errors [--since 24h|7d|all] [--service postgres|pgbouncer])" ;; esac; shift; done
+  case "$svc" in postgres|pgbouncer) ;; *) die "log-errors: --service postgres or pgbouncer" ;; esac
+  ds="$(log_errors_since "$since")" || die "log-errors: --since takes 30m, 24h, 7d, all or YYYY-MM-DD"
+  cid="$(docker ps -aq --filter "label=com.docker.compose.service=$svc" --filter "label=com.docker.compose.project.working_dir=$DB_DIR" | head -n1)"
+  [ -n "$cid" ] || die "log-errors: no $svc container for the stack in $DB_DIR"
+  a=(--timestamps); [ -z "$ds" ] || a+=(--since "$ds")
+  docker logs "${a[@]}" "$cid" 2>&1 | log_errors_summary "$svc, since $since"
+}
 
 # env-init: the interactive setup wizard (or flags). Writes config KEY=VALUE lines only;
 # nothing on the server changes until env-apply / upgrade. Exit 2 = a value is missing.
@@ -2709,6 +2791,16 @@ doctor_postgres() {
   if [ -n "$(docker image ls -q "$PG_IMAGE_LEGACY" 2>/dev/null)" ] && [ "$PG_IMAGE_LEGACY" != "$PG_IMAGE" ]; then d_warn "old image tag $PG_IMAGE_LEGACY still present (upgrade retires it)"; fi
   doctor_pg_users
 }
+doctor_pg_log() { # Postgres ERROR/FATAL lines in the last 24 h: a warning with the first group (details: log-errors)
+  [ "$ENABLE_POSTGRES" = 1 ] || return 0
+  local out rc
+  out="$(cmd_log_errors --since 24h 2>&1)" && rc=0 || rc=$?
+  case "$rc" in
+    0) d_ok "postgres log: no ERROR/FATAL in the last 24 h" ;;
+    1) d_warn "postgres log: $(printf '%s\n' "$out" | sed -n '1s/^log-errors: [^:]*: //p') - $(printf '%s\n' "$out" | sed -n '2s/^ *//p' | tr -s ' ') (run: log-errors --since 24h)" ;;
+    *) d_warn "postgres log: could not read it ($(printf '%s\n' "$out" | tail -n1))" ;;
+  esac
+}
 doctor_pg_users() { # every login vs the privilege model (docs/reference/privileges.md)
   local x
   x="$(pg_val postgres "select string_agg(r.rolname || '->' || d.datname, ' ') from pg_roles r cross join pg_database d where r.rolcanlogin and not r.rolsuper and not d.datistemplate and d.datname <> 'postgres' and d.datdba = r.oid and r.rolname <> '$PG_USER' and d.datname not like '%\_t\_%' and d.datname not like '%\_\_trash\_%'")"
@@ -2780,7 +2872,7 @@ cmd_doctor() { # [--alert]
   D_BAD=0 D_WARN=0
   [ -f "$DB_DIR/.env" ] && { cd "$DB_DIR"; load_env; }
   # a check that errors out must not stop the others: run each section on its own
-  local s; for s in doctor_exposure doctor_network doctor_host doctor_postgres "doctor_mysql mysql" "doctor_mysql mariadb" doctor_backups; do
+  local s; for s in doctor_exposure doctor_network doctor_host doctor_postgres doctor_pg_log "doctor_mysql mysql" "doctor_mysql mariadb" doctor_backups; do
     $s || d_bad "check '$s' could not finish (exit $?)"
   done
   echo
@@ -3249,6 +3341,7 @@ case "$CMD" in
   cron-install) cmd_cron_install ;;
   cron-remove)  cmd_cron_remove ;;
   logs)         cmd_logs "$@" ;;
+  log-errors)   cmd_log_errors "$@" || exit $? ;;   # errors found = exit 1, a result (no ERR trap line)
   monitor-user) cmd_monitor_user "$@" ;;
   metrics)      cmd_metrics ;;
   tls-ca)       cmd_tls_ca "$@" ;;
