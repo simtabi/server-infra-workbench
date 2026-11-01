@@ -69,6 +69,8 @@ $action->confirm()->wait();      // send, then poll until done
 ```
 
 New project end to end: **[Getting started](docs/getting-started.md)** (about 10 minutes).
+The full Ploi + DigitalOcean walkthrough (DNS, certificates, daemons, troubleshooting) is
+**[Ploi + DigitalOcean setup](docs/guides/ploi-digitalocean-setup.md)**.
 
 ## Why
 
@@ -114,6 +116,7 @@ Full map and conventions: [docs/structure.md](docs/structure.md).
 Start at the [docs index](docs/README.md) (diagrams and command reference included).
 
 **Guides:** [Installation](docs/installation.md) · [Getting started](docs/getting-started.md) ·
+[Ploi + DigitalOcean setup](docs/guides/ploi-digitalocean-setup.md) (end to end, with troubleshooting) ·
 [Configuration](docs/configuration.md) · [Architecture](docs/architecture.md) ·
 [Repository structure](docs/structure.md) · [Security and operations](docs/security.md) ·
 [Troubleshooting](docs/troubleshooting.md) · [Status](docs/status.md) · [Releasing](docs/release.md)

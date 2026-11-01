@@ -9,6 +9,7 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 |---|---|
 | [Installation](installation.md) | setting up a workstation: requirements, Composer, credentials check |
 | [Getting started](getting-started.md) | starting a new project: two droplets to a deployed app |
+| [Ploi + DigitalOcean setup](guides/ploi-digitalocean-setup.md) | the whole flow end to end: droplets, VPC, firewall, Ploi site settings, siwo DB server, daemons, Cloudflare DNS and wildcard certificates, real troubleshooting |
 | [Configure a setup](configure.md) | picking a profile and generating a client's config with `bin/siwo configure` |
 | [Configuration](configuration.md) | config files, precedence, platform credentials, what is written where |
 | [Architecture](architecture.md) | droplets, VPC, `eth0` vs `eth1`, ports, where files live |
