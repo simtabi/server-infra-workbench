@@ -53,10 +53,15 @@ Confirm the live ports on the server with `sudo docker ps --format '{{.Names}}\t
 
 ## 1. Mac GUI tools over SSH
 
-Credentials: Postgres user, database and password come from `sudo ./docker-db-server-manager.sh env`.
-MySQL and MariaDB root passwords live in `/opt/db/.env` (`sudo grep ROOT_PASSWORD /opt/db/.env`); better,
-create a per-app or read-only user (`create-db`, `create-user ... --readonly`, see
-[db-server.md](../tools/db-server-manager.md#create-db-name-engine)) and use that.
+Step-by-step for every client (TablePlus, DBeaver, DataGrip/PhpStorm, psql/mysql): [Connecting local DB
+clients](../databases/connecting-local-clients.md).
+
+Credentials: the app login comes from `sudo ./docker-db-server-manager.sh env`. Each engine's master login
+(`vsw_admin` on Postgres, `siwo_admin` on MySQL/MariaDB, manager 1.6.0+) goes to a 600 file with
+`admin-creds <engine> --out FILE`; `root` works only on the server itself. For everyday work prefer a per-app
+or read-only user (`create-db`, `create-user ... --readonly`, see
+[db-server.md](../tools/db-server-manager.md#create-db-name-engine)), and see
+[users and privileges](../databases/users-and-privileges.md).
 
 ### TablePlus (built-in SSH)
 
@@ -66,7 +71,7 @@ New connection, pick the engine, tick **Over SSH**:
 |---|---|---|---|
 | Host | `10.0.0.5` | `10.0.0.5` | `10.0.0.5` |
 | Port | `5432` | `3306` | `3307` |
-| User / Database | from `env` | root or `create-db` user | root or `create-db` user |
+| User / Database | from `env` | `siwo_admin` or `create-db` user | `siwo_admin` or `create-db` user |
 | SSL mode | Disable (traffic is inside SSH) | Disable | Disable |
 | Over SSH: server | `203.0.113.10`, port `22` | same | same |
 | Over SSH: user | `ploi` | same | same |
@@ -91,8 +96,8 @@ Then connect to `127.0.0.1`:
 
 ```bash
 psql "host=127.0.0.1 port=15432 user=app dbname=app"
-mysql -h 127.0.0.1 -P 13306 -u root -p
-mariadb -h 127.0.0.1 -P 13307 -u root -p
+mysql -h 127.0.0.1 -P 13306 --protocol=TCP -u siwo_admin -p
+mariadb -h 127.0.0.1 -P 13307 --protocol=TCP -u siwo_admin -p
 ```
 
 `db-tunnel.sh` options: engines `postgres pgbouncer mysql mariadb adminer all`; `--background`; `--print`
@@ -123,8 +128,7 @@ Security model:
 Enable it (on the DB server):
 
 ```bash
-echo 'ENABLE_ADMINER=1' | sudo tee -a /etc/docker-db-server-manager.conf
-sudo /root/docker-db-server-manager.sh install     # keeps .env and data, adds the adminer container
+sudo /root/docker-db-server-manager.sh engines apply --set ENABLE_ADMINER=1   # only adds the adminer container
 sudo /root/docker-db-server-manager.sh doctor      # expect: adminer 8081: ok (127.0.0.1:8081, tunnel only)
 ```
 
@@ -137,7 +141,7 @@ ssh -N -L 8081:127.0.0.1:8081 ploi@203.0.113.10
 
 On the login screen choose the system and type the **Compose service name** as the server:
 `postgres` (PostgreSQL), `pgbouncer` (PostgreSQL, via the pooler), `mysql` (MySQL), `mariadb:3306` (MariaDB;
-inside Docker it listens on 3306). Disable it: set `ENABLE_ADMINER=0`, then `install` again.
+inside Docker it listens on 3306). Disable it: `engines apply --set ENABLE_ADMINER=0`.
 
 ## 3. Web server to DB server
 

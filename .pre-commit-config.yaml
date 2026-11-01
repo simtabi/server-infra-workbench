@@ -25,6 +25,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: no-env-files
+        name: no .env / credentials / key file staged (names only)
+        entry: python3 tests/security/no-env-files.py --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
       - id: no-hardcoded-secrets
         name: no hardcoded passwords/secrets (staged files)
         entry: python3 tests/security/no-hardcoded-secrets.py --staged
