@@ -9,6 +9,6 @@ real; copy the folder to `local/<yourproject>/` (git ignores it) and edit.
 |---|---|
 | [`example.conf`](example.conf) | `examples/run.sh generic-laravel`: the same settings through `configure --dry-run` |
 | [`db-server.conf`](db-server.conf) | `/etc/docker-db-server-manager.conf` (Postgres + PgBouncer only) |
-| [`ploi-deploy.settings.sh`](ploi-deploy.settings.sh) | the SETTINGS block for the deploy script |
+| [`ploi-deploy.settings.sh`](ploi-deploy.settings.sh) | the SETTINGS block for the deploy script: `examples/_shared/ploi-script.sh <file>` prints Ploi's deploy script, `--post <file>` its post-deploy script (zero-downtime: `queue:restart` and the health check run after the switch) |
 
 Step by step: [docs/getting-started.md](../../docs/getting-started.md).

@@ -16,6 +16,7 @@ sed -e 's/^PRESET="laravel"/PRESET="generic"/' -e 's/^PHP_MIN="8.3.0"/PHP_MIN=""
     -e 's/^FIRST_INSTALL_CMD=""/FIRST_INSTALL_CMD="echo installed-by-\\$ADMIN_EMAIL > first.txt"/' \
     -e 's/^ENV_DEFAULTS=""/ENV_DEFAULTS="APP_HOST=@SITE_DOMAIN@"/' \
     -e 's/^HEALTHCHECK_CMD=""/HEALTHCHECK_CMD="test -L .env"/' \
+    -e 's/^POST_DEPLOY_CMDS=""/POST_DEPLOY_CMDS="touch post.txt"/' \
     -e 's/^REQUIRED_VARS=""/REQUIRED_VARS="GREETING"/' "$D" > "$S"
 run() { SITE_ROOT="$T/site" SHARED="$T/shared" bash "$S" >"$T/log" 2>&1; }
 if run; then echo "FAIL: first run should stop for install.env"; exit 1; fi
@@ -28,4 +29,14 @@ grep -q "^APP_HOST=example.com$" "$T/shared/.env"
 [ "$(stat -c %a "$T/shared/.env" 2>/dev/null || stat -f %Lp "$T/shared/.env")" = 600 ]
 rm "$T/site/first.txt"; run || { cat "$T/log"; exit 1; }
 [ ! -e "$T/site/first.txt" ] || { echo "FAIL: first install ran twice"; exit 1; }
+[ -f "$T/site/post.txt" ] || { echo "FAIL: in-place deploy skipped POST_DEPLOY_CMDS"; exit 1; }
+# zero-downtime: Ploi fills {RELEASE} with a new release dir and makes it live only after the main script
+git clone -q "$T/origin.git" "$T/rel" 2>/dev/null
+sed -e "s|^RELEASE_DIR=.*|RELEASE_DIR=\"$T/rel\"|" "$S" > "$T/zdt.sh"
+SITE_ROOT="$T/site" SHARED="$T/shared" bash "$T/zdt.sh" >"$T/log" 2>&1 || { cat "$T/log"; exit 1; }
+{ [ ! -e "$T/rel/post.txt" ] && grep -q 'STAGE="post"' "$T/log"; } || { echo "FAIL: live steps ran before go-live"; cat "$T/log"; exit 1; }
+rm -f "$T/site/post.txt"
+sed -e 's/^STAGE="main"/STAGE="post"/' "$S" > "$T/post.sh"
+SITE_ROOT="$T/site" SHARED="$T/shared" bash "$T/post.sh" >"$T/log" 2>&1 || { cat "$T/log"; exit 1; }
+{ [ -f "$T/site/post.txt" ] && grep -q 'Post-deploy done' "$T/log"; } || { echo "FAIL: STAGE=post"; cat "$T/log"; exit 1; }
 echo "deploy sandbox ok"

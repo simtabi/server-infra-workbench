@@ -6,6 +6,12 @@ set -euo pipefail
 # Paste it into the site's deploy script in Ploi and edit the SETTINGS block.
 # Works for zero-downtime sites and for plain in-place sites (auto-detected).
 #
+# Zero-downtime sites: Ploi switches the site to the new release AFTER the main
+# deploy script ends. Everything that must see the live release (queue:restart,
+# POST_DEPLOY_CMDS, HEALTHCHECK_CMD) therefore runs from Ploi's post-deploy
+# script: paste this same script there with STAGE="post". In-place sites run
+# all of it in the main script.
+#
 # PRESET=laravel adds Laravel defaults (required .env keys, migrate, key:generate,
 # optimize, queue:restart). PRESET=generic does only what you configure.
 # Every project-specific step is an optional hook, empty by default.
@@ -23,6 +29,7 @@ set -euo pipefail
 # ---- SETTINGS ----------------------------------------------------------------
 SITE_DOMAIN="example.com"          # Ploi site domain (= folder in /home/ploi)
 PRESET="laravel"                   # laravel | generic
+STAGE="main"                       # main | post (zero-downtime: Ploi's post-deploy script)
 APP_ENV_NAME="production"          # APP_ENV written into a new .env (laravel)
 DEPLOY_BRANCH="main"
 APP_SUBDIR="."                     # app root inside the repo, e.g. "src"
@@ -62,6 +69,21 @@ case "$PRESET" in
     : "${MIGRATE_CMD:=php artisan migrate --force}" ;;
   generic) ;;
   *) stop "PRESET must be laravel or generic (got $PRESET)" ;;
+esac
+
+# Steps that need the live release: workers reload, hooks, health check.
+go_live_steps() {
+  if [ "$PRESET" = laravel ]; then php artisan queue:restart; fi   # daemons pick up the new code
+  hook "Post-deploy" "$POST_DEPLOY_CMDS"
+  hook "Health check" "$HEALTHCHECK_CMD"
+}
+case "${STAGE:=main}" in
+  main) ;;
+  post) # Ploi's post-deploy script on a zero-downtime site: the new release is live now
+    cd "$SITE_ROOT/$APP_SUBDIR" || stop "live app root $SITE_ROOT/$APP_SUBDIR not found"
+    say "Post-deploy for $SITE_DOMAIN ($PRESET) in $(pwd)"
+    go_live_steps; echo "Post-deploy done"; exit 0 ;;
+  *) stop "STAGE must be main or post (got $STAGE)" ;;
 esac
 
 # 0. Release directory: Ploi fills this in on zero-downtime sites ------------
@@ -175,13 +197,16 @@ else
 fi
 hook "Extra migrations" "$EXTRA_MIGRATE_CMDS"
 
-# 5. Caches, workers, hooks, health check -------------------------------------------
+# 5. Caches (built in the release before it goes live), then the live steps ------------
 if [ "$PRESET" = laravel ]; then
   php artisan storage:link --force >/dev/null 2>&1 || true
   php artisan optimize             # config, routes, views, events
-  php artisan queue:restart        # daemons pick up the new code
 fi
-hook "Post-deploy" "$POST_DEPLOY_CMDS"
-hook "Health check" "$HEALTHCHECK_CMD"
+if [ "$RELEASE_DIR" = "$SITE_ROOT" ]; then
+  go_live_steps                    # in place: this code is already live
+else
+  say "Zero-downtime: Ploi makes this release live after the script ends; queue:restart,"
+  say "POST_DEPLOY_CMDS and HEALTHCHECK_CMD run from the post-deploy script (this script with STAGE=\"post\")"
+fi
 
 echo "Application deployed"

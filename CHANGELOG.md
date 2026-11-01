@@ -23,6 +23,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     [naming](docs/reference/naming.md#frozen-identifiers). `# Managed by` headers get the new name on the
     next re-run.
 
+### Fixed (pre-release audit, 2026-11-01)
+
+- Deploy script on zero-downtime sites: `queue:restart`, `POST_DEPLOY_CMDS` and `HEALTHCHECK_CMD` ran before
+  Ploi made the release live, so workers restarted on the old code and the health check tested the old
+  release. The main script now builds the caches in the release and stops; the same script with
+  `STAGE="post"` in Ploi's post-deploy script runs the live steps (`examples/_shared/ploi-script.sh --post`).
+  In-place sites are unchanged.
+
 ### Added
 
 - Platform APIs (P3 provider audit): full REST coverage for five providers on the shared transport, each with a

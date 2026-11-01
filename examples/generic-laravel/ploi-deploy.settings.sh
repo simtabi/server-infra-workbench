@@ -2,6 +2,7 @@
 # SETTINGS block for a plain Laravel app at app.example.com (zero-downtime Ploi site).
 SITE_DOMAIN="app.example.com"
 PRESET="laravel"
+STAGE="main"                          # zero-downtime: paste again as the post-deploy script, STAGE="post"
 APP_ENV_NAME="production"
 DEPLOY_BRANCH="main"
 APP_SUBDIR="."

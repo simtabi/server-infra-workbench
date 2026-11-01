@@ -4,15 +4,16 @@
 #
 #   examples/_shared/ploi-script.sh examples/symfony/ploi-deploy.settings.sh > /tmp/deploy.txt
 #   examples/_shared/ploi-script.sh --check FILE    also `bash -n` the result and require each setting once
+#   examples/_shared/ploi-script.sh --post FILE     the post-deploy script of a zero-downtime site (STAGE="post")
 # Why: one maintained deploy script, one small settings file per app. Copying the whole script per app would
 # fork it; a fix in ploi-deploy.sh then reaches no app.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$ROOT/src/shell/deploy/ploi-deploy.sh"
-check=0
-[ "${1:-}" = --check ] && { check=1; shift; }
+check=0 post=0
+case "${1:-}" in --check) check=1; shift ;; --post) post=1; shift ;; esac
 settings="${1:-}"
-case "$settings" in ""|-h|--help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$settings" in ""|-h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 [ -f "$settings" ] || { echo "ploi-script: no $settings" >&2; exit 2; }
 grep -q '^# ---- SETTINGS ---' "$SCRIPT" || { echo "ploi-script: no SETTINGS marker in $SCRIPT" >&2; exit 1; }
 
@@ -20,7 +21,8 @@ assemble() { # the script up to the marker, the settings (minus the shellcheck l
   awk -v f="$settings" '
     /^# ---- SETTINGS ---/ { print; while ((getline l < f) > 0) if (l !~ /^# shellcheck /) print l; skip = 1; next }
     skip && /^# -{20,}$/ { skip = 0 }
-    !skip { print }' "$SCRIPT"
+    !skip { print }' "$SCRIPT" | if [ "$post" -eq 1 ]; then
+    awk '/^STAGE=/ { next } { print } /^# ---- SETTINGS ---/ { print "STAGE=\"post\"" }'; else cat; fi
 }
 
 if [ "$check" -eq 0 ]; then assemble; exit 0; fi
