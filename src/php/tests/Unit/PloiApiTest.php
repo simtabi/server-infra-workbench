@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Ploi\Ploi;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Ploi\Ploi;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 /** Ploi sites create/delete, deploy scripts and daemons. All mocked. */
 final class PloiApiTest extends TestCase
 {
-    private function server(): \Simtabi\VpsServerWorkbench\Ploi\ServerResource
+    private function server(): \Simtabi\ServerInfraWorkbench\Ploi\ServerResource
     {
-        return Ploi::make('ploi-token-abcdef', $this->options())->servers()->find(12);
+        return Ploi::make(self::fake('ploi'), $this->options())->servers()->find(12);
     }
 
     public function test_site_create_is_idempotent_and_validates(): void

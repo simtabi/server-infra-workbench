@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Ploi\Ploi;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Ploi\Ploi;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class PloiTest extends TestCase
 {
     private function ploi(): Ploi
     {
-        return Ploi::make('ploi-token-abcdef', $this->options());
+        return Ploi::make(self::fake('ploi'), $this->options());
     }
 
     public function test_fluent_server_sites_chain(): void

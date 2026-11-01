@@ -8,7 +8,9 @@ its `SETTINGS` block and paste it into the site's deploy script in Ploi.
   shared `storage/`, `key:generate`, `migrate --force`, `optimize`,
   `queue:restart`, `storage:link`). `PRESET=generic` runs only what you configure.
 - **Site type:** works on zero-downtime sites (`{RELEASE}`) and on plain in-place
-  sites; it detects which one it's on.
+  sites; it detects which one it's on. On a zero-downtime site, paste the same
+  script into Ploi's **post-deploy** script too, with `STAGE="post"`
+  ([why](#zero-downtime-sites)).
 - **Hooks:** every project-specific step is an optional hook, empty by default.
 
 Examples: [generic Laravel](../../examples/generic-laravel/ploi-deploy.settings.sh),
@@ -20,6 +22,7 @@ and a multi-tenant app with an admin install command (see [examples/](../../exam
 - [Settings](#settings)
 - [Hooks](#hooks)
 - [First run](#first-run)
+- [Zero-downtime sites](#zero-downtime-sites)
 - [Ploi placeholder caveat](#ploi-placeholder-caveat)
 
 ## Pipeline
@@ -49,8 +52,12 @@ flowchart TD
     inst -->|yes| migrate["MIGRATE_CMD"]
     install --> extra["EXTRA_MIGRATE_CMDS"]
     migrate --> extra
-    extra --> cache["5. laravel: optimize, storage:link, queue:restart<br/>POST_DEPLOY_CMDS, HEALTHCHECK_CMD"]
-    cache --> done(["deployed"])
+    extra --> cache["5. laravel: storage:link, optimize (caches built in the release)"]
+    cache --> live{"in-place site?"}
+    live -->|yes| steps["laravel: queue:restart<br/>POST_DEPLOY_CMDS, HEALTHCHECK_CMD"]
+    live -->|"no: zero-downtime"| swap["Ploi makes the release live,<br/>then runs the post-deploy script (STAGE=post)"]
+    swap --> steps
+    steps --> done(["deployed"])
 ```
 
 ## Settings
@@ -59,6 +66,7 @@ flowchart TD
 |---|---|---|
 | `SITE_DOMAIN` | `example.com` | Ploi site domain; also the folder name in `/home/ploi` |
 | `PRESET` | `laravel` | `laravel` or `generic` |
+| `STAGE` | `main` | `main` in Ploi's deploy script; `post` in the post-deploy script of a zero-downtime site (runs only the live steps) |
 | `APP_ENV_NAME` | `production` | `APP_ENV` written into a new shared `.env` (laravel) |
 | `DEPLOY_BRANCH` | `main` | branch pulled on in-place sites |
 | `APP_SUBDIR` | `.` | app root inside the repository, e.g. `src` |
@@ -78,8 +86,8 @@ All are shell snippets run with `bash -euo pipefail -c` in the app root; multi-l
 | `INSTALL_ENV_KEYS` | with the first install | empty. Keys read from `<shared>/install.env` and exported to `FIRST_INSTALL_CMD`; the file is `shred`-deleted afterwards |
 | `MIGRATE_CMD` | every later deploy | laravel: `php artisan migrate --force`; generic: none |
 | `EXTRA_MIGRATE_CMDS` | after the install or migrate, every deploy | empty (e.g. `php artisan tenants:migrate --force`) |
-| `POST_DEPLOY_CMDS` | after the preset's caches and restarts | empty |
-| `HEALTHCHECK_CMD` | last; a failure fails the deploy | empty (e.g. `curl -fsS -o /dev/null https://example.com/up`) |
+| `POST_DEPLOY_CMDS` | once the release is live, after `queue:restart` (zero-downtime: in the post-deploy script) | empty |
+| `HEALTHCHECK_CMD` | last, against the live release; a failure fails the deploy | empty (e.g. `curl -fsS -o /dev/null https://example.com/up`) |
 
 On a Laravel site that already has `storage/installed` (from an older version of
 this script), the first install counts as done.
@@ -96,9 +104,30 @@ The first deploy may stop, on purpose:
    deploy again.
 
 The queue worker and scheduler run as Ploi daemons ([daemons.md](../recipes/run-daemons.md));
-`queue:restart` makes them load the new release. Don't also enable a
+`queue:restart` makes the workers load the new release. Don't also enable a
 `schedule:run` cron. `make test` runs the script end to end against a scratch
 repository ([`tests/shell/deploy-sandbox.sh`](../../tests/shell/deploy-sandbox.sh)).
+
+## Zero-downtime sites
+
+Ploi runs the main deploy script inside the new release (`{RELEASE}`) and switches the site to it only
+after the script ends. Caches (`optimize`) belong there: they are built in the release before visitors
+reach it. But a `queue:restart` there is too early: Supervisor restarts the workers in the release that is
+still live, so they keep running the old code until the next deploy. The same goes for a health check of
+the public URL.
+
+So the main script stops after the caches on a zero-downtime site, and the live steps (`queue:restart`,
+`POST_DEPLOY_CMDS`, `HEALTHCHECK_CMD`) run from Ploi's post-deploy script, which runs after the switch:
+
+1. Site → Settings: enable zero-downtime deployment.
+2. Deploy script: this script with your settings (`STAGE="main"`).
+3. Post-deploy script: the same script and settings with `STAGE="post"`. It only runs the live steps in
+   `SITE_ROOT/APP_SUBDIR`. With a settings file, `examples/_shared/ploi-script.sh --post <settings>` prints
+   it (without `--post`: the main script).
+
+The restart signal reaches the workers of every release because `storage/` is shared (a file cache store
+writes it to the shared `storage/framework/cache`); with Redis or the database cache it is shared anyway.
+In-place sites need nothing extra: the code is live as soon as `git pull` returns.
 
 ## Ploi placeholder caveat
 

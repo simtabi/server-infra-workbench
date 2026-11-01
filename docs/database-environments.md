@@ -145,7 +145,7 @@ balancer when the web tier matters -> D only if C is too limiting.
 | Guard | Applies to | Behaviour |
 |---|---|---|
 | Typed confirmation | all envs | `drop-db`, `drop-user` and `restore` ask you to type a word; `--yes` skips it on non-protected envs |
-| Protected envs (`PROTECTED_ENVS`, default `stg prd`) | drop, restore, purge | refused without `--force-prod`; then type the env name (or `WORKBENCH_CONFIRM=<env>` without a terminal) |
+| Protected envs (`PROTECTED_ENVS`, default `stg prd`) | drop, restore, reset, uninstall --purge | refused without `--force-prod`; then type the env name (or `WORKBENCH_CONFIRM=<env>` without a terminal) |
 | Fresh backup | protected envs | a verified backup younger than `FRESH_BACKUP_MIN` (15) minutes, taken automatically if missing |
 | Soft drop | protected envs | Postgres: rename to `<db>__trash_<ts>` with connections off, purge after `TRASH_DAYS` (7). MySQL/MariaDB: a verified dump kept `DROPPED_DUMP_DAYS` (30), then drop |
 | Least privilege | all envs | no superuser app logins, no `root@'%'`, the app can't drop its central database |
@@ -162,7 +162,7 @@ flowchart TD
   e --> f["upgrade (backup, savepoint, apply, verify, auto-rollback)"]
   f --> g["env-apply (databases, roles, pg_hba, idempotent)"]
   g --> h["env-creds &lt;env&gt; --out /root/&lt;env&gt;-db.env"]
-  h --> i["web: workbench env init / update-env-db.sh"]
+  h --> i["web: siwo env init / update-env-db.sh"]
 ```
 
 On the DB server, from a reviewed plan:
@@ -225,7 +225,7 @@ psql "host=db-prd.internal.example.com port=25060 user=doadmin sslmode=verify-fu
 | TLS | on when `TLS_MODE=require`; certificate valid for more than 21 days | problem |
 | Backups | newest dump under `BACKUP_MAX_AGE_H`; off-site copy as fresh; WAL archived within the hour | problem + alert |
 | Restore tests | one passed within `RESTORE_TEST_MAX_AGE_D` days | warn |
-| Capacity | disk under 80% (warn) / 90% (problem); RAM vs [sizing](reference/sizing.md) | warn |
+| Capacity | disk under 80% (warn) / 90% (problem), `DOCTOR_DISK_WARN_PCT` / `DOCTOR_DISK_BAD_PCT`; RAM vs [sizing](reference/sizing.md) | warn |
 
 `doctor --alert` (hourly from `cron-install`) sends failures to `ALERT_EMAIL`, `ALERT_WEBHOOK`,
 `HEALTHCHECK_URL` or `ALERT_COMMAND`.

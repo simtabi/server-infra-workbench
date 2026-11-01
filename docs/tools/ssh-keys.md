@@ -1,20 +1,20 @@
-# SSH keys: `workbench keys` and `fixkeys.sh`
+# SSH keys: `siwo keys` and `fixkeys.sh`
 
 Keys live in two places, and a third tool covers the case where you are already locked out.
 
 | Situation | Tool |
 |---|---|
-| Change the keys baked into **future** servers (provider dashboard) | `workbench keys account ...` |
-| Change who can log in to a **running** server, while ssh still works | `workbench keys server ...` |
+| Change the keys baked into **future** servers (provider dashboard) | `siwo keys account ...` |
+| Change who can log in to a **running** server, while ssh still works | `siwo keys server ...` |
 | **Locked out**: only the provider's web console works | [`src/shell/ssh/fixkeys.sh`](../../src/shell/ssh/fixkeys.sh), pasted into the console |
 
 Per-host keys and `~/.ssh/config` stay with [sshmgr](../recipes/set-up-ssh-access.md); these tools only
 put public keys where servers read them. Private keys are never read.
 
-## `workbench keys`
+## `siwo keys`
 
-See `workbench help keys` and the [CLI reference](cli.md). Providers: DigitalOcean, Vultr, Hetzner, Linode,
-Scaleway, plus `extra_providers` in `~/.config/vps-server-workbench/keys.json`. Server edits back up the
+See `siwo help keys` and the [CLI reference](cli.md). Providers: DigitalOcean, Vultr, Hetzner, Linode,
+Scaleway, plus `extra_providers` in `~/.config/server-infra-workbench/keys.json`. Server edits back up the
 file, write atomically, read it back and test a fresh login (restoring the backup if that fails); the
 current session's key can't be removed, and the last key or your own local keys need `--force`.
 
@@ -39,7 +39,7 @@ bash fixkeys.sh --root /mnt --user root add '...'     # disk mounted from a reco
 | Right file | the effective `AuthorizedKeysFile` from `sshd -T -C user=...` (`%h`, `%u` expanded), or `--file` |
 | Last key | removing it needs `EMPTY` typed; `--yes` is not enough |
 | Changes | backup `<file>.bak.<ts>` (600), atomic write, 700/600 + owner (numeric uid from the server's `/etc/passwd`, so it works under `--root`), `restorecon` when SELinux is present |
-| Audit | `/var/log/vps-server-workbench/audit.log` and syslog (`logger -t fixkeys`): fingerprints only |
+| Audit | `/var/log/server-infra-workbench/audit.log` and syslog (`logger -t fixkeys`): fingerprints only |
 | Restore | only `<file>.bak.*` files next to the managed file; the current file is backed up first |
 
 `diagnose` reports: `.ssh` and file modes and owners, a group/other-writable home (sshd `StrictModes`
@@ -49,19 +49,20 @@ matters: `UsePAM no`), the effective `PubkeyAuthentication`, `PasswordAuthentica
 keys), `sshd -T` errors, and the last hour's sshd refusals from the journal.
 
 Tests: `tests/shell/smoke-server.sh` (fake root, 14 cases) and `tests/shell/server-it.sh` (as root in
-Ubuntu 24.04: real chown, `ssh-keygen`, `sshd -T`, a custom `AuthorizedKeysFile /etc/ssh/keys/%u`).
+Ubuntu 26.04: real chown, `ssh-keygen`, `sshd -T`, a custom `AuthorizedKeysFile /etc/ssh/keys/%u`).
 
 ## Migration from `vps-ssh-key-manager` (vpskeys)
 
-The standalone `vps-ssh-key-manager` folder is superseded by this repo. It is left in place (not deleted);
-an archive of it is kept at `packages/_archive/vps-ssh-key-manager-2026-10-31.tar.gz`.
+The standalone `vps-ssh-key-manager` folder was superseded by this repo and retired (deleted) on 2026-10-31.
+It had no `.env`, so there were no tokens to move. An archive is kept at
+`packages/_archive/vps-ssh-key-manager-2026-10-31.tar.gz` (outside this repo).
 
 | Old | New | Notes |
 |---|---|---|
-| `vpskeys.py` account keys | `workbench keys account list/add/rename/remove` | Same providers; `--json`, `--dry-run`; remove needs `--force` |
-| `vpskeys.py` server keys (`serverkeys.py`) | `workbench keys server list/add/remove/fix-perms` | Adds read-back + fresh-login test with automatic restore |
-| `providers.py` + `config.json` (`extra_providers`) | built-in providers + `keys.json` | **Same schema**: copy `config.json` to `~/.config/vps-server-workbench/keys.json`, or point `$VPSKEYS_CONFIG` / `$VSW_KEYS_CONFIG` at it |
-| `.env` (`DIGITALOCEAN_TOKEN`, `VULTR_API_KEY`, `HCLOUD_TOKEN`, `LINODE_TOKEN`, `SCW_SECRET_KEY`, `SCW_PROJECT_ID`) | same names, in the environment or `~/.config/vps-server-workbench/credentials` (600) | Template: [`config/credentials.env.example`](../../config/credentials.env.example). Move the values yourself; no tool copies them |
+| `vpskeys.py` account keys | `siwo keys account list/add/rename/remove` | Same providers; `--json`, `--dry-run`; remove needs `--force` |
+| `vpskeys.py` server keys (`serverkeys.py`) | `siwo keys server list/add/remove/fix-perms` | Adds read-back + fresh-login test with automatic restore |
+| `providers.py` + `config.json` (`extra_providers`) | built-in providers + `keys.json` | **Same schema**: copy `config.json` to `~/.config/server-infra-workbench/keys.json`, or point `$VPSKEYS_CONFIG` / `$SIWO_KEYS_CONFIG` at it |
+| `.env` (`DIGITALOCEAN_TOKEN`, `VULTR_API_KEY`, `HCLOUD_TOKEN`, `LINODE_TOKEN`, `SCW_SECRET_KEY`, `SCW_PROJECT_ID`) | same names, in the environment or `~/.config/server-infra-workbench/credentials` (600) | Template: [`config/credentials.env.example`](../../config/credentials.env.example). Put values there yourself; no tool copies them |
 | `fixkeys.sh` (menu only) | `src/shell/ssh/fixkeys.sh` 2.0 | Subcommands, `--user`, `--file`, `--root`, `FIXKEYS_TTY`, exact match, `sshd -T` + `AuthorizedKeysFile`, lock status, restore, ssh-keygen validation, audit |
 | Python 3.8 + `requests` | PHP 8.4 core (no Python needed for keys) | |
 
@@ -73,7 +74,7 @@ an archive of it is kept at `packages/_archive/vps-ssh-key-manager-2026-10-31.ta
 - [x] `fixkeys.sh` in the repo with the old menu and everything above; tests offline and in a container
 - [x] Credentials: same variable names, env or 600 file, never logged
 - [x] Docs: this page, the [lockout recipe](../recipes/recover-ssh-lockout.md), CLI reference
-- [ ] **You:** move your token values from the old folder's `.env` into `~/.config/vps-server-workbench/credentials`
-      (`install -m 600 /dev/null ~/.config/vps-server-workbench/credentials`, then edit), and copy `config.json`
-      if it has extra providers
-- [ ] **You:** once `workbench keys providers` shows your providers, retire the old folder (archive already made)
+- [x] **You:** move token values from the old folder's `.env` into `~/.config/server-infra-workbench/credentials`:
+      done, nothing to move (the old folder had no `.env`). New tokens go in that 600 file
+      (`install -m 600 /dev/null ~/.config/server-infra-workbench/credentials`, then edit)
+- [x] **You:** retire the old folder: done 2026-10-31 (deleted; archive kept)

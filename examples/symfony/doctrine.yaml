@@ -1,0 +1,13 @@
+# config/packages/doctrine.yaml (the dbal part). The URL has host, port, database, user and sslmode;
+# libpq adds the password from ~/.pgpass, so the profiler, logs and exception pages never see one.
+doctrine:
+  dbal:
+    url: '%env(resolve:DATABASE_URL)%'
+    server_version: '18'          # skips a version probe on every first connection
+    use_savepoints: true
+when@prod:
+  doctrine:
+    orm:
+      auto_generate_proxy_classes: false
+      query_cache_driver: { type: pool, pool: doctrine.system_cache_pool }
+      result_cache_driver: { type: pool, pool: doctrine.result_cache_pool }

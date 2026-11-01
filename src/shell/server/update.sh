@@ -22,14 +22,16 @@
 #    --allow-docker                upgrade Docker too (restarts containers)
 #    --backup-first                run /root/docker-db-server-manager.sh backup before upgrading
 #    --no-refresh                  skip apt-get update in the plan
-#    --dry-run, -n  --yes, -y  --host H  -h, --help
+#    --dry-run, -n  --yes, -y  --host H  --quiet, -q (no progress lines)  -h, --help
 # =============================================================================
 set -euo pipefail
 TOOL=update
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=src/shell/lib/common.sh
 . "$HERE/../lib/common.sh"
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
+# usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
+# title box, so --help printed one line; awk counts the rules instead.
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,""); print}' "$0"; }
 
 WINDOW="" NOREBOOT=0 FULL=0 SECURITY=0 ALLOW_DOCKER=0 BACKUP_FIRST=0 REFRESH=1 HOST=""
 ARGS=("$@")
@@ -43,6 +45,7 @@ while [ $# -gt 0 ]; do
     --backup-first) BACKUP_FIRST=1; shift ;;
     --no-refresh) REFRESH=0; shift ;;
     --dry-run|-n) DRY=1; shift ;;
+    --quiet|-q) export SIWO_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -63,7 +66,7 @@ in_window() { # in_window HH:MM-HH:MM NOW(HH:MM)
   local s e n; s="$(mins "${1%-*}")"; e="$(mins "${1#*-}")"; n="$(mins "$2")"
   if [ "$s" -le "$e" ]; then [ "$n" -ge "$s" ] && [ "$n" -lt "$e" ]; else [ "$n" -ge "$s" ] || [ "$n" -lt "$e" ]; fi
 }
-NOW="${VSW_NOW:-$(date +%H:%M)}"
+NOW="${SIWO_NOW:-$(date +%H:%M)}"
 REBOOT_FLAG="$R/var/run/reboot-required"
 DOCKER_PKGS="docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker.io"
 
@@ -76,7 +79,7 @@ say "update plan ($(hostname 2>/dev/null), server time $NOW):"
 if [ "$n" -eq 0 ]; then ok "no upgradable packages"; else todo "$n upgradable: $(printf '%s\n' "$UPG" | head -15 | tr '\n' ' ')$([ "$n" -gt 15 ] && echo '...')"; fi
 held=""
 running=0; have docker && running="$(docker ps -q 2>/dev/null | grep -c . || true)"
-for p in $DOCKER_PKGS; do printf '%s\n' "$UPG" | grep -qx "$p" && held+="$p "; done
+for p in $DOCKER_PKGS; do printf '%s\n' "$UPG" | grep -x "$p" >/dev/null && held+="$p "; done
 if [ -n "$held" ] && [ "$running" -gt 0 ] && [ "$ALLOW_DOCKER" = 0 ]; then
   warn "docker packages upgradable ($held) with $running running container(s): held for this run"
   why "a Docker upgrade restarts every container (DB downtime); do it in a window with --allow-docker"
@@ -104,7 +107,7 @@ if [ "$BACKUP_FIRST" = 1 ]; then
 fi
 was_held="$(apt-mark showhold 2>/dev/null || true)"
 newly=""
-for p in $held; do printf '%s\n' "$was_held" | grep -qx "$p" || newly+="$p "; done
+for p in $held; do printf '%s\n' "$was_held" | grep -x "$p" >/dev/null || newly+="$p "; done
 # shellcheck disable=SC2086  # word lists
 unhold() { [ -z "$newly" ] || apt-mark unhold $newly >/dev/null 2>&1 || true; newly=""; }
 # shellcheck disable=SC2086  # word lists
@@ -113,8 +116,8 @@ export DEBIAN_FRONTEND=noninteractive
 opts=(-y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 if [ "$n" -gt 0 ]; then
   if [ "$SECURITY" = 1 ]; then have unattended-upgrade || apt-get install "${opts[@]}" unattended-upgrades; unattended-upgrade -v
-  elif [ "$FULL" = 1 ]; then apt-get "${opts[@]}" dist-upgrade
-  else apt-get "${opts[@]}" upgrade; fi
+  elif [ "$FULL" = 1 ]; then progress_run "apt-get dist-upgrade ($n packages)" apt-get "${opts[@]}" dist-upgrade
+  else progress_run "apt-get upgrade ($n packages)" apt-get "${opts[@]}" upgrade; fi
   apt-get -y -q autoremove >/dev/null 2>&1 || true
   ok "upgrade done"; audit applied "upgrade packages=$n"
 fi
@@ -122,7 +125,7 @@ unhold
 if [ -f "$REBOOT_FLAG" ]; then
   if [ -n "$WINDOW" ]; then
     if in_window "$WINDOW" "$NOW"; then when="+1"; else when="${WINDOW%-*}"; fi
-    shutdown -r "$when" "vps-server-workbench: reboot after updates" && ok "reboot scheduled ($when); cancel with: shutdown -c"
+    shutdown -r "$when" "server-infra-workbench: reboot after updates" && ok "reboot scheduled ($when); cancel with: shutdown -c"
     audit applied "reboot scheduled=$when"
   else warn "reboot required - run in a window: update.sh --yes --reboot-window HH:MM-HH:MM"; fi
 fi

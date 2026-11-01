@@ -2,27 +2,30 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Safety;
+namespace Simtabi\ServerInfraWorkbench\Safety;
+
+use Simtabi\ServerInfraWorkbench\Support\Env;
 
 /**
  * Append-only JSON lines, one per event. The directory is 0700 and the file 0600.
- * Default: $VSW_AUDIT_LOG, else ~/.local/state/vps-server-workbench/audit.log.
+ * Default: $SIWO_AUDIT_LOG, else ~/.local/state/server-infra-workbench/audit.log (or the pre-rename
+ * ~/.local/state/vps-server-workbench/audit.log while only that one exists).
  */
 final class JsonlAuditLog implements AuditLog
 {
-    public const string PATH_ENV = 'VSW_AUDIT_LOG';
+    public const string PATH_ENV = 'SIWO_AUDIT_LOG';
 
     public function __construct(private readonly string $path) {}
 
     public static function default(): AuditLog
     {
-        $path = getenv(self::PATH_ENV);
-        if (is_string($path) && $path !== '') {
+        $path = Env::get(self::PATH_ENV);
+        if ($path !== null) {
             return $path === 'off' ? new NullAuditLog : new self($path);
         }
         $home = getenv('HOME');
 
-        return is_string($home) && $home !== '' ? new self($home.'/.local/state/vps-server-workbench/audit.log') : new NullAuditLog;
+        return is_string($home) && $home !== '' ? new self(Env::userPath($home, '.local/state/{name}/audit.log')) : new NullAuditLog;
     }
 
     public function path(): string

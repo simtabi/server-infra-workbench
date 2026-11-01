@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\DigitalOcean;
+namespace Simtabi\ServerInfraWorkbench\DigitalOcean;
 
-use Simtabi\VpsServerWorkbench\Http\BearerToken;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Security\Secret;
-use Simtabi\VpsServerWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Http\BearerToken;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Support\Data;
 
 /**
  * DigitalOcean API v2.
@@ -59,6 +59,46 @@ final readonly class DigitalOcean
     public function monitoring(): Monitoring
     {
         return new Monitoring($this->transport);
+    }
+
+    public function volumes(): Volumes
+    {
+        return new Volumes($this->transport, $this->actions());
+    }
+
+    public function vpcs(): Vpcs
+    {
+        return new Vpcs($this->transport);
+    }
+
+    public function spacesKeys(): SpacesKeys
+    {
+        return new SpacesKeys($this->transport);
+    }
+
+    public function domains(): Domains
+    {
+        return new Domains($this->transport);
+    }
+
+    public function reservedIps(): ReservedIps
+    {
+        return new ReservedIps($this->transport, $this->actions());
+    }
+
+    public function projects(): Projects
+    {
+        return new Projects($this->transport);
+    }
+
+    public function tags(): Tags
+    {
+        return new Tags($this->transport);
+    }
+
+    public function catalog(): Catalog
+    {
+        return new Catalog($this->transport);
     }
 
     public function actions(): Actions

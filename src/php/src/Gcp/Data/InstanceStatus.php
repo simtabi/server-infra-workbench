@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Gcp\Data;
+namespace Simtabi\ServerInfraWorkbench\Gcp\Data;
 
 enum InstanceStatus: string
 {

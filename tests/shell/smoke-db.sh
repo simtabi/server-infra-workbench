@@ -5,6 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+gen() { openssl rand -hex "${1:-12}"; }  # repo rule: test secrets are generated per run, never hardcoded
 pass=0; ok() { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }; fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
 M="$PWD/src/shell/db/docker-db-server-manager.sh"
 export PRIVATE_IP=10.0.0.5 VPC_CIDR=10.0.0.0/20 DBM_CONFIG="$T/none.conf" STATE_DIR="$T/state" ENV_SECRETS_DIR="$T/secrets" BACKUP_DIR="$T/backups"
@@ -55,30 +56,37 @@ L my_grant_sql app my_app owner | grep -qF '`my\_app`.*' && ok "create-db grants
 # --- guard rails --------------------------------------------------------------------
 if APP=shop ENVS="dev prd" L guard_destructive shop_prd prd 0 2>"$T/e"; then fail "prd without --force-prod"; fi
 grep -q 'add --force-prod' "$T/e" && ok "protected env needs --force-prod" || fail "force-prod"
+G() { bash -c 'm="$1"; shift; fn=("$@"); set --; DBM_SOURCE_ONLY=1 source "$m"; PRIVATE_IP=10.0.0.5; need_root(){ :; }; ensure_docker(){ exit 42; }; "${fn[@]}"' _ "$M" "$@"; }
+for c in cmd_reset cmd_uninstall; do a=(); [ "$c" = cmd_uninstall ] && a=(--purge)
+  APP=shop ENVS="dev prd" G "$c" "${a[@]}" </dev/null >/dev/null 2>"$T/e" || true; grep -q 'add --force-prod' "$T/e" || fail "$c without --force-prod"
+  APP=shop ENVS="dev prd" G "$c" "${a[@]}" --force-prod </dev/null >/dev/null 2>"$T/e" || true; grep -q "type the environment name" "$T/e" || fail "$c --force-prod not accepted"
+  if G "$c" --bogus </dev/null >/dev/null 2>&1; then fail "$c accepted an unknown option"; fi
+done; ok "reset / uninstall --purge: protected env needs --force-prod (flag or *_FORCE_PROD=1), unknown options refused"
 if APP=shop ENVS="dev prd" L guard_destructive shop_prd prd 1 </dev/null 2>"$T/e"; then fail "prd without typed name"; fi
 grep -q 'WORKBENCH_CONFIRM=prd' "$T/e" && ok "protected env needs the typed env name" || fail "typed"
 [ "$(APP=shop ENVS="dev prd" L env_of_db shop_prd_t_42)" = prd ] && [ "$(APP=shop ENVS="dev prd" L env_of_db shop_dev)" = dev ] && [ -z "$(APP=shop L env_of_db other)" ] \
   && ok "databases map to their environment (tenants too)" || fail "env_of_db"
 
 # --- notify + redaction -------------------------------------------------------------
-ALERT_COMMAND="printf '%s|%s|%s\n' >> $T/alerts" L notify backup fail "PGPASSWORD=hunter2 token abcdef0123456789abcdef0123456789ab failed"
-grep -q '^backup|fail|' "$T/alerts" && ! grep -q hunter2 "$T/alerts" && ! grep -q abcdef0123456789abcdef0123456789ab "$T/alerts" && ok "notify: hook called, secrets redacted" || { cat "$T/alerts"; fail "notify"; }
+NPW="$(gen 6)"; NTOK="$(gen 17)"
+ALERT_COMMAND="printf '%s|%s|%s\n' >> $T/alerts" L notify backup fail "PGPASSWORD=$NPW token $NTOK failed"
+grep -q '^backup|fail|' "$T/alerts" && ! grep -q "$NPW" "$T/alerts" && ! grep -q "$NTOK" "$T/alerts" && ok "notify: hook called, secrets redacted" || { cat "$T/alerts"; fail "notify"; }
 
 # --- off-site copy with a stub rclone (local dir as the bucket) -----------------------
 mkdir -p "$T/bin" "$T/bucket" "$T/b/20261031-031500" "$T/etc"
 cat > "$T/bin/rclone" <<'EOF'
 #!/usr/bin/env bash
-# stub: vsw:bucket/prefix/name -> $STUB_BUCKET/prefix/name ; records that creds came from env
-[ -n "${RCLONE_CONFIG_VSW_ACCESS_KEY_ID:-}" ] || { echo "no creds" >&2; exit 1; }
-map() { local p="${1#vsw:}"; echo "$STUB_BUCKET/${p#*/}"; }
+# stub: siw:bucket/prefix/name -> $STUB_BUCKET/prefix/name ; records that creds came from env
+[ -n "${RCLONE_CONFIG_SIWO_ACCESS_KEY_ID:-}" ] || { echo "no creds" >&2; exit 1; }
+map() { local p="${1#siw:}"; echo "$STUB_BUCKET/${p#*/}"; }
 case "$1" in
-  copyto) shift; [ "$1" = --s3-no-check-bucket ] && shift; if [[ "$1" == vsw:* ]]; then cp "$(map "$1")" "$2"; else mkdir -p "$(dirname "$(map "$2")")"; cp "$1" "$(map "$2")"; fi ;;
+  copyto) shift; [ "$1" = --s3-no-check-bucket ] && shift; if [[ "$1" == siw:* ]]; then cp "$(map "$1")" "$2"; else mkdir -p "$(dirname "$(map "$2")")"; cp "$1" "$(map "$2")"; fi ;;
   lsf) ls "$(map "$2")" ;;
   delete) exit 0 ;;
 esac
 EOF
 chmod +x "$T/bin/rclone"
-printf 'OFFSITE_ACCESS_KEY=AKFAKE\nOFFSITE_SECRET_KEY=fake-secret-key\n' > "$T/etc/offsite.env"; chmod 600 "$T/etc/offsite.env"
+printf 'OFFSITE_ACCESS_KEY=%s\nOFFSITE_SECRET_KEY=%s\n' "$(gen 10)" "$(gen)" > "$T/etc/offsite.env"; chmod 600 "$T/etc/offsite.env"
 echo "-- dump complete" | gzip > "$T/b/20261031-031500/postgres.sql.gz"
 export PATH="$T/bin:$PATH" STUB_BUCKET="$T/bucket" OFFSITE=s3 OFFSITE_BUCKET=bk OFFSITE_PREFIX=db/h OFFSITE_CREDS_FILE="$T/etc/offsite.env" OFFSITE_KEY_FILE="$T/etc/backup.key" ENABLE_MYSQL=0 ENABLE_MARIADB=0
 L offsite_upload "$T/b/20261031-031500" > "$T/off.out" 2>&1 || { cat "$T/off.out"; fail "offsite upload"; }
@@ -102,6 +110,12 @@ grep -q 'POSTGRES_USER: ${PG_ADMIN_USER}' "$c" && grep -q 'hba_file=/etc/postgre
   && grep -q '"--local-infile=0"' "$c" && grep -q 'secure-file-priv=/var/lib/mysql-files' "$c" && grep -q 'MYSQL_ROOT_HOST: localhost' "$c" \
   && grep -q 'subnet: "${DOCKER_SUBNET}"' "$c" && grep -q '^PG_IMAGE=vsw/postgres:18-postgis-pgvector$' "$T/db/stack.env" \
   && ok "compose: admin bootstrap, pg_hba, logging, local_infile=0, secure_file_priv, no root@'%', fixed subnet, neutral image tag" || fail "compose hardening"
+grep -q 'mysqladmin ping -uroot -h127.0.0.1 --protocol=TCP --silent' "$c" && grep -q '"healthcheck.sh", "--connect", "--innodb_initialized"' "$c" \
+  && ok "compose: MySQL/MariaDB healthchecks need TCP (the entrypoint's temporary socket-only server is not healthy)" || fail "my healthcheck"
+df="$T/db/postgres/Dockerfile"
+grep -qx 'ARG PG_BASE_IMAGE=postgis/postgis:18-3.6' "$df" && [ "$(grep -n '^ARG PG_BASE_IMAGE=' "$df" | cut -d: -f1)" -lt "$(grep -n '^FROM ' "$df" | cut -d: -f1)" ] \
+  && grep -qx 'ARG DEBIAN_FRONTEND=noninteractive' "$df" && ! grep -q '^ENV DEBIAN_FRONTEND' "$df" \
+  && ok "Dockerfile: base ARG has a default before FROM (no InvalidDefaultArgInFrom), debconf noninteractive as a build ARG only" || { cat "$df"; fail "Dockerfile args"; }
 
 # --- cross-region: extra bind addresses, region check ----------------------------------------
 mkdir -p "$T/db2"; EXTRA_BIND_IPS=10.200.0.1 DB_DIR="$T/db2" L eval 'dc() { :; }; write_files >/dev/null'
@@ -110,10 +124,13 @@ grep -qF 'ports: ["${PRIVATE_IP}:${PG_PORT}:5432", "10.200.0.1:${PG_PORT}:5432"]
   && ! grep -q '0\.0\.0\.0' "$T/db2/docker-compose.yml" && ok "EXTRA_BIND_IPS: every DB port also published on the tunnel IP" || { grep ports "$T/db2/docker-compose.yml"; fail "extra binds"; }
 L ip_in_cidr 10.200.0.2 10.0.0.0/8 && ! L ip_in_cidr 10.17.0.2 10.16.0.0/16 2>/dev/null && L ip_in_cidr 192.0.2.9 0.0.0.0/0 && ! L ip_private 203.0.113.5 2>/dev/null && L ip_private 100.64.1.1 \
   && ok "ip_in_cidr / ip_private" || fail "cidr math"
-EXTRA_BIND_IPS=203.0.113.5 L validate_config 2>"$T/e" && fail "public bind accepted" || { grep -q 'ALLOW_PUBLIC_BIND=1' "$T/e" && grep -q 'TLS_MODE=require is mandatory' "$T/e" && ok "public bind refused without ALLOW_PUBLIC_BIND=1 and TLS"; } || { cat "$T/e"; fail "public bind"; }
+EXTRA_BIND_IPS=203.0.113.5 L validate_config 2>"$T/e" && fail "public bind accepted" || { grep -q 'ALLOW_PUBLIC_BIND=1' "$T/e" && grep -q 'TLS_MODE=require or verify-full is mandatory' "$T/e" && ok "public bind refused without ALLOW_PUBLIC_BIND=1 and TLS"; } || { cat "$T/e"; fail "public bind"; }
 EXTRA_BIND_IPS=203.0.113.5 ALLOW_PUBLIC_BIND=1 TLS_MODE=require L validate_config 2>"$T/e" && ok "public bind accepted with ALLOW_PUBLIC_BIND=1 + TLS_MODE=require" || { cat "$T/e"; fail "public bind ok"; }
 PRIVATE_IP=203.0.113.5 L validate_config 2>"$T/e" && fail "public PRIVATE_IP" || { grep -q 'not a private' "$T/e" && ok "PRIVATE_IP must be a private address"; } || fail "private ip"
 PEER_REGIONS="nyc 1" L validate_config 2>"$T/e" && fail "bad region" || { grep -q 'PEER_REGIONS entry' "$T/e" && ok "PEER_REGIONS validated"; } || fail "region slug"
+PG_BASE_IMAGE=postgres:18 PG_EXTENSIONS="vector postgis" L validate_config 2>"$T/e" && fail "postgis on a plain base accepted" || { grep -q 'PG_EXTENSIONS has postgis' "$T/e" && ok "postgis needs a postgis base image"; } || fail "postgis base"
+PG_BASE_IMAGE=postgres:18 PG_EXTENSIONS="vector pg_trgm" L validate_config 2>"$T/e" && ok "plain base without postgis accepted" || { cat "$T/e"; fail "plain base"; }
+DOCTOR_DISK_WARN_PCT=95 DOCTOR_DISK_BAD_PCT=90 L validate_config 2>"$T/e" && fail "warn > bad accepted" || { grep -q 'DOCTOR_DISK_WARN_PCT <= DOCTOR_DISK_BAD_PCT' "$T/e" && ok "doctor disk thresholds validated"; } || fail "disk pct"
 mkdir -p "$T/meta"; printf 'nyc1' > "$T/meta/region"
 mkdir -p "$T/mbin"; printf '#!/bin/sh\nfor a; do u="$a"; done; cat "%s/meta/${u##*/}"\n' "$T" > "$T/mbin/curl"; chmod +x "$T/mbin/curl"
 PATH="$T/mbin:$PATH" PEER_REGIONS=ams3 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
@@ -125,4 +142,47 @@ PATH="$T/mbin:$PATH" PEER_REGIONS=nyc1 L eval 'doctor_network; echo "bad=$D_BAD"
 grep -q 'peer region nyc1: same region' "$T/net.out" && grep -q 'bad=0' "$T/net.out" && ok "doctor: same region is ok" || { cat "$T/net.out"; fail "same region"; }
 PATH="$T/mbin:$PATH" PRIVATE_IP=10.0.0.5 VPC_CIDR=10.16.0.0/20 L eval 'doctor_network; echo "bad=$D_BAD"' > "$T/net.out" 2>&1 || true
 grep -q 'outside VPC_CIDR' "$T/net.out" && ok "doctor: PRIVATE_IP outside VPC_CIDR is a PROBLEM" || { cat "$T/net.out"; fail "vpc cidr"; }
+printf 'root:x:0:\ndocker:x:999:root,ploi,deploy\n' > "$T/group"
+[ "$(GROUP_FILE="$T/group" L docker_group_members)" = "ploi deploy" ] && [ "$(GROUP_FILE="$T/group" DOCKER_GROUP_ALLOW=ploi L docker_group_members)" = deploy ] \
+  && ok "doctor: non-root docker group members found, DOCKER_GROUP_ALLOW honoured" || fail "docker group members"
+# ---- P2: textfile metrics, image major swap, migrate-managed target parsing ----------------------------
+mkdir -p "$T/tf" "$T/state"; rm -f "$T/state/offsite"; now="$(date +%s)"; echo "$now" > "$T/state/backup"; echo "$((now - 60)) x" > "$T/state/restore-test"; echo "$now fail 2" > "$T/state/doctor"
+METRICS_TEXTFILE_DIR="$T/tf" DB_DIR="$T/nodb" L write_metrics
+grep -qx "vsw_backup_last_success_timestamp_seconds{engine=\"all\"} $now" "$T/tf/vsw_db.prom" && grep -qx 'vsw_doctor_problems 2' "$T/tf/vsw_db.prom" \
+  && grep -qx "vsw_restore_test_last_success_timestamp_seconds $((now - 60))" "$T/tf/vsw_db.prom" && ! grep -q offsite "$T/tf/vsw_db.prom" \
+  && [ "$(grep -c '^# HELP' "$T/tf/vsw_db.prom")" = "$(grep -c '^# TYPE' "$T/tf/vsw_db.prom")" ] && [ "$(stat -c %a "$T/tf/vsw_db.prom" 2>/dev/null || stat -f %Lp "$T/tf/vsw_db.prom")" = 644 ] \
+  && ok "write_metrics: stamps -> gauges with HELP/TYPE, 644, absent stamps skipped" || { cat "$T/tf/vsw_db.prom"; fail "write_metrics"; }
+METRICS_TEXTFILE_DIR="$T/missing" L write_metrics && [ ! -e "$T/missing" ] && ok "write_metrics: no textfile folder -> silently skipped" || fail "metrics skip"
+[ "$(L pg_swap_major postgis/postgis:18-3.6 18 19)" = postgis/postgis:19-3.6 ] && [ "$(L pg_swap_major postgresql-18-pgvector 18 19)" = postgresql-19-pgvector ] \
+  && [ "$(L pg_swap_major local/pg:18 18 19)" = local/pg:19 ] && [ "$(L pg_swap_major postgres:180 18 19)" = postgres:180 ] && [ "$(L pg_major postgres:17-alpine)" = 17 ] \
+  && ok "pg_swap_major / pg_major: tags and package names, no partial-number matches" || fail "pg_swap_major"
+INJ='p$(touch '"$T"'/pwned)w'  # a command-injection probe, not a credential
+printf 'TARGET_HOST=db-x.example.com\nTARGET_USER=doadmin\nTARGET_PASSWORD="%s"\nEVIL=$(touch %s/pwned2)\n' "$INJ" "$T" > "$T/tgt.env"; chmod 644 "$T/tgt.env"
+L mm_load_target "$T/tgt.env" 2>"$T/e" && fail "644 target file accepted" || grep -q 'chmod 600' "$T/e" || fail "mm perms"
+chmod 600 "$T/tgt.env"; out="$(TGT="$T/tgt.env" L eval 'mm_load_target "$TGT"; echo "$TARGET_HOST $TARGET_PORT $TARGET_SSLMODE ${TARGET_PASSWORD:0:4}"' 2>&1 || true)"
+[ "$out" = 'db-x.example.com 25060 require p$(t' ] && [ ! -e "$T/pwned" ] && [ ! -e "$T/pwned2" ] \
+  && ok "mm_load_target: 600 only, strict KEY=VALUE (no shell execution), managed-DB defaults" || fail "mm_load_target: $out"
+# --- log-errors (read-only Postgres log summary; docs/plan/postgres-log-quoting-errors.md) ------
+pw="$(gen 16)"
+{ echo "2026-10-31 11:47:46.403 UTC [1] ERROR:  syntax error at or near \"\\\" at character 53"
+  printf '%s\n' "2026-10-31 11:47:46.403 UTC [1] STATEMENT:  select datname from pg_database where datname<>\\x27template1\\x27"
+  echo "2026-10-31 11:47:47.100 UTC [2] ERROR:  syntax error at or near \"\\\" at character 91"
+  printf '%s\n' "2026-10-31 11:47:47.100 UTC [2] STATEMENT:  select 1 where 'a'=\\x27b\\x27"
+  echo "2026-10-31 11:50:00.000 UTC [3] LOG:  checkpoint complete"
+  echo "2026-10-31 12:00:00.000 UTC [4] ERROR:  syntax error at or near \"PASSWORD\" at character 9"
+  echo "2026-10-31 12:00:00.000 UTC [4] STATEMENT:  alter role x PASSWORD '$pw' valid"
+  echo "2026-10-31 12:01:00.000 UTC [5] FATAL:  password authentication failed for user \"app\""
+  echo "2026-10-31 12:01:00.000 UTC [5] DETAIL:  Connection matched file \"/etc/hba\" line 3 from 10.1.2.3"; } > "$T/pglog"
+if L log_errors_summary t < "$T/pglog" > "$T/le.out"; then fail "log-errors: errors found but exit 0"; fi
+grep -q '4 error(s) in 3 group(s)' "$T/le.out" && grep -q '2x  shell-quoting' "$T/le.out" && grep -q 'character N' "$T/le.out" \
+  && grep -q 'auth' "$T/le.out" && grep -q '<ip>' "$T/le.out" && ! grep -q "$pw" "$T/le.out" && ! grep -q template1 "$T/le.out" \
+  && ok "log-errors groups, classifies \\x27 as shell-quoting, masks literals/passwords/IPs, exit 1" || { cat "$T/le.out"; fail "log-errors"; }
+printf '2026-10-31 11:50:00.000 UTC [3] LOG:  checkpoint complete\n' | L log_errors_summary t | grep -q 'no errors' && ok "log-errors: clean log -> exit 0" || fail "log-errors clean"
+[ "$(L log_errors_since 7d)" = 168h ] && [ -z "$(L log_errors_since all)" ] && ! L log_errors_since 'x;y' 2>/dev/null \
+  && ok "log-errors --since: 7d -> 168h, all, junk refused" || fail "log-errors since"
+out="$(L eval 'trap - ERR; D_WARN=0; ENABLE_POSTGRES=1; cmd_log_errors() { log_errors_summary postgres < "'"$T/pglog"'"; }; doctor_pg_log; echo "warn=$D_WARN"')"
+printf '%s' "$out" | grep -q 'warn  postgres log: 4 error(s) in 3 group(s)' && printf '%s' "$out" | grep -q 'warn=1' \
+  && ok "doctor warns (not fails) on Postgres log errors in the last 24 h" || fail "doctor_pg_log: $out"
+# regression: no SQL in the toolkit may carry a literal \x27 (the 2026-10-31 log errors); redact() is perl, not SQL
+if rg -n '(=|<>|\(|,)\s*\\x27[A-Za-z0-9_%]' src/shell bin 2>/dev/null | grep -v 'redact()' >&2; then fail "\\x27 in SQL"; else ok "no literal \\x27 in toolkit SQL"; fi
 echo "smoke-db: all $pass checks passed"

@@ -4,13 +4,15 @@
 #
 #   addon.sh list                                    add-ons, kind, default role, pinned image, installed?
 #   addon.sh plan    <name> [--role R] [--bind IP]   what install would do (writes nothing, shows no secrets)
-#   addon.sh install <name> [--role R] [--bind IP] [--data-dir D] [--yes]
+#   addon.sh install <name> [--role R] [--bind IP] [--data-dir D] [--accept-experimental] [--yes]
 #                                                    plan, confirm, creds (600), start, bucket + app key, health
 #   addon.sh status  [name]                          containers and health
 #   addon.sh doctor  [name]                          binding, pin, perms, health, auth, RAM, disk (exit 1 on a problem)
 #   addon.sh laravel-env <name> [--out FILE]         Laravel .env keys into FILE (chmod 600); values never printed
 #   addon.sh remove  <name> [--delete-data] [--yes]  stop and remove; data kept unless --delete-data (typed name)
+#   addon.sh garage-node-id                          this node's Garage id@addr, for GARAGE_PEERS on the next node (not a secret)
 #
+# Flags: --force (skip the RAM/disk gate), --accept-experimental (RustFS; never on a protected env).
 # Roles: web = same node as PHP, binds 127.0.0.1 | db, dedicated = binds the private (VPC) IP.
 # Config: /etc/vsw-addons.conf (or ADDON_CONF=FILE); keys in config/addons.conf.example.
 # Every change is appended to the audit log (/var/log/vsw-addons.log). Secrets never reach stdout or the log.
@@ -26,7 +28,8 @@ ADDON_CONF="${ADDON_CONF:-/etc/vsw-addons.conf}"
 log()  { printf '==> %s\n' "$*"; }
 warn() { printf '!! WARNING: %s\n' "$*" >&2; }
 die()  { printf '!! %s\n' "$*" >&2; exit "${CODE:-1}"; }
-usage() { sed -n '2,17p' "$SELF" | sed 's/^# \{0,1\}//'; }
+# usage: the header comment block (up to the first code line), minus shellcheck directives
+usage() { awk 'NR==1{next} !/^#/{exit} /^# shellcheck /{next} {sub(/^# ?/,""); print}' "$SELF"; }
 perm() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 owner_uid() { stat -c %u "$1" 2>/dev/null || stat -f %u "$1"; }
 hex() { openssl rand -hex "$1"; }
@@ -70,10 +73,13 @@ load_addon() { # pinned defaults, then the conf again so it wins, then what inst
   ADDON_NETWORK="${ADDON_NETWORK:-bridge}"; [ "$n" = garage ] || ADDON_NETWORK=bridge
   ADDON_DATA_DIR="${OPT_DATA_DIR:-${ADDON_DATA_DIR:-$ADDONS_DIR/$n}}"
   case "$ADDON_ROLE" in web|db|dedicated) ;; *) CODE=2 die "--role must be web, db or dedicated" ;; esac
+  local v; for v in "${ADDON_DISK_WARN_PCT:-85}" "${ADDON_DISK_BAD_PCT:-95}"; do
+    [[ "$v" =~ ^[0-9]+$ ]] && [ "$v" -le 100 ] || CODE=2 die "ADDON_DISK_WARN_PCT / ADDON_DISK_BAD_PCT must be 0-100"; done
   case "$ADDON_NETWORK" in host|bridge) ;; *) CODE=2 die "ADDON_NETWORK must be host or bridge" ;; esac
+  [[ "${ADDON_PROJECT_PREFIX:-vsw}" =~ ^[a-z0-9][a-z0-9_-]{0,30}$ ]] || CODE=2 die "ADDON_PROJECT_PREFIX must be lowercase letters, digits, - or _ (max 31)"
 }
 pinned_keys() { grep -oE '^[A-Z0-9_]+=' "$STACKS/$1/addon.env.example" | tr -d =; }
-image_of() { local k; k="$(pinned_keys "$1" | grep '_IMAGE$' | head -1)"; echo "${!k}"; }
+image_of() { local k; k="$(pinned_keys "$1" | grep '_IMAGE$' | head -1 || true)"; [ -z "$k" ] || echo "${!k}"; }
 installed() { [ -f "$ADDONS_DIR/$1/stack.env" ]; }
 installed_storage() { local n; for n in garage seaweedfs rustfs; do installed "$n" && echo "$n"; done; return 0; }
 stack_get() { sed -n "s/^$2=//p" "$ADDONS_DIR/$1/stack.env" 2>/dev/null | tail -1; }
@@ -111,7 +117,7 @@ ram_report() { # $1 addon; prints findings, never fails
   if [ "$ADDON_KIND" = storage ] && [ "$ADDON_ROLE" = web ] && [ "$total" -le 2048 ]; then
     warn "object storage on a ${total} MB web node competes with PHP-FPM; prefer the db node (once MySQL/MariaDB are off) or a dedicated droplet"
   fi
-  if [ "$ADDON_ROLE" = db ] && command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -qE 'mysql|mariadb'; then
+  if [ "$ADDON_ROLE" = db ] && command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -E 'mysql|mariadb' >/dev/null; then
     warn "MySQL/MariaDB still run on this db node; disable them first or size up (docker-db-server-manager.sh engines)"
   fi
 }
@@ -136,8 +142,8 @@ gates() { # refusals that apply to plan and install
 stack_env() { # non-secret settings recorded for compose and later commands
   local k
   printf '# written by addon.sh %s - non-secret settings for %s (secrets are in secrets.env)\n' "$VERSION" "$1"
-  printf 'ADDON_NAME=%s\nADDON_ROLE=%s\nADDON_BIND=%s\nADDON_NETWORK=%s\nADDON_DATA_DIR=%s\nSTORAGE_BUCKET=%s\n' \
-    "$1" "$ADDON_ROLE" "$ADDON_BIND" "$ADDON_NETWORK" "$ADDON_DATA_DIR" "$STORAGE_BUCKET"
+  printf 'ADDON_NAME=%s\nADDON_PROJECT=%s\nADDON_ROLE=%s\nADDON_BIND=%s\nADDON_NETWORK=%s\nADDON_DATA_DIR=%s\nSTORAGE_BUCKET=%s\n' \
+    "$1" "$(project_of "$1")" "$ADDON_ROLE" "$ADDON_BIND" "$ADDON_NETWORK" "$ADDON_DATA_DIR" "$STORAGE_BUCKET"
   for k in $(pinned_keys "$1"); do case "$k" in ADDON_*) ;; *) printf '%s=%s\n' "$k" "${!k}" ;; esac; done
   case "$1" in
     gotenberg) printf 'GOTENBERG_BASIC_AUTH_ON=%s\n' "$(gotenberg_auth_on && echo true || echo false)" ;;
@@ -151,7 +157,7 @@ secret_spec() { # KEY:value-kind
     gotenberg) echo "GOTENBERG_USERNAME:user GOTENBERG_PASSWORD:hex24" ;;
     garage) echo "GARAGE_RPC_SECRET:hex32 GARAGE_ADMIN_TOKEN:hex32 GARAGE_METRICS_TOKEN:hex32 GARAGE_APP_KEY_ID:gk GARAGE_APP_SECRET:hex32" ;;
     seaweedfs) echo "SEAWEED_ADMIN_KEY_ID:ak SEAWEED_ADMIN_SECRET:hex24 SEAWEED_APP_KEY_ID:ak SEAWEED_APP_SECRET:hex24 SEAWEED_ADMIN_PASSWORD:hex16" ;;
-    rustfs) echo "RUSTFS_ACCESS_KEY:ak RUSTFS_SECRET_KEY:hex24" ;;
+    rustfs) echo "RUSTFS_ACCESS_KEY:ak RUSTFS_SECRET_KEY:hex24 RUSTFS_APP_KEY_ID:ak RUSTFS_APP_SECRET:hex24" ;;
   esac
 }
 gen_value() {
@@ -167,17 +173,18 @@ write_secrets() { # adds missing keys only; existing credentials are never rotat
 }
 garage_toml() { # $1 = file
   # host mode: bind the configured ports on ADDON_BIND; bridge mode: fixed ports inside the container
-  local inner="$ADDON_BIND" admin_bind=127.0.0.1 s3p="$GARAGE_S3_PORT" rpcp="$GARAGE_RPC_PORT" admp="$GARAGE_ADMIN_PORT"
-  [ "$ADDON_NETWORK" = bridge ] && { inner=0.0.0.0; admin_bind=0.0.0.0; s3p=3900; rpcp=3901; admp=3903; }
+  # peers dial rpc_public_addr, so in host mode it is ADDON_BIND (the VPC IP); bridge mode is single-node only
+  local inner="$ADDON_BIND" pub="$ADDON_BIND" admin_bind=127.0.0.1 s3p="$GARAGE_S3_PORT" rpcp="$GARAGE_RPC_PORT" admp="$GARAGE_ADMIN_PORT"
+  [ "$ADDON_NETWORK" = bridge ] && { inner=0.0.0.0; pub=127.0.0.1; admin_bind=0.0.0.0; s3p=3900; rpcp=3901; admp=3903; }
   (umask 077; cat > "$1" <<TOML
 # written by addon.sh $VERSION - chmod 600 (holds rpc_secret and admin tokens)
 metadata_dir = "/var/lib/garage/meta"
 data_dir = "/var/lib/garage/data"
 db_engine = "${GARAGE_DB_ENGINE}"
 metadata_auto_snapshot_interval = "6h"
-replication_factor = 1
+replication_factor = ${GARAGE_REPLICATION:-1}
 rpc_bind_addr = "${inner}:${rpcp}"
-rpc_public_addr = "127.0.0.1:${rpcp}"
+rpc_public_addr = "${pub}:${rpcp}"
 rpc_secret = "$(secret_get garage GARAGE_RPC_SECRET)"
 
 [s3_api]
@@ -191,7 +198,6 @@ admin_token = "$(secret_get garage GARAGE_ADMIN_TOKEN)"
 metrics_token = "$(secret_get garage GARAGE_METRICS_TOKEN)"
 TOML
   )
-  [ "$ADDON_NETWORK" = host ] && [ "$ADDON_BIND" != 127.0.0.1 ] && sed -i.tmp "s/^rpc_public_addr = .*/rpc_public_addr = \"${ADDON_BIND}:${GARAGE_RPC_PORT}\"/" "$1" && rm -f "$1.tmp"
   chmod 600 "$1"
 }
 seaweed_s3_json() {
@@ -215,7 +221,11 @@ config_sha() { # hash of mounted config files (not of secrets.env; compose alrea
   for f in garage.toml s3.json; do [ -f "$ADDONS_DIR/$1/$f" ] && out="$out$( (sha256sum "$ADDONS_DIR/$1/$f" 2>/dev/null || shasum -a 256 "$ADDONS_DIR/$1/$f") | cut -c1-16)"; done
   echo "${out:-none}"
 }
-dca() { local n="$1"; shift; (cd "$ADDONS_DIR/$n" && docker compose --env-file stack.env --env-file secrets.env "$@"); }
+# compose project: what install recorded (ADDON_PROJECT), else <ADDON_PROJECT_PREFIX>-<name>.
+# An exported COMPOSE_PROJECT_NAME (the caddy stack uses one) is deliberately ignored: it would put
+# every add-on in one project, and `uninstall` (down --remove-orphans) would remove the others.
+project_of() { local p; p="$(stack_get "$1" ADDON_PROJECT)"; echo "${p:-${ADDON_PROJECT_PREFIX:-vsw}-$1}"; }
+dca() { local n="$1" p; shift; p="$(project_of "$n")"; (cd "$ADDONS_DIR/$n" && docker compose -p "$p" --env-file stack.env --env-file secrets.env "$@"); }
 need_docker() { { command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; } || die "docker with the compose plugin is required"; }
 need_root() { [ "$(id -u)" -eq 0 ] || [ "${ADDON_ALLOW_NONROOT:-0}" = 1 ] || die "run as root (sudo)"; }
 audit() { printf '%s user=%s addon=%s %s\n' "$(date -u +%FT%TZ)" "${SUDO_USER:-$(id -un)}" "$1" "${*:2}" >> "$AUDIT_LOG" 2>/dev/null || warn "cannot write audit log $AUDIT_LOG"; }
@@ -240,8 +250,25 @@ ports_of() {
     rustfs) echo "$ADDON_BIND:$RUSTFS_PORT (S3), 127.0.0.1:$RUSTFS_CONSOLE_PORT (console)" ;;
   esac
 }
+garage_checks() { # replication and peers: Garage cannot change replication_factor on a live cluster
+  local rf="${GARAGE_REPLICATION:-1}" was p
+  case "$rf" in 1|2|3) ;; *) CODE=2 die "GARAGE_REPLICATION must be 1, 2 or 3" ;; esac
+  if installed garage; then
+    was="$(stack_get garage GARAGE_REPLICATION)"
+    [ "${was:-1}" = "$rf" ] || die "GARAGE_REPLICATION is ${was:-1} on this cluster; Garage cannot change it in place (new cluster + migration, see the Garage docs)"
+  fi
+  [ "$rf" = 1 ] || [ "$ADDON_NETWORK" = host ] || die "GARAGE_REPLICATION=$rf needs ADDON_NETWORK=host: peers must reach this node's RPC port"
+  for p in ${GARAGE_PEERS//,/ }; do
+    [[ "$p" =~ ^[0-9a-f]{64}@[^@[:space:]]+:[0-9]+$ ]] || CODE=2 die "GARAGE_PEERS entry '$p' is not <64-hex node id>@<ip>:<port>"
+  done
+  if [ -n "${GARAGE_PEERS:-}" ] && ! grep -q '^GARAGE_RPC_SECRET=' "$ADDONS_DIR/garage/secrets.env" 2>/dev/null; then
+    die "joining a cluster: copy secrets.env from a running node to $ADDONS_DIR/garage/secrets.env (600) first; rpc_secret and the app key must match"
+  fi
+  [ "$rf" = 1 ] || ! is_loopback "$ADDON_BIND" || warn "replication $rf with RPC on $ADDON_BIND: nodes on other hosts cannot reach it (use the VPC IP)"
+  return 0
+}
 cmd_plan() { # prints the plan; returns 0 when install may proceed
-  local n="$1" tmp; load_addon "$n"; resolve_bind; gates "$n"
+  local n="$1" tmp; load_addon "$n"; resolve_bind; gates "$n"; [ "$n" != garage ] || garage_checks
   echo "plan: $n ($ADDON_KIND$( [ "$ADDON_EXPERIMENTAL" = 1 ] && echo ', EXPERIMENTAL'))"
   echo "  role     $ADDON_ROLE   network $ADDON_NETWORK"
   echo "  image    $(image_of "$n")"
@@ -250,6 +277,7 @@ cmd_plan() { # prints the plan; returns 0 when install may proceed
   echo "  files    $ADDONS_DIR/$n/{docker-compose.yml,stack.env,secrets.env (600)$( [ "$n" = garage ] && echo ',garage.toml (600)')$( [ "$n" = seaweedfs ] && echo ',s3.json (600)')}"
   echo "  secrets  generated if missing: $(secret_spec "$n" | tr ' ' '\n' | cut -d: -f1 | tr '\n' ' ')(values never shown)"
   [ "$ADDON_KIND" = storage ] && echo "  bucket   $STORAGE_BUCKET with a key limited to it (read/write, not owner)"
+  [ "$n" = garage ] && echo "  cluster  replication ${GARAGE_REPLICATION:-1}, zone $GARAGE_ZONE, $(echo "${GARAGE_PEERS:-}" | tr ',' '\n' | grep -c . || true) peer(s) to join"
   [ "$n" = gotenberg ] && echo "  auth     basic auth $(gotenberg_auth_on && echo on || echo 'off (loopback only)'); private-IP fetches denied: $GOTENBERG_DENY_PRIVATE_IPS"
   ram_report "$n"
   if [[ "$ADDON_DATA_DIR" == /mnt/* ]] && command -v mountpoint >/dev/null 2>&1; then
@@ -310,14 +338,29 @@ cmd_install() {
 
 g() { dca garage exec -T -e RUST_LOG=warn garage /garage "$@"; }
 garage_setup() {
-  local ver id key="vsw-app-$STORAGE_BUCKET"
+  local id lay ver p want key="vsw-app-$STORAGE_BUCKET" rf="${GARAGE_REPLICATION:-1}"
   for _ in $(seq 1 30); do g status >/dev/null 2>&1 && break; sleep 2; done
-  if g status 2>/dev/null | grep -q 'NO ROLE ASSIGNED'; then
-    id="$(g node id -q 2>/dev/null | head -1 | cut -d@ -f1)"; [ -n "$id" ] || die "garage: no node id"
-    ver="$(g layout show 2>/dev/null | sed -n 's/.*[Cc]urrent cluster layout version: *\([0-9]*\).*/\1/p' | head -1)"
-    log "garage: layout zone=$GARAGE_ZONE capacity=$GARAGE_CAPACITY version $(( ${ver:-0} + 1 ))"
-    g layout assign -z "$GARAGE_ZONE" -c "$GARAGE_CAPACITY" "${id:0:16}" >/dev/null
-    g layout apply --version "$(( ${ver:-0} + 1 ))" >/dev/null
+  for p in ${GARAGE_PEERS//,/ }; do
+    g node connect "$p" >/dev/null 2>&1 || die "garage: cannot connect to peer ${p#*@} (reachable on the VPC? same rpc_secret?)"
+  done
+  id="$(g node id -q 2>/dev/null | head -1 | cut -c1-16)"; [ -n "$id" ] || die "garage: no node id"
+  # the layout is cluster state: wait until every peer's role (staged or applied) has reached this node
+  for _ in $(seq 1 30); do
+    lay="$(g layout show 2>&1 || true)"; want=0
+    for p in ${GARAGE_PEERS//,/ }; do grep -q "^${p:0:16} " <<<"$lay" || want=1; done
+    [ "$want" = 0 ] && break; sleep 2
+  done
+  if ! grep -q "^$id " <<<"$lay"; then
+    log "garage: layout assign zone=$GARAGE_ZONE capacity=$GARAGE_CAPACITY"
+    g layout assign -z "$GARAGE_ZONE" -c "$GARAGE_CAPACITY" "$id" >/dev/null
+    lay="$(g layout show 2>&1 || true)"
+  fi
+  ver="$(sed -n 's/.*garage layout apply --version \([0-9]*\).*/\1/p' <<<"$lay" | head -1)"
+  if [ -n "$ver" ]; then
+    log "garage: layout apply version $ver"; g layout apply --version "$ver" >/dev/null
+  elif grep -q 'cannot yet be applied' <<<"$lay"; then
+    log "garage: layout staged; it is applied by the install that brings the cluster to $rf node(s), which also creates the bucket and key"
+    return 0
   fi
   g bucket info "$STORAGE_BUCKET" >/dev/null 2>&1 || { log "garage: bucket $STORAGE_BUCKET"; g bucket create "$STORAGE_BUCKET" >/dev/null; }
   if ! g key info "$key" >/dev/null 2>&1; then
@@ -329,19 +372,37 @@ garage_setup() {
 sw_shell() { dca seaweedfs exec -T seaweedfs weed shell -master=127.0.0.1:9333 -filer=127.0.0.1:8888; }
 seaweed_setup() {
   for _ in $(seq 1 30); do echo "s3.bucket.list" | sw_shell >/dev/null 2>&1 && break; sleep 2; done
-  if ! echo "s3.bucket.list" | sw_shell 2>/dev/null | grep -qE "(^|[[:space:]])$STORAGE_BUCKET([[:space:]]|$)"; then
+  if ! echo "s3.bucket.list" | sw_shell 2>/dev/null | grep -E "(^|[[:space:]])$STORAGE_BUCKET([[:space:]]|$)" >/dev/null; then
     log "seaweedfs: bucket $STORAGE_BUCKET"; echo "s3.bucket.create -name $STORAGE_BUCKET" | sw_shell >/dev/null
   fi
   log "seaweedfs: app identity vsw-app limited to $STORAGE_BUCKET (s3.json)"
 }
-rustfs_setup() {
-  local code
-  code="$(printf 'user = "%s:%s"\naws-sigv4 = "aws:amz:%s:s3"\n' "$(secret_get rustfs RUSTFS_ACCESS_KEY)" "$(secret_get rustfs RUSTFS_SECRET_KEY)" "$STORAGE_REGION" \
-    | dca rustfs exec -T rustfs curl -s -o /dev/null -w '%{http_code}' -K - -X PUT "http://127.0.0.1:9000/$STORAGE_BUCKET" || true)"
-  case "$code" in 200|409) log "rustfs: bucket $STORAGE_BUCKET" ;; *) warn "rustfs: bucket create returned HTTP $code" ;; esac
-  warn "rustfs: create a key limited to $STORAGE_BUCKET in the console (ssh -L $RUSTFS_CONSOLE_PORT:127.0.0.1:$RUSTFS_CONSOLE_PORT <host>); the root key is not for the app"
+# rf_admin METHOD PATH [BODY]: a SigV4-signed request with the root key, sent from inside the container.
+# Credentials and the body travel in curl's stdin config, never on a command line; prints the HTTP code.
+rf_admin() {
+  { printf 'user = "%s:%s"\naws-sigv4 = "aws:amz:%s:s3"\n' "$(secret_get rustfs RUSTFS_ACCESS_KEY)" "$(secret_get rustfs RUSTFS_SECRET_KEY)" "$STORAGE_REGION"
+    [ -z "${3:-}" ] || printf 'data-binary = "%s"\n' "${3//\"/\\\"}"; } \
+    | dca rustfs exec -T rustfs curl -s -o /dev/null -w '%{http_code}' -K - -X "$1" "http://127.0.0.1:9000$2" || true
 }
-
+rustfs_policy() { # read/write objects in one bucket, list it; no bucket create/delete, no admin
+  local b="$1"
+  printf '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetBucketLocation","s3:ListBucket","s3:ListBucketMultipartUploads"],"Resource":["arn:aws:s3:::%s"]},{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:AbortMultipartUpload","s3:ListMultipartUploadParts"],"Resource":["arn:aws:s3:::%s/*"]}]}' "$b" "$b"
+}
+rustfs_setup() {
+  local code pol="vsw-app-$STORAGE_BUCKET" uid; uid="$(secret_get rustfs RUSTFS_APP_KEY_ID)"
+  for _ in $(seq 1 30); do code="$(rf_admin GET "/$STORAGE_BUCKET")"; [ "$code" != 000 ] && break; sleep 2; done
+  code="$(rf_admin PUT "/$STORAGE_BUCKET")"
+  case "$code" in 200|409) log "rustfs: bucket $STORAGE_BUCKET" ;; *) die "rustfs: bucket create returned HTTP $code" ;; esac
+  code="$(rf_admin PUT "/rustfs/admin/v3/add-canned-policy?name=$pol" "$(rustfs_policy "$STORAGE_BUCKET")")"
+  [ "$code" = 200 ] || die "rustfs: policy $pol returned HTTP $code"
+  if [ "$(rf_admin GET "/rustfs/admin/v3/user-info?accessKey=$uid")" != 200 ]; then
+    log "rustfs: app key (read/write on $STORAGE_BUCKET only)"
+    code="$(rf_admin PUT "/rustfs/admin/v3/add-user?accessKey=$uid" "{\"secretKey\":\"$(secret_get rustfs RUSTFS_APP_SECRET)\",\"status\":\"enabled\"}")"
+    [ "$code" = 200 ] || die "rustfs: app key create returned HTTP $code"
+  fi
+  code="$(rf_admin PUT "/rustfs/admin/v3/set-user-or-group-policy?policyName=$pol&userOrGroup=$uid&isGroup=false")"
+  [ "$code" = 200 ] || die "rustfs: attaching $pol returned HTTP $code"
+}
 recorded() { # load what install recorded for an installed add-on
   local n="$1"; installed "$n" || die "$n is not installed here"
   load_addon "$n"; set -a
@@ -364,8 +425,8 @@ cmd_laravel_env() {
         case "$n" in
           garage) port="$GARAGE_S3_PORT"; id="$(secret_get garage GARAGE_APP_KEY_ID)"; sec="$(secret_get garage GARAGE_APP_SECRET)" ;;
           seaweedfs) port="$SEAWEED_S3_PORT"; id="$(secret_get seaweedfs SEAWEED_APP_KEY_ID)"; sec="$(secret_get seaweedfs SEAWEED_APP_SECRET)" ;;
-          rustfs) port="$RUSTFS_PORT"; id=""; sec=""
-            echo "# RustFS: paste a bucket-scoped key created in the console; the root key is deliberately not written here" ;;
+          rustfs) port="$RUSTFS_PORT"; id="$(secret_get rustfs RUSTFS_APP_KEY_ID)"; sec="$(secret_get rustfs RUSTFS_APP_SECRET)"
+            echo "# RustFS: bucket-scoped app key (policy vsw-app-$STORAGE_BUCKET); the root key is deliberately not written here" ;;
         esac
         echo "FILESYSTEM_DISK=s3"; echo "AWS_ACCESS_KEY_ID=$id"; echo "AWS_SECRET_ACCESS_KEY=$sec"
         echo "AWS_DEFAULT_REGION=$STORAGE_REGION"; echo "AWS_BUCKET=$STORAGE_BUCKET"
@@ -408,7 +469,7 @@ doctor_one() {
     [ -z "$hostips" ] && dwarn "no published ports found"
     [ -n "$hostips" ] && [ "$exposed" = 0 ] && ok "published only on: $(echo "$hostips" | tr ' ' '\n' | sort -u | tr '\n' ' ')"
   elif command -v ss >/dev/null 2>&1; then
-    if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -E ":(${GARAGE_S3_PORT}|${GARAGE_RPC_PORT}|${GARAGE_ADMIN_PORT})$" | grep -qE '^(0\.0\.0\.0|\*|\[::\]):'; then
+    if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -E ":(${GARAGE_S3_PORT}|${GARAGE_RPC_PORT}|${GARAGE_ADMIN_PORT})$" | grep -E '^(0\.0\.0\.0|\*|\[::\]):' >/dev/null; then
       bad "garage listens on all interfaces; check garage.toml bind addresses"
     else ok "garage listens on $ADDON_BIND / 127.0.0.1 only"; fi
   else dwarn "ss not available; listening addresses not checked"; fi
@@ -417,17 +478,29 @@ doctor_one() {
       if ! is_loopback "$ADDON_BIND" && [ "$GOTENBERG_BASIC_AUTH_ON" != true ]; then bad "bound to $ADDON_BIND without basic auth"; fi
       [ "$GOTENBERG_DENY_PRIVATE_IPS" = true ] && ok "SSRF guard on (private IPs denied)" || dwarn "GOTENBERG_DENY_PRIVATE_IPS is off: rendered HTML can reach internal services" ;;
     garage)
-      g status 2>/dev/null | grep -q 'NO ROLE ASSIGNED' && bad "layout not applied (re-run install)" || ok "layout applied"
-      if g bucket info "$STORAGE_BUCKET" 2>/dev/null | grep -q "vsw-app-$STORAGE_BUCKET"; then ok "bucket $STORAGE_BUCKET has key vsw-app-$STORAGE_BUCKET"
+      local gid nodes; gid="$(g node id -q 2>/dev/null | head -1 | cut -c1-16)"
+      g layout show 2>/dev/null | sed '/STAGED ROLE CHANGES/,$d' | grep "^${gid:-none} " >/dev/null && ok "layout applied (this node has a role)" || bad "layout not applied for this node (re-run install; with replication > 1 it applies when the last node joins)"
+      nodes="$(g status 2>/dev/null | sed -n '/HEALTHY NODES/,/^$/p' | grep -cE '^[0-9a-f]{16} ' || true)"
+      # write quorum is floor(R/2)+1 (Garage default consistency): 2 of 3 still reads and writes, 1 of 3 refuses writes
+      local rf="${GARAGE_REPLICATION:-1}" q; nodes="${nodes:-0}"; q=$(( rf / 2 + 1 ))
+      if [ "$nodes" -ge "$rf" ]; then ok "healthy nodes: $nodes (replication $rf)"
+      elif [ "$nodes" -ge "$q" ]; then dwarn "healthy nodes: $nodes of $rf (replication $rf): reads and writes still work; one more node down stops writes"
+      else bad "healthy nodes: $nodes of $rf (replication $rf): below the write quorum of $q, writes are refused"; fi
+      if g bucket info "$STORAGE_BUCKET" 2>/dev/null | grep "vsw-app-$STORAGE_BUCKET" >/dev/null; then ok "bucket $STORAGE_BUCKET has key vsw-app-$STORAGE_BUCKET"
       else bad "bucket $STORAGE_BUCKET or its app key is missing (re-run install)"; fi ;;
     seaweedfs|rustfs)
       local port code; port="$([ "$n" = seaweedfs ] && echo "$SEAWEED_S3_PORT" || echo "$RUSTFS_PORT")"
       code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://$ADDON_BIND:$port/$STORAGE_BUCKET" || true)"
-      case "$code" in 401|403) ok "anonymous S3 access denied ($code)" ;; 000) dwarn "S3 port not reachable from here" ;; *) bad "anonymous S3 request returned $code (auth not enforced?)" ;; esac ;;
+      case "$code" in 401|403) ok "anonymous S3 access denied ($code)" ;; 000) dwarn "S3 port not reachable from here" ;; *) bad "anonymous S3 request returned $code (auth not enforced?)" ;; esac
+      if [ "$n" = rustfs ]; then
+        [ "$(rf_admin GET "/rustfs/admin/v3/user-info?accessKey=$(secret_get rustfs RUSTFS_APP_KEY_ID)")" = 200 ] \
+          && ok "app key exists (policy vsw-app-$STORAGE_BUCKET)" || bad "rustfs app key missing (re-run install)"
+      fi ;;
   esac
   if [ "$ADDON_KIND" = storage ] && [ -d "$ADDON_DATA_DIR" ]; then
     local use; use="$(df -P "$ADDON_DATA_DIR" | awk 'NR==2 {gsub("%","",$5); print $5}')"
-    if [ "${use:-0}" -ge 95 ]; then bad "data disk ${use}% full"; elif [ "${use:-0}" -ge 85 ]; then dwarn "data disk ${use}% full"; else ok "data disk ${use}% used"; fi
+    local dbad="${ADDON_DISK_BAD_PCT:-95}" dwrn="${ADDON_DISK_WARN_PCT:-85}"
+    if [ "${use:-0}" -ge "$dbad" ]; then bad "data disk ${use}% full (limit $dbad%)"; elif [ "${use:-0}" -ge "$dwrn" ]; then dwarn "data disk ${use}% full"; else ok "data disk ${use}% used"; fi
     [ "$ADDON_ROLE" = web ] && dwarn "storage on the web node: backups of the app droplet now include object data; prefer db/dedicated"
     dwarn "back up object data off this droplet (see stacks/addons/README.md#backups)"
   fi
@@ -504,6 +577,7 @@ main() {
     doctor) need_docker; cmd_doctor "$name" ;;
     laravel-env) [ -n "$name" ] || CODE=2 die "usage: addon.sh laravel-env <name>"; cmd_laravel_env "$name" ;;
     remove) [ -n "$name" ] || CODE=2 die "usage: addon.sh remove <name>"; cmd_remove "$name" ;;
+    garage-node-id) recorded garage; g node id -q 2>/dev/null | head -1 | grep . || die "garage is not running" ;;
     version|--version) echo "addon.sh $VERSION" ;;
     ""|-h|--help|help) usage ;;
     *) CODE=2 die "unknown command '$cmd' (see --help)" ;;

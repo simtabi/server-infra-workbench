@@ -1,0 +1,84 @@
+# Alert rules (copied by monitor.sh). Thresholds match docs/tools/monitor.md#alerts; `for:` keeps one
+# slow scrape from paging anyone. Labels: severity = critical (act now) | warning (act today).
+groups:
+  - name: vsw-hosts
+    rules:
+      - alert: VswTargetDown
+        expr: up == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: "{{ $labels.job }} on {{ $labels.host }} is down", hint: "monitor doctor on that node; check the VPC firewall"}
+      - alert: VswDiskFilling
+        expr: (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) > 0.85
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "{{ $labels.host }} {{ $labels.mountpoint }} is {{ $value | humanizePercentage }} full", hint: "docker system df; backups/trash; resize the volume"}
+      - alert: VswDiskFull
+        expr: (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) > 0.95
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "{{ $labels.host }} {{ $labels.mountpoint }} is almost full", hint: "Postgres stops writing at 100%"}
+      - alert: VswMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "{{ $labels.host }} has {{ $value | humanizePercentage }} memory available", hint: "docker stats; consider MONITOR_STACKS=beszel,kuma on small nodes"}
+      - alert: VswLoadHigh
+        expr: node_load15 / on(instance) group_left count by (instance) (node_cpu_seconds_total{mode="idle"}) > 2
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: "{{ $labels.host }} load is {{ $value }}x its CPU count"}
+      - alert: VswRebootRequired
+        expr: vsw_reboot_required == 1
+        for: 24h
+        labels: {severity: warning}
+        annotations: {summary: "{{ $labels.host }} needs a reboot (kernel/libc update)", hint: "plan it: runbooks/live-rollout.md"}
+  - name: vsw-database
+    rules:
+      - alert: VswPostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "Postgres on {{ $labels.host }} is not answering the exporter"}
+      - alert: VswPostgresConnectionsHigh
+        expr: sum by (host) (pg_stat_activity_count) / max by (host) (pg_settings_max_connections) > 0.8
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "Postgres on {{ $labels.host }} uses {{ $value | humanizePercentage }} of max_connections", hint: "the app should connect through PgBouncer"}
+      - alert: VswPgBouncerDown
+        expr: pgbouncer_up == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "PgBouncer on {{ $labels.host }} is down"}
+      - alert: VswBackupStale
+        expr: time() - vsw_backup_last_success_timestamp_seconds > 26 * 3600
+        for: 15m
+        labels: {severity: critical}
+        annotations: {summary: "no successful {{ $labels.engine }} backup on {{ $labels.host }} for {{ $value | humanizeDuration }}", hint: "docker-db-server-manager.sh backup; check the cron log"}
+      - alert: VswOffsiteStale
+        expr: time() - vsw_offsite_last_success_timestamp_seconds > 26 * 3600
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: "off-site copy on {{ $labels.host }} is {{ $value | humanizeDuration }} old"}
+      - alert: VswRestoreTestStale
+        expr: time() - vsw_restore_test_last_success_timestamp_seconds > 8 * 86400
+        for: 1h
+        labels: {severity: warning}
+        annotations: {summary: "last passing restore test on {{ $labels.host }} was {{ $value | humanizeDuration }} ago", hint: "an untested backup is a hope"}
+      - alert: VswDbCertExpiring
+        expr: vsw_tls_cert_expiry_timestamp_seconds - time() < 30 * 86400
+        for: 1h
+        labels: {severity: warning}
+        annotations: {summary: "DB TLS certificate on {{ $labels.host }} expires in {{ $value | humanizeDuration }}", hint: "docker-db-server-manager.sh tls renews it"}
+  - name: vsw-probes
+    rules:
+      - alert: VswProbeFailed
+        expr: probe_success == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: "{{ $labels.instance }} fails its HTTP probe"}
+      - alert: VswCertExpiring
+        expr: probe_ssl_earliest_cert_expiry - time() < 14 * 86400
+        for: 1h
+        labels: {severity: warning}
+        annotations: {summary: "certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}"}

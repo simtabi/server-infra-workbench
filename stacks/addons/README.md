@@ -2,7 +2,7 @@
 
 Optional services that sit next to a Laravel app. Each one is a pinned Docker Compose template plus defaults
 (`addon.env.example`). [`src/shell/addons/addon.sh`](../../src/shell/addons/addon.sh) renders, starts, checks
-and removes them on the node you pick. `bin/workbench configure` and the
+and removes them on the node you pick. `bin/siwo configure` and the
 [profiles](../../config/profiles) choose which add-ons to use and where.
 
 | Add-on | What | Image (pinned, checked 2026-10) | Default role | RAM (estimate) | Status |
@@ -19,13 +19,13 @@ RAM figures are planning estimates, not measurements under your load. A node run
 From your workstation (repo root). `DB_HOST` is your SSH alias for the node, and you need a sudo user:
 
 ```bash
-rsync -a src/shell/addons/addon.sh stacks/addons/ DB_HOST:/tmp/vsw-addons-src/
-# optional settings (no secrets), e.g. written by `bin/workbench configure`
+rsync -a src/shell/addons/addon.sh stacks/addons/ DB_HOST:/tmp/siw-addons-src/
+# optional settings (no secrets), e.g. written by `bin/siwo configure`
 scp local/<client>/addons-db.conf DB_HOST:/tmp/addons.conf \
   && ssh DB_HOST 'sudo install -m 600 -o root -g root /tmp/addons.conf /etc/vsw-addons.conf && rm /tmp/addons.conf'
 
-ssh DB_HOST 'sudo /tmp/vsw-addons-src/addon.sh plan garage'       # writes nothing
-ssh -t DB_HOST 'sudo /tmp/vsw-addons-src/addon.sh install garage' # type the name to confirm
+ssh DB_HOST 'sudo /tmp/siw-addons-src/addon.sh plan garage'       # writes nothing
+ssh -t DB_HOST 'sudo /tmp/siw-addons-src/addon.sh install garage' # type the name to confirm
 ssh DB_HOST 'sudo /opt/vsw-addons/addon.sh doctor garage'         # later runs use the installed copy
 ssh DB_HOST 'sudo /opt/vsw-addons/addon.sh laravel-env garage --out /root/garage.laravel.env'
 ```
@@ -64,9 +64,13 @@ flowchart LR
 - **Credentials** are generated on the node (`openssl rand`), stored in `/opt/vsw-addons/<name>/secrets.env`
   (chmod 600), never printed and never logged. Re-running `install` keeps them. To rotate them, delete the key
   from `secrets.env` and the matching app key in the store, then run `install` again.
-- **App key**: Garage and SeaweedFS get a key that can read and write the one bucket only. It cannot create
-  or delete buckets, and it cannot see other buckets. RustFS has no CLI for this, so you create the key in its
-  console. The root key is never written for the app.
+- **App key**: every store gets a key that can read and write the one bucket only. It cannot create or
+  delete buckets, and it cannot see other buckets. Garage uses `bucket allow --read --write`, SeaweedFS an
+  `s3.json` identity, RustFS an IAM user with the policy `vsw-app-<bucket>` created through its admin API
+  (signed with the root key from inside the container). The root key is never written for the app.
+- **Project name**: compose projects are `<ADDON_PROJECT_PREFIX>-<name>` (`vsw-garage` by default), recorded
+  in `stack.env` as `ADDON_PROJECT` at install so later commands find the containers. Change the prefix only
+  for a second, separate set of add-ons on one host (the integration tests do this).
 - **Data path**: `ADDON_DATA_DIR`, `/opt/vsw-addons/<name>` by default. A DigitalOcean volume such as
   `/mnt/volume_nyc3_01/garage` keeps object data off the droplet disk and survives a resize. `plan` warns if
   the volume is not mounted.
@@ -83,7 +87,7 @@ flowchart LR
 | Who runs it | DigitalOcean | you | you | you | you (a team) |
 | Smallest useful setup | none | 1 node; 3 for redundancy | 1 node | 1 node | 3+ nodes, cephadm |
 | RAM (estimate) | none on your droplets | ~256 MB | ~512 MB+ | ~512 MB | GBs per node |
-| Least-privilege key | per-bucket access keys | `bucket allow --read --write` | `s3.json` actions per bucket | console only | RGW users/policies |
+| Least-privilege key | per-bucket access keys | `bucket allow --read --write` | `s3.json` actions per bucket | IAM user + bucket policy (admin API) | RGW users/policies |
 | Redundancy | provider-managed | multi-node, multi-zone layout | replication / erasure coding | erasure coding | full |
 | Fit | **default for dev-budget and most production** | small self-hosted, multi-site later | many small files, wants a UI | evaluation only | large clusters only |
 | In this repo | docs (below) | add-on, container-tested | add-on, container-tested | add-on, gated | docs only |
@@ -121,7 +125,8 @@ Object storage on one droplet is not a backup: the droplet's snapshots and the d
 - **Copy the bucket off the node**, for example nightly with rclone to DO Spaces or another provider:
   `rclone sync garage:app spaces:app-backup --s3-no-check-bucket`. Configure the remotes through
   `RCLONE_CONFIG_*` environment variables in a 600 file and never put the keys in the crontab.
-- **Garage**: run three nodes in different zones (`garage layout assign -z zoneN`) for redundancy. LMDB
+- **Garage**: a [three-node cluster](garage/README.md#three-node-cluster) in three zones keeps every object on
+  three nodes (it is still not a backup: a delete replicates too). LMDB
   metadata snapshots every 6 hours (`metadata_auto_snapshot_interval`) let you recover from a crash.
 - **SeaweedFS**: `weed filer.backup` or `filer.sync` replicate to another cluster or to S3.
 - **Credentials**: keep a copy of `secrets.env` in your password manager. Without it, the data is still
@@ -138,7 +143,7 @@ Object storage on one droplet is not a backup: the droplet's snapshots and the d
 - Gotenberg: basic auth is on when the bind is not loopback, and the SSRF guard is on
 - Garage: the layout is applied, and the bucket and app key exist
 - SeaweedFS and RustFS: anonymous S3 requests are denied
-- data disk usage (warning at 85%, problem at 95%)
+- data disk usage (warning at 85%, problem at 95%; `ADDON_DISK_WARN_PCT` / `ADDON_DISK_BAD_PCT`)
 - free memory
 
 It also warns that object data needs a copy off the node.

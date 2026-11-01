@@ -2,16 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
 use GuzzleHttp\Psr7\Response;
-use Simtabi\VpsServerWorkbench\Console\Application;
-use Simtabi\VpsServerWorkbench\Console\Output;
-use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\FakeKeys;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\FakeSshRunner;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Console\Application;
+use Simtabi\ServerInfraWorkbench\Console\Output;
+use Simtabi\ServerInfraWorkbench\Console\ProviderFactory;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Droplets;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\FakeKeys;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\FakeSshRunner;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 /** CLI wiring for firewalls, uptime, droplet-create, ploi sites/daemons/scripts, health and keys. */
 final class ConsoleNewCommandsTest extends TestCase
@@ -35,11 +36,12 @@ final class ConsoleNewCommandsTest extends TestCase
         $this->ssh = new FakeSshRunner;
     }
 
-    private function app(): Application
+    /** @param array<string, string> $settings extra environment (non-secret settings) */
+    private function app(array $settings = []): Application
     {
         $this->stdout = self::memory();
         $this->stderr = self::memory();
-        $env = ['DIGITALOCEAN_TOKEN' => 'do-token-abcdef', 'PLOI_API_TOKEN' => 'ploi-token-abcdef', 'HCLOUD_TOKEN' => 'hcloud-token-abcdef'];
+        $env = ['DIGITALOCEAN_TOKEN' => self::fake('do'), 'PLOI_API_TOKEN' => self::fake('ploi'), 'HCLOUD_TOKEN' => self::fake('hcloud')] + $settings;
 
         return new Application(
             new ProviderFactory($this->options(), new Credentials('/nonexistent/credentials', $env), null, $this->ssh, [], '/tmp'),
@@ -176,7 +178,7 @@ final class ConsoleNewCommandsTest extends TestCase
     {
         self::assertSame(0, $this->app()->run(['keys', 'providers', '--config', '/nonexistent/keys.json']));
         self::assertMatchesRegularExpression('/hetzner\s+yes/', $this->out());
-        self::assertStringNotContainsString('hcloud-token-abcdef', $this->out());
+        self::assertStringNotContainsString(self::fake('hcloud'), $this->out());
 
         $this->http->json(['ssh_keys' => [['id' => 1, 'name' => 'lap', 'fingerprint' => 'aa:bb']], 'meta' => ['pagination' => ['next_page' => null]]]);
         self::assertSame(0, $this->app()->run(['keys', 'account', 'list', '--provider', 'hetzner', '--config', '/nonexistent/keys.json']));
@@ -270,5 +272,30 @@ final class ConsoleNewCommandsTest extends TestCase
         self::assertSame(0, $this->app()->run(['keys', '--dry-run', '--config', '/nonexistent/k.json']));
         self::assertStringContainsString('DRY RUN', $this->out());
         self::assertSame(['GET /v1/ssh_keys?per_page=50'], $this->http->log());
+    }
+
+    public function test_droplet_create_image_comes_from_flag_then_setting_then_the_newest_lts_default(): void
+    {
+        $this->http->json(['droplets' => [], 'links' => []]);
+        self::assertSame(0, $this->app()->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--dry-run']));
+        self::assertStringContainsString('"image":"'.Droplets::DEFAULT_IMAGE.'"', $this->out());
+
+        $this->http->json(['droplets' => [], 'links' => []]);
+        self::assertSame(0, $this->app(['SIWO_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--dry-run']));
+        self::assertStringContainsString('"image":"ubuntu-24-04-x64"', $this->out());
+
+        $this->http->json(['images' => [['slug' => 'ubuntu-26-04-x64'], ['slug' => 'ubuntu-28-04-x64']], 'links' => []])->json(['droplets' => [], 'links' => []]);
+        self::assertSame(0, $this->app(['SIWO_DROPLET_IMAGE' => 'ubuntu-24-04-x64'])->run(['do', 'droplet-create', 'web-02', '--region', 'nyc3', '--size', 's-1vcpu-1gb', '--ssh-keys', '1', '--image', 'latest', '--dry-run']));
+        self::assertStringContainsString('"image":"ubuntu-28-04-x64"', $this->out());
+    }
+
+    public function test_help_and_docs_name_the_current_default_image(): void
+    {
+        self::assertSame(0, $this->app()->run(['do', '--help']));
+        self::assertStringContainsString(Droplets::DEFAULT_IMAGE, $this->out());
+        $root = dirname(__DIR__, 4);
+        foreach (['docs/tools/cli.md', 'config/credentials.env.example'] as $doc) {
+            self::assertStringContainsString(Droplets::DEFAULT_IMAGE, (string) file_get_contents($root.'/'.$doc), $doc);
+        }
     }
 }

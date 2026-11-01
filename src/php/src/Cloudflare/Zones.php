@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Cloudflare;
+namespace Simtabi\ServerInfraWorkbench\Cloudflare;
 
-use Simtabi\VpsServerWorkbench\Cloudflare\Data\Zone;
-use Simtabi\VpsServerWorkbench\Exception\NotFoundException;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Data\Zone;
+use Simtabi\ServerInfraWorkbench\Exception\NotFoundException;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 final readonly class Zones
 {
@@ -41,6 +41,26 @@ final readonly class Zones
     public function dns(string $zone): DnsRecords
     {
         return new DnsRecords($this->transport, $this->find($zone));
+    }
+
+    public function settings(string $zone): ZoneSettings
+    {
+        return new ZoneSettings($this->transport, $this->find($zone));
+    }
+
+    public function originCertificates(string $zone): OriginCertificates
+    {
+        return new OriginCertificates($this->transport, $this->find($zone));
+    }
+
+    public function firewall(string $zone): Firewall
+    {
+        return new Firewall($this->transport, $this->find($zone));
+    }
+
+    public function cache(string $zone): Cache
+    {
+        return new Cache($this->transport, $this->find($zone));
     }
 
     public static function isId(string $value): bool

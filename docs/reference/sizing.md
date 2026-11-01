@@ -7,7 +7,7 @@ and `free -m` once real traffic arrives.
 
 | Component | RAM (MB, estimate) | Notes |
 |---|---|---|
-| OS + Docker | 512 | Ubuntu 24.04, dockerd, containerd, journald |
+| OS + Docker | 512 | Ubuntu 24.04 or 26.04 LTS, dockerd, containerd, journald |
 | PostgreSQL 18 | 1024 | `shared_buffers` ~25% of this; more for big indexes |
 | PgBouncer | 64 | |
 | MySQL 9.7 | 1024 | InnoDB buffer pool is the main cost |
@@ -23,7 +23,7 @@ and `free -m` once real traffic arrives.
 | All four engines | 3392 MB | `s-2vcpu-4gb`, no headroom; 8 GB for real load |
 
 `doctor` and `engine enable` warn when the host has less than 90% of the estimate and print the
-`bin/workbench do resize <droplet> --size ...` command for the smallest size that fits (or suggest
+`bin/siwo do resize <droplet> --size ...` command for the smallest size that fits (or suggest
 `engine disable mysql`). Each extra environment on the
 same server adds databases, not processes, so it costs disk and cache rather than a fixed amount of RAM.
 

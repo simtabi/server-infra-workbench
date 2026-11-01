@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Cloudflare;
+namespace Simtabi\ServerInfraWorkbench\Cloudflare;
 
-use Simtabi\VpsServerWorkbench\Cloudflare\Data\DnsRecord;
-use Simtabi\VpsServerWorkbench\Cloudflare\Data\DnsRecordType;
-use Simtabi\VpsServerWorkbench\Cloudflare\Data\Zone;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Data\DnsRecord;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Data\DnsRecordType;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Data\Zone;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 /** DNS records of one zone. */
 final readonly class DnsRecords

@@ -20,11 +20,11 @@ commit them.
 
 ## Platform credentials
 
-Used by `bin/workbench do|cf|ploi|gcp` and the PHP library. Resolution order, first hit wins:
+Used by `bin/siwo do|cf|ploi|gcp` and the PHP library. Resolution order, first hit wins:
 
 1. A value passed in code (`DigitalOcean::make($token)`).
 2. The environment variable.
-3. The credentials file: `$VSW_CREDENTIALS_FILE`, else `~/.config/vps-server-workbench/credentials`.
+3. The credentials file: `$SIWO_CREDENTIALS_FILE`, else `~/.config/server-infra-workbench/credentials`.
 
 | Key | What | Minimum scope |
 |---|---|---|
@@ -37,15 +37,15 @@ Used by `bin/workbench do|cf|ploi|gcp` and the PHP library. Resolution order, fi
 Create the file (it is refused unless it is mode 600, owned by you, and outside any git working tree):
 
 ```bash
-mkdir -p ~/.config/vps-server-workbench && chmod 700 ~/.config/vps-server-workbench
-touch ~/.config/vps-server-workbench/credentials && chmod 600 ~/.config/vps-server-workbench/credentials
-open -e ~/.config/vps-server-workbench/credentials      # macOS; or use any editor
+mkdir -p ~/.config/server-infra-workbench && chmod 700 ~/.config/server-infra-workbench
+touch ~/.config/server-infra-workbench/credentials && chmod 600 ~/.config/server-infra-workbench/credentials
+open -e ~/.config/server-infra-workbench/credentials      # macOS; or use any editor
 ```
 
 Format, one key per line (quotes optional, `#` starts a comment):
 
 ```ini
-# ~/.config/vps-server-workbench/credentials
+# ~/.config/server-infra-workbench/credentials
 DIGITALOCEAN_TOKEN=<token>
 CLOUDFLARE_API_TOKEN=<token>
 PLOI_API_TOKEN=<token>
@@ -53,7 +53,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/Users/you/.config/gcloud/workbench-sa.json
 GCP_PROJECT=my-project
 ```
 
-Then `bin/workbench credentials` shows where each key comes from without printing it. Type tokens into an
+Then `bin/siwo credentials` shows where each key comes from without printing it. Type tokens into an
 editor rather than `echo`ing them, so they do not land in your shell history.
 
 GCP without a key file: install gcloud and run `gcloud auth login`; the workbench then uses
@@ -63,13 +63,24 @@ GCP without a key file: install gcloud and run `gcloud auth login`; the workbenc
 
 | Variable | Default | Effect |
 |---|---|---|
-| `VSW_CREDENTIALS_FILE` | `~/.config/vps-server-workbench/credentials` | Credentials file location |
-| `VSW_AUDIT_LOG` | `~/.local/state/vps-server-workbench/audit.log` | JSONL audit log of every dry run and write; `off` disables it |
+| `SIWO_CREDENTIALS_FILE` | `~/.config/server-infra-workbench/credentials` | Credentials file location |
+| `SIWO_AUDIT_LOG` | `~/.local/state/server-infra-workbench/audit.log` | JSONL audit log of every dry run and write; `off` disables it |
+| `SIWO_KEYS_CONFIG` | `~/.config/server-infra-workbench/keys.json` | Extra SSH-key API providers for `siwo keys` (`VPSKEYS_CONFIG` also read) |
+| `SIWO_DROPLET_IMAGE` | `ubuntu-26-04-x64` | `do droplet-create` image when `--image` is not given; `latest` asks the API |
+| `SIWO_PROGRESS` | `auto` | Progress output: `auto`, `tty`, `plain` or `off` (all tools, shell included) |
+| `SIWO_QUIET` | unset | `1` = no progress output (what `--quiet` sets) |
+| `SIWO_VERBOSE` | unset | `1` = show a wrapped step's output even when it succeeds (shell tools) |
+
+Before November 2026 these were `VSW_*` (the project was `vps-server-workbench`). An unset `SIWO_X` still
+falls back to `VSW_X`, with one `note: VSW_X is deprecated` line on stderr, and a credentials file or
+`keys.json` that only exists under `~/.config/vps-server-workbench/` keeps being used
+([ADR 0014](adr/0014-rename-to-server-infra-workbench.md)). Rename the variables and move the directory
+when convenient: `mv ~/.config/vps-server-workbench ~/.config/server-infra-workbench`.
 
 ## Where things are written
 
 | Path | What | Mode |
 |---|---|---|
-| `~/.local/state/vps-server-workbench/audit.log` | platform write audit (no tokens, no payloads) | 600 |
+| `~/.local/state/server-infra-workbench/audit.log` | platform write audit (no tokens, no payloads) | 600 |
 | `/var/log/docker-db-server-manager.log` (DB server) | manager run log, redacted | 600 |
 | `/opt/db/` (DB server) | stack, `.env` with passwords, backups, upgrade savepoints | root |

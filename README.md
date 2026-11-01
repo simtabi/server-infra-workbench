@@ -1,13 +1,17 @@
-# simtabi/vps-server-workbench
+# simtabi/server-infra-workbench
 
-[![CI](https://img.shields.io/github/actions/workflow/status/simtabi/vps-server-workbench/ci.yml?branch=main&label=ci)](https://github.com/simtabi/vps-server-workbench/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/simtabi/server-infra-workbench/ci.yml?branch=main&label=ci)](https://github.com/simtabi/server-infra-workbench/actions/workflows/ci.yml)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4.svg)](src/php/composer.json)
 [![PHPStan](https://img.shields.io/badge/phpstan-level%20max-brightgreen.svg)](src/php/phpstan.neon)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> Tools and runbooks for hosting PHP (Laravel or not) apps on DigitalOcean droplets managed with Ploi: a
-> dedicated Docker database server on the private VPC, a Ploi web server, zero-downtime deploys, daemons,
-> SSH access, and typed API clients for DigitalOcean, Cloudflare, Ploi and Google Compute Engine.
+> Tools and runbooks for running web apps (PHP/Laravel, Python, Ruby, Node, Go) on cloud servers managed
+> with Ploi: a dedicated Docker database server on the private network, Ploi web servers, zero-downtime
+> deploys, daemons, backups with point-in-time restore, monitoring, cross-region WireGuard, SSH access, and
+> typed API clients for DigitalOcean, Cloudflare, Google Cloud, GitHub and Ploi.
+
+The command is `siwo` (Server + Infrastructure + WOrkbench). Formerly `vps-server-workbench` with `bin/workbench` <!-- siw-commands: ignore -->
+(old URLs redirect; `bin/workbench` and `VSW_*` settings still work, with a deprecation notice): see [ADR 0014](docs/adr/0014-rename-to-server-infra-workbench.md). <!-- siw-commands: ignore -->
 
 Server tooling is plain Bash plus docker compose; platform automation is a small PHP 8.4 library with a CLI.
 Every name, path, IP, port and image version is a parameter with a default; project-specific values live
@@ -16,9 +20,9 @@ only in [`examples/`](examples).
 ## Install
 
 ```bash
-git clone <your remote or path> vps-server-workbench && cd vps-server-workbench
+git clone <your remote or path> server-infra-workbench && cd server-infra-workbench
 composer install --working-dir=src/php        # only needed for the platform APIs (PHP 8.4+)
-bin/workbench list                        # every tool and where it lives
+bin/siwo list                        # every tool and where it lives
 ```
 
 Requirements and credentials: [docs/installation.md](docs/installation.md).
@@ -47,17 +51,17 @@ src/shell/web/update-env-db.sh --remote prd-web-00 --site example.com --from db.
 Platform APIs, read-only unless you confirm:
 
 ```bash
-bin/workbench credentials                                         # which tokens are set (never the values)
-bin/workbench do droplets --tag db
-bin/workbench do snapshot 123456 --name db-pre-upgrade --dry-run  # shows the request, sends nothing
-bin/workbench do snapshot 123456 --name db-pre-upgrade --yes --wait
-bin/workbench cf dns upsert example.com A db 203.0.113.10 --ttl 300 --dry-run
-bin/workbench ploi deploy 42 1001 --yes
-bin/workbench gcp firewalls --project my-project                  # flags rules open to 0.0.0.0/0
+bin/siwo credentials                                         # which tokens are set (never the values)
+bin/siwo do droplets --tag db
+bin/siwo do snapshot 123456 --name db-pre-upgrade --dry-run  # shows the request, sends nothing
+bin/siwo do snapshot 123456 --name db-pre-upgrade --yes --wait
+bin/siwo cf dns upsert example.com A db 203.0.113.10 --ttl 300 --dry-run
+bin/siwo ploi deploy 42 1001 --yes
+bin/siwo gcp firewalls --project my-project                  # flags rules open to 0.0.0.0/0
 ```
 
 ```php
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
 
 $action = DigitalOcean::make()->droplets()->snapshot(123456, 'db-pre-upgrade'); // nothing sent yet
 $action->plan();                 // dry run
@@ -81,24 +85,26 @@ New project end to end: **[Getting started](docs/getting-started.md)** (about 10
 
 | Path | What |
 |---|---|
-| [`bin/workbench`](bin/workbench) | One entry point: `list`, `<area> <tool>` for shell tools, `do`/`cf`/`ploi`/`gcp` for platform APIs, `py` for Python helpers ([cli.md](docs/tools/cli.md)) |
-| [`src/shell/db/docker-db-server-manager.sh`](src/shell/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP, each engine optional. `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user logs backup restore cron-install cron-remove uninstall help` |
+| [`bin/siwo`](bin/siwo) | One entry point: `list`, `<area> <tool>` for shell tools, `do`/`cf`/`ploi`/`gcp` for platform APIs, `py` for Python helpers ([cli.md](docs/tools/cli.md)) |
+| [`src/shell/db/docker-db-server-manager.sh`](src/shell/db/docker-db-server-manager.sh) | Docker DB Server Setup Manager: PostgreSQL 18 + PostGIS 3.6 + pgvector, PgBouncer (session, scram), MySQL 9.7, MariaDB 13, bound to the private IP, each engine optional. `init install upgrade reset status verify doctor env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user logs backup restore tls-ca monitor-user metrics migrate-managed pg-major-upgrade cron-install cron-remove uninstall help` |
 | [`src/shell/db/remote-run.sh`](src/shell/db/remote-run.sh) | Run the manager on the DB server from your workstation, with a wrong-server guard |
+| [`src/shell/db/pg-log-errors.sh`](src/shell/db/pg-log-errors.sh) | Read-only: grouped, masked Postgres/PgBouncer log errors from your workstation (ssh + `docker logs`) |
 | [`src/shell/web/update-env-db.sh`](src/shell/web/update-env-db.sh) | Back up a shared Laravel `.env` and replace its `DB_*` keys idempotently (password masked in output); local or `--remote` |
 | [`src/shell/deploy/ploi-deploy.sh`](src/shell/deploy/ploi-deploy.sh) | Ploi deploy script for any PHP/Node app: `laravel` or `generic` preset, optional hooks (first install, migrations, post-deploy, health check), zero-downtime or in-place |
 | [`src/shell/tunnels/db-tunnel.sh`](src/shell/tunnels/db-tunnel.sh) | SSH tunnels from the Mac per engine (`postgres pgbouncer mysql mariadb adminer all`) for TablePlus, psql, Adminer |
 | [`src/shell/web/check-db-reach.sh`](src/shell/web/check-db-reach.sh) | TCP check from the web server to every DB port (no passwords needed), with region and VPC warnings |
 | [`src/shell/server/`](docs/tools/server.md) | `server init`, `harden`, `update --reboot-window`, `inventory`, and `web diagnose` for a 500/503 |
-| [`src/shell/env/env.sh`](docs/tools/env.md) | Laravel `.env` per environment: `env init` / `env check` from the template |
+| [`src/shell/env/env.sh`](docs/tools/env.md) | Laravel `.env` per environment: `env init` / `env check` from the template, `--addons` merges add-on keys |
 | [`src/shell/ssh/fixkeys.sh`](docs/tools/ssh-keys.md) | `authorized_keys` repair and console lockout recovery (also from the DO recovery ISO) |
 | [`src/shell/net/wireguard.sh`](docs/tools/net.md) | WireGuard tunnel between two servers in different regions ([cross-region](docs/cross-region.md)) |
+| [`src/shell/monitor/monitor.sh`](docs/tools/monitor.md) | Self-hosted monitoring per node: Beszel, Uptime Kuma, Netdata, Prometheus + Grafana + exporters; loopback UIs, RAM gate. `bin/siwo status` for a one-screen health check |
 | [`src/shell/addons/addon.sh`](docs/tools/addons.md) | Optional services: Gotenberg (PDF) and one S3-compatible store (Garage, SeaweedFS, RustFS) |
-| [`configure`](docs/configure.md) | `bin/workbench configure` wizard and versioned `config/profiles` (dev-budget and others) into gitignored `local/<client>/` |
+| [`configure`](docs/configure.md) | `bin/siwo configure` wizard and versioned `config/profiles` (dev-budget and others) into gitignored `local/<client>/` |
 | [`src/php`](src/php/README.md) | Typed PHP 8.4 clients for DigitalOcean, Cloudflare, Ploi and GCP on PSR-18, with retries, pagination, redaction, pending actions and an audit log ([platform-api.md](docs/tools/platform-api.md)) |
 | [`src/python`](src/python/README.md) | Standard-library helpers with tests: `ping` (TCP probe) and `plans` (which DO plans each region offers through Ploi) ([python.md](docs/tools/python.md)) |
 | [`stacks/caddy`](stacks/README.md) | Laravel (php-fpm, queue, scheduler) behind Caddy with automatic HTTPS, for a Ploi Docker web server; reverse-proxy and smoke-test variants |
 | [`config/`](config/README.md) | `.env.example`-style templates for every tool |
-| [`examples/`](examples/README.md) | Example configs per project (no secrets): a made-up generic Laravel app (real setups live in gitignored `local/`) |
+| [`examples/`](examples/README.md) | Catalog of made-up examples (no secrets, runnable offline with `examples/run.sh`): Laravel, multi-tenant, split web/DB, cross-region WireGuard, S3, Gotenberg, monitoring; more planned. Real setups live in gitignored `local/` |
 
 Full map and conventions: [docs/structure.md](docs/structure.md).
 
@@ -128,14 +134,17 @@ Start at the [docs index](docs/README.md) (diagrams and command reference includ
 
 ```sh
 make help           # targets
-make lint           # shellcheck + bash -n on every script
-make test           # offline smoke tests (shell tools, dispatcher, CLI safety)
+make secrets-check  # no hardcoded secrets: repo scanner + gitleaks over the full history
+make lint           # pinned shellcheck + bash -n on every script
+make test           # offline smoke tests (shell tools, dispatcher, CLI safety) and the runnable examples
 make php            # pint --test, phpstan (level max), phpunit
 make python         # py_compile (+ ruff when installed), unittest
 make links          # check relative links and #anchors in all Markdown
+make docs-commands  # every documented command and flag exists in --help; Markdown tables are well formed
+make client-check   # no client names (.client-denylist) in tracked files or commit messages
 make compose-check  # docker compose config + caddy validate
-make ci             # all of the above (what CI runs)
-make it             # Docker integration test of the guided DB upgrade (~3 min)
+make ci             # all of the above (what CI runs); make ci-local runs it with CI's pinned tools
+make it             # nine Docker integration suites, one after another, with a leak guard (~13 min)
 make fmt-check      # shfmt diff (advisory)
 ```
 

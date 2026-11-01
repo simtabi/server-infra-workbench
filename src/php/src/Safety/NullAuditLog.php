@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Safety;
+namespace Simtabi\ServerInfraWorkbench\Safety;
 
 final class NullAuditLog implements AuditLog
 {

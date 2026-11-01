@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Monitoring;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Monitoring;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 /** do resize and Monitoring alert policies. All mocked; no network. */
 final class DigitalOceanResizeMonitoringTest extends TestCase
 {
     private function do(): DigitalOcean
     {
-        return DigitalOcean::make(self::TOKEN, $this->options());
+        return DigitalOcean::make(self::token(), $this->options());
     }
 
     /** @return array<string, mixed> */
@@ -78,7 +78,7 @@ final class DigitalOceanResizeMonitoringTest extends TestCase
         try {
             $this->do()->droplets()->resize(7, 's-2vcpu-4gb')->confirm();
             self::fail('resize error must surface');
-        } catch (\Simtabi\VpsServerWorkbench\Exception\ActionFailedException) {
+        } catch (\Simtabi\ServerInfraWorkbench\Exception\ActionFailedException) {
             $this->addToAssertionCount(1);
         }
         $types = [];

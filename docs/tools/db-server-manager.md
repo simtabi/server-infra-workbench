@@ -20,6 +20,10 @@
 
 Moving an existing server to this version: [upgrading.md](../recipes/upgrade-a-legacy-db-server.md).
 
+**New in 1.5.0:** `TLS_MODE=verify-full` + `tls-ca` ([recipe](../recipes/verify-full-tls.md)), `monitor-user` and `metrics`
+for [monitoring](monitor.md), `migrate-managed` ([recipe](../recipes/migrate-to-managed.md)), `pg-major-upgrade`
+([recipe](../recipes/pg-major-upgrade.md)).
+
 **New in 1.4.0** (details in the [CHANGELOG](../../CHANGELOG.md)):
 
 | Area | What changed | Read |
@@ -54,18 +58,18 @@ src/shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
   --config my-db-server.conf -- reset --yes, verify, cron-install, env
 ```
 
-That uploads the script (scp to `~`), installs it to `/root` with `sudo install -m 755`, aborts
+That uploads the script and config to staging names in `~` (`.vsw-upload-*`, so a `root` login never copies a file onto itself), installs them to `/root` with `sudo install -m 755`, aborts
 with `ABORT: this is <host>, not the db server` unless `<private-ip>` is on the host, then runs
 each command with sudo (one password prompt). Use `install` instead of `reset --yes` to keep
 existing data. For `upgrade` it first offers a droplet snapshot from your Mac: doctl if configured,
-otherwise `bin/workbench do snapshot` (token from the credentials file), otherwise the server's own token,
-otherwise you type `CONTINUE` on the server; `--snapshot-with doctl|workbench|server|none` forces one.
+otherwise `bin/siwo do snapshot` (token from the credentials file), otherwise the server's own token,
+otherwise you type `CONTINUE` on the server; `--snapshot-with doctl|siwo|server|none` forces one (`workbench` is the old name of `siwo`).
 The equivalent by hand:
 
 ```sh
-scp src/shell/db/docker-db-server-manager.sh <db-alias>:~/
+scp src/shell/db/docker-db-server-manager.sh <db-alias>:~/.vsw-upload-docker-db-server-manager.sh
 ssh -t <db-alias> 'ip -4 addr | grep -q "inet <private-ip>/" || { echo "ABORT: $(hostname)"; exit 1; }
-  sudo install -m 755 ~/docker-db-server-manager.sh /root/docker-db-server-manager.sh &&
+  sudo install -m 755 ~/.vsw-upload-docker-db-server-manager.sh /root/docker-db-server-manager.sh && rm -f ~/.vsw-upload-docker-db-server-manager.sh &&
   sudo /root/docker-db-server-manager.sh reset --yes && sudo /root/docker-db-server-manager.sh cron-install &&
   sudo /root/docker-db-server-manager.sh env'
 ```
@@ -99,8 +103,8 @@ Every port is bound to the private IP, so none of them is reachable from the pub
 /opt/db/postgres/Dockerfile
 /opt/db/postgres/init/10-extensions.sql
 /opt/db/backups/<YYYYmmdd-HHMMSS>/{postgres,mysql,mariadb}.sql.gz, grants-*.sql.gz, manifest.txt, SHA256SUMS
-/etc/vps-server-workbench/secrets/<env>.env   per-environment passwords (chmod 600, with APP set)
-/var/lib/vps-server-workbench/db/            status stamps (last backup, restore test, off-site) for doctor
+/etc/server-infra-workbench/secrets/<env>.env   per-environment passwords (chmod 600, with APP set)
+/var/lib/server-infra-workbench/db/            status stamps (last backup, restore test, off-site) for doctor
 Docker volumes: db_pg_data, db_mysql_data, db_mariadb_data
 ```
 Every run of `install` and `reset` rewrites these files from the script, so make changes in the script rather than in the files.
@@ -125,8 +129,9 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 |---|---|---|---|
 | `init [file]` | no (writes a config file) | no | starter config for this host: detects the private IP and VPC range; no root needed |
 | `upgrade [--dry-run] [--snapshot\|--snapshot-taken\|--no-snapshot]` (alias `apply`) | no (backs up first) | snapshot, apply (or `--yes`) | guided upgrade of a running server: preflight, diff, snapshot offer, verified backup, savepoint, apply, verify + doctor, auto-rollback; see [Upgrade](#upgrade) |
+| `rebind-ip [--dry-run]` | no (restarts the stack) | no | after a snapshot restore to a droplet with another private IP: set `PRIVATE_IP` in `/opt/db/.env` (copy kept as `.env.bak.<ts>`) and start the stack on the new IP; `upgrade` preflight names it when the stack binds an IP that is not on the host |
 | `install` | no (keeps `.env` and volumes) | no | Docker, files, build, `up --wait`, ufw, `verify`, summary |
-| `reset` | **destroys** all DB data | `Type RESET` (or `--yes`) | new passwords, rebuild from scratch |
+| `reset [--force-prod]` | **destroys** all DB data | `Type RESET` (or `--yes`); protected envs: `--force-prod` + env name | new passwords, rebuild from scratch |
 | `status` | no | no | `docker compose ps` |
 | `verify` | no | no | health, extensions, logins for each enabled engine |
 | `doctor [--alert]` | no | no | host, exposure, roles and isolation, MySQL hardening, TLS, environments, backups, off-site, restore test, PITR, RAM; `--alert` notifies on problems |
@@ -142,6 +147,7 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `offsite backup [dir] \| list \| verify [name] \| fetch <name> [dir]` | uploads / downloads | no | encrypted copies in S3/Spaces ([backups](../backups-and-recovery.md)) |
 | `pitr setup \| backup [full\|diff\|incr] \| status \| restore --target T` | `restore` **rewinds the cluster** | `restore`: `Type RESTORE` / env name | pgBackRest point-in-time recovery for Postgres |
 | `binlog-ship` | uploads | no | closed MySQL/MariaDB binlogs off-site, encrypted |
+| `binlog-replay --target 'YYYY-MM-DD HH:MM:SS' [--engine E] [--from DIR] [--force-prod] \| --prepare` | **replaces the user databases** | `Type RESTORE` / env name | MySQL/MariaDB point in time: newest dump before T + binlogs up to T (UTC) |
 | `restore <dir> [postgres\|mysql\|mariadb\|all]` | **overwrites** | `Type RESTORE` (or `--yes`); protected envs: `--force-prod` + env name | checks the manifest, then loads the dumps |
 | `env-init [flags] [--out F] [--dry-run]` | writes a config block | wizard (or flags) | environment layout ([guide](../database-environments.md#set-it-up)) |
 | `env-apply` | creates databases and roles | no | `<app>_<env>` databases, roles, grants, `pg_hba`; idempotent |
@@ -149,9 +155,15 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `purge-trash [--dry-run]` | **drops** soft-dropped databases older than `TRASH_DAYS` | no | also removes dumps of dropped MySQL/MariaDB databases after `DROPPED_DUMP_DAYS` |
 | `engine enable\|disable <engine> [--delete-volume] [--dry-run]` | starts / stops an engine | `Type ENABLE` / `DISABLE` | edits the config, converges, RAM check |
 | `role-split [--rollback]` | changes roles | `Type SPLIT` / `ROLLBACK` | the 1.4.0 Postgres role split by hand (`upgrade` does it) |
+| `tls-ca [--out F]` | no | no | prints (or writes) the public CA certificate for `TLS_MODE=verify-full` clients; the key never leaves the server |
+| `monitor-user [--rotate]` | creates a role | no | `vsw_monitor` with `pg_monitor`, connection limit 5, password in `MONITOR_PASSWORD_FILE` (600, never printed); idempotent |
+| `metrics` | writes the textfile | no | node-exporter metrics (`vsw_db.prom`): last backup, off-site, restore test, TLS expiry; also refreshed by every backup |
+| `migrate-managed --target-env F [--db a,b] [--check]` | **replaces** same-named target databases | `Type MIGRATE` | copies databases to a managed PostgreSQL, extension check, row counts compared; source read-only ([recipe](../recipes/migrate-to-managed.md)) |
+| `pg-major-upgrade --to N [--dry-run] \| --cleanup OLD` | rebuilds Postgres (backs up first) | `Type UPGRADE` / `CLEANUP` | dump/reload into the new major, inventory compare, auto-rollback; old data kept until `--cleanup` ([recipe](../recipes/pg-major-upgrade.md)) |
 | `cron-install` / `cron-remove` | cron file only | no | `backup`, `doctor --alert`, `restore-test`, PITR, `binlog-ship`, `purge-trash` jobs ([table](../backups-and-recovery.md#set-up)) |
 | `logs [service]` | no | no | follow the last 200 lines |
-| `uninstall [--purge]` | `--purge` deletes everything | `Type PURGE` | stop and remove |
+| `log-errors [--since 24h\|7d\|all] [--service postgres\|pgbouncer]` | no | no | read-only: ERROR/FATAL lines grouped, classified and masked (literals, passwords, IPs); exit 1 when there are any ([plan](../plan/postgres-log-quoting-errors.md)) |
+| `uninstall [--purge] [--force-prod]` | `--purge` deletes everything | `Type PURGE`; protected envs: `--force-prod` + env name | stop and remove |
 | `help` | no | no | detailed help |
 
 Options (anywhere on the line): `--yes`/`-y` (or `FORCE=1`), `--non-interactive` (never prompt; fail safe), `--config FILE`
@@ -177,7 +189,11 @@ This installs or enables Docker, keeps an existing `.env` (or creates one with n
 ```sh
 ./docker-db-server-manager.sh reset           # prompts: Type RESET
 ./docker-db-server-manager.sh reset --yes     # or FORCE=1
+sudo WORKBENCH_CONFIRM=prd ./docker-db-server-manager.sh reset --force-prod   # APP set with a protected env
 ```
+With `APP` set and a protected env on the server (`PROTECTED_ENVS`), `reset` also needs `--force-prod`, the env
+name typed (or `WORKBENCH_CONFIRM=<env>`) and a fresh backup, like `drop-db`. Earlier builds did not parse the
+flag (only `RESET_FORCE_PROD=1` worked, still accepted) although the refusal told you to add `--force-prod`.
 In order, it:
 1. Runs `docker compose down -v --remove-orphans`.
 2. Removes the `db_*` volumes and the built image.
@@ -279,7 +295,7 @@ sudo /root/docker-db-server-manager.sh drop-user shop_report      # type DROP
 Read-only health check (run as root). Every line is `ok`, `warn` or `PROBLEM`; exit code 1 on any problem.
 Sections: host (ufw, updates, reboot, disk, RAM vs [sizing](../reference/sizing.md)), exposure (ports on the
 private IP only), Postgres roles, isolation, `pg_hba`, TLS and extensions, environments and tenants,
-MySQL/MariaDB hardening and grants, backups, off-site copies, restore tests and PITR. The full list is in
+MySQL/MariaDB hardening and grants, Postgres log errors in the last 24 h (a warning; details: `log-errors`), backups, off-site copies, restore tests and PITR. The full list is in
 [Database environments](../database-environments.md#what-doctor-checks). `doctor --alert` (hourly from
 `cron-install`) sends problems to `ALERT_EMAIL`, `ALERT_WEBHOOK`, `HEALTHCHECK_URL` or `ALERT_COMMAND`.
 
@@ -310,8 +326,8 @@ The 1.4.0 Postgres role split by hand: backs up, ends `PG_USER`'s sessions for a
 to a new non-superuser `PG_USER` and makes `PG_ADMIN_USER` the only superuser. `upgrade` does this for you.
 `--rollback` restores the pre-1.4.0 layout.
 
-### `restore-test`, `offsite`, `pitr`, `binlog-ship`
-See [Backups and recovery](../backups-and-recovery.md).
+### `restore-test`, `offsite`, `pitr`, `binlog-ship`, `binlog-replay`
+See [Backups and recovery](../backups-and-recovery.md) ([binlog replay](../backups-and-recovery.md#mysqlmariadb-point-in-time-binlog-replay)).
 
 ### `backup`
 
@@ -360,9 +376,24 @@ Writes `/etc/cron.d/docker-db-server-backup`, which runs `backup` at `CRON_TIME`
 ### `logs [service]`
 `./docker-db-server-manager.sh logs pgbouncer` shows the last 200 lines and keeps following the log.
 
-### `uninstall [--purge]`
+### `log-errors`
+`sudo ./docker-db-server-manager.sh log-errors --since 7d` reads the postgres container's log with `docker logs`
+(no `stack.env` needed, writes nothing) and prints each kind of ERROR/FATAL once, with a count, first and last
+time (UTC), a masked sample statement and a likely cause. Exit 0 = no errors in the window, 1 = errors.
+From your workstation, without installing anything on the server (the login user needs the docker group, or
+passwordless sudo):
+
+```bash
+bin/siwo db pg-log-errors --host <db-alias> --since 7d
+```
+
+A `shell-quoting` group means a client sent `\x27` literally: an ad-hoc `psql -c` over ssh with hand-escaped
+quotes. Nothing ran. Send ad-hoc SQL from a quoted heredoc with psql variables instead
+([plan](../plan/postgres-log-quoting-errors.md)).
+
+### `uninstall [--purge] [--force-prod]`
 - Without `--purge`, it stops and removes the containers and keeps the volumes and `/opt/db`. Run `install` to bring everything back.
-- With `--purge` (type `PURGE`), it also removes the volumes, the image, the cron job and all of `/opt/db`, **backups included**.
+- With `--purge` (type `PURGE`), it also removes the volumes, the image, the cron job and all of `/opt/db`, **backups included**. With a protected env on the server it also needs `--force-prod` and the env name.
 
 The ufw rules are left in place. Remove them with `ufw status numbered` and `ufw delete N`.
 
@@ -431,7 +462,7 @@ traffic is unencrypted on the VPC.
 2. **Plan**: prints a diff of what would change; `--dry-run` stops here.
 3. **Snapshot**: `--snapshot` takes a DigitalOcean snapshot through the API (token from `DIGITALOCEAN_TOKEN`
    or `/root/.config/digitalocean-token`, chmod 600, never in the repo), `--snapshot-taken` records that you
-   took one (remote-run.sh does this with doctl or `bin/workbench do snapshot`), `--no-snapshot` skips with a warning. Without a flag it asks.
+   took one (remote-run.sh does this with doctl or `bin/siwo do snapshot`), `--no-snapshot` skips with a warning. Without a flag it asks.
 4. **Backup** and **verify** it (every engine present, gzip intact, dump trailer present).
 5. **Savepoint** in `/opt/db/upgrade-saves/<ts>` (chmod 700, newest 5 kept): the previous manager and config,
    compose file, `.env`, `stack.env`, Postgres files, PgBouncer config, image IDs (the Postgres image is pinned
@@ -441,7 +472,11 @@ traffic is unencrypted on the VPC.
 
 A lock (`/run/lock/docker-db-server-manager.lock`) stops two mutating runs at once (stale locks are
 recovered); every run is logged, with secrets redacted, to `/var/log/docker-db-server-manager.log` (chmod 600).
-Prompts need a terminal; without one, use `--yes` plus a snapshot flag.
+Prompts need a terminal; without one, use `--yes` plus a snapshot flag. Unhealthy containers stop the preflight:
+`--dry-run` continues to the plan, a terminal asks, and a scripted run needs `--allow-unhealthy` (the upgrade's
+own rollback still applies). A stack that predates the managed network (`db_default`) is moved onto
+`DOCKER_NETWORK` during the apply: its containers are recreated, volumes kept. `upgrade` with nothing to change
+still retires an old image tag (`PG_IMAGE_LEGACY`, or the running container's tag on a stack without `stack.env`).
 
 
 Major Postgres versions need a dump and restore; see [status.md](../status.md#postgres-major-upgrade).

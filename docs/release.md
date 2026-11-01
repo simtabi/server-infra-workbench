@@ -9,7 +9,7 @@ The repository follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 |---|---|---|
 | The repository (tags `vX.Y.Z`) | `CHANGELOG.md` headings | any release |
 | DB server manager | `VERSION=` in `src/shell/db/docker-db-server-manager.sh` (`--version`) | its behaviour or generated files change |
-| PHP library and CLI | `ClientOptions::VERSION` in `src/php/src/Http/ClientOptions.php` (`bin/workbench version`) | its public API or CLI changes |
+| PHP library and CLI | `ClientOptions::VERSION` in `src/php/src/Http/ClientOptions.php` (`bin/siwo version`) | its public API or CLI changes |
 | Python package | `version` in `src/python/pyproject.toml` and `__version__` | its CLI or API changes |
 
 **Major**: a removed command, flag, class or method; a changed default that alters what runs on a server;

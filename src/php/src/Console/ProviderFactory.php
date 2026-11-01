@@ -2,21 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console;
+namespace Simtabi\ServerInfraWorkbench\Console;
 
-use Simtabi\VpsServerWorkbench\Cloudflare\Cloudflare;
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\TokenProvider;
-use Simtabi\VpsServerWorkbench\Gcp\Gcp;
-use Simtabi\VpsServerWorkbench\Health\HealthCheck;
-use Simtabi\VpsServerWorkbench\Http\ClientOptions;
-use Simtabi\VpsServerWorkbench\Keys\AccountKeys;
-use Simtabi\VpsServerWorkbench\Keys\KeyProviders;
-use Simtabi\VpsServerWorkbench\Keys\ProcessSshRunner;
-use Simtabi\VpsServerWorkbench\Keys\ServerKeys;
-use Simtabi\VpsServerWorkbench\Keys\SshRunner;
-use Simtabi\VpsServerWorkbench\Ploi\Ploi;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Cloudflare;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\TokenProvider;
+use Simtabi\ServerInfraWorkbench\Gcp\Gcp;
+use Simtabi\ServerInfraWorkbench\Github\Github;
+use Simtabi\ServerInfraWorkbench\Health\HealthCheck;
+use Simtabi\ServerInfraWorkbench\Http\ClientOptions;
+use Simtabi\ServerInfraWorkbench\Keys\AccountKeys;
+use Simtabi\ServerInfraWorkbench\Keys\KeyProviders;
+use Simtabi\ServerInfraWorkbench\Keys\ProcessSshRunner;
+use Simtabi\ServerInfraWorkbench\Keys\ServerKeys;
+use Simtabi\ServerInfraWorkbench\Keys\SshRunner;
+use Simtabi\ServerInfraWorkbench\Ploi\Ploi;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
 
 /** Builds the provider clients for the CLI. Tests pass options with a mocked PSR-18 client. */
 final readonly class ProviderFactory
@@ -59,6 +60,11 @@ final readonly class ProviderFactory
     public function ploi(): Ploi
     {
         return Ploi::make(null, $this->options, $this->credentials);
+    }
+
+    public function github(): Github
+    {
+        return Github::make(null, $this->options, $this->credentials);
     }
 
     public function gcp(?string $project): Gcp

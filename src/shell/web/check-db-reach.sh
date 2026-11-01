@@ -34,7 +34,7 @@ if [ "${1:-}" = "--db-region" ]; then
   [[ "${2:-}" =~ ^[a-z]{3}[0-9]$ ]] || die "--db-region needs a region slug like nyc1"
   DB_REGION="$2"; shift 2
 fi
-case "${1:-}" in ""|-h|--help) sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; exit 0 ;; esac
+case "${1:-}" in ""|-h|--help) awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,""); print}' "$0"; exit 0 ;; esac
 host="$1"; shift
 [ $# -gt 0 ] || set -- 5432 6432 3306 3307
 

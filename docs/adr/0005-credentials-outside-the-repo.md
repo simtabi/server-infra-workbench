@@ -11,10 +11,10 @@ to commit by mistake, and tokens in logs or exception messages leak through CI o
 ## Decision
 
 Credentials are resolved from an explicit value, then the environment, then
-`~/.config/vps-server-workbench/credentials` (or `$VSW_CREDENTIALS_FILE`). The file is refused unless it is
+`~/.config/server-infra-workbench/credentials` (or `$SIWO_CREDENTIALS_FILE`). The file is refused unless it is
 mode 600, owned by the current user and not inside a git working tree; service-account key files get the
 same checks. Tokens are wrapped in a `Secret` type that prints as `***` and refuses serialization, and every
-log line and error message passes through a redactor. `bin/workbench credentials` reports where each value
+log line and error message passes through a redactor. `bin/siwo credentials` reports where each value
 comes from, never the value.
 
 ## Consequences

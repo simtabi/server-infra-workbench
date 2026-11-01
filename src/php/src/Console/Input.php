@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console;
+namespace Simtabi\ServerInfraWorkbench\Console;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
 
 /** argv split into positionals and known options. Unknown options are an error, never ignored. */
 final readonly class Input
 {
-    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose', 'backups', 'disk', 'below'];
+    public const array FLAGS = ['json', 'dry-run', 'yes', 'force', 'wait', 'proxied', 'help', 'verbose', 'quiet', 'backups', 'disk', 'below',
+        'everything', 'draft', 'prerelease', 'write'];
 
     public const array VALUES = ['name', 'type', 'ttl', 'zone', 'project', 'priority', 'comment', 'tag', 'timeout',
         // do firewalls / droplets / uptime
@@ -19,7 +20,17 @@ final readonly class Input
         // ploi
         'web-directory', 'project-type', 'user', 'file', 'command', 'processes', 'directory',
         // keys
-        'provider', 'host', 'key-file', 'public-key', 'ssh-opt', 'config'];
+        'provider', 'host', 'key-file', 'public-key', 'ssh-opt', 'config',
+        // do volumes / vpcs / spaces keys / reserved ips
+        'size-gb', 'filesystem', 'ip-range', 'description', 'bucket', 'permission', 'out', 'ip',
+        // cloudflare
+        'hostnames', 'validity', 'files', 'target',
+        // gcp
+        'location', 'storage-class', 'retention-days', 'prefix', 'limit', 'disk-gb', 'network', 'allow', 'source-ranges', 'target-tags',
+        // ploi
+        'frequency', 'site', 'domain',
+        // github
+        'repo', 'org', 'workflow', 'branch', 'status', 'ref', 'inputs', 'env', 'value-file', 'title', 'notes-file'];
 
     /**
      * @param list<string>          $args
@@ -47,6 +58,8 @@ final readonly class Input
                 $token = '--dry-run';
             } elseif ($token === '-y') {
                 $token = '--yes';
+            } elseif ($token === '-q') {
+                $token = '--quiet';
             }
             if (! str_starts_with($token, '--') || strlen($token) === 2) {
                 $args[] = $token;
@@ -63,9 +76,14 @@ final readonly class Input
                 if ($value === null) {
                     $value = $argv[++$i] ?? throw new ValidationException("--{$key} needs a value");
                 }
+                // A repeated option used to keep only the last value, so `--droplet A --droplet B`
+                // silently targeted B alone. Lists are comma-separated; a repeat is a usage error.
+                if (array_key_exists($key, $values)) {
+                    throw new ValidationException("--{$key} given twice; pass a comma-separated list instead (--{$key} a,b)");
+                }
                 $values[$key] = $value;
             } else {
-                throw new ValidationException(sprintf('unknown option --%s (see: workbench help)', $key));
+                throw new ValidationException(sprintf('unknown option --%s (see: siwo help)', $key));
             }
         }
 
@@ -97,7 +115,7 @@ final readonly class Input
     public function expectAtMost(int $count, string $usage): void
     {
         if (count($this->args) > $count) {
-            throw new ValidationException(sprintf('unexpected argument "%s"; usage: workbench %s', $this->args[$count], $usage));
+            throw new ValidationException(sprintf('unexpected argument "%s"; usage: siwo %s', $this->args[$count], $usage));
         }
     }
 
@@ -109,6 +127,26 @@ final readonly class Input
     public function value(string $name): ?string
     {
         return $this->values[$name] ?? null;
+    }
+
+    /** A value option that must be present. */
+    public function required(string $name, string $hint = ''): string
+    {
+        $value = $this->values[$name] ?? null;
+
+        return $value === null || $value === '' ? throw new ValidationException("--{$name} is required".($hint === '' ? '' : " ({$hint})")) : $value;
+    }
+
+    /**
+     * Positionals from $index on (e.g. a list of ids).
+     *
+     * @return list<string>
+     */
+    public function rest(int $index, string $name): array
+    {
+        $rest = array_values(array_slice($this->args, $index));
+
+        return $rest === [] ? throw new ValidationException("missing <{$name}>") : $rest;
     }
 
     /**

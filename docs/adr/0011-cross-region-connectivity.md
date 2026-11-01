@@ -16,7 +16,7 @@ sources.
 
 - Recommend **one region** for the app and its database. Latency between regions is paid on every query.
 - If two regions are unavoidable: **VPC peering** first (no software to run), then **WireGuard**
-  (`workbench net wireguard setup`, keys made on each server and never printed, ufw open to the peer only).
+  (`siwo net wireguard setup`, keys made on each server and never printed, ufw open to the peer only).
 - A **public bind** is allowed only as an explicit choice: `ALLOW_PUBLIC_BIND=1` plus `TLS_MODE=require`,
   with the allowlist in a DO cloud firewall; `doctor` warns for as long as it exists.
 - The manager gets `EXTRA_BIND_IPS` (the tunnel or public address), `PEER_REGIONS` and `VPC_PEERING` so

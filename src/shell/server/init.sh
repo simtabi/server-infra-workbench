@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  init.sh - first-boot setup for a fresh Ubuntu 24.04 droplet (db, web or base)
+#  init.sh - first-boot setup for a fresh Ubuntu LTS droplet, 24.04 or 26.04 (db, web or base)
 # =============================================================================
 #  One command after the droplet exists and your key works. Prints a plan,
 #  changes nothing until confirmed, locks, logs to the audit log, re-runnable.
@@ -27,14 +27,16 @@
 #    --role db|web|base  (required)   --timezone Area/City (default UTC)
 #    --swap 2G|4096M|0   (0 = never create swap)
 #    --only a,b  --skip a,b   --firewall (passed to harden; not on Ploi)
-#    --dry-run, -n  --yes, -y  --host H  -h, --help
+#    --dry-run, -n  --yes, -y  --host H  --quiet, -q (no progress lines)  -h, --help
 # =============================================================================
 set -euo pipefail
 TOOL=init
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=src/shell/lib/common.sh
 . "$HERE/../lib/common.sh"
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
+# usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
+# title box, so --help printed one line; awk counts the rules instead.
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,""); print}' "$0"; }
 
 ROLE="" TZ_WANT=UTC SWAP=2G ONLY="" SKIP="" FIREWALL=0 HOST=""
 ARGS=("$@")
@@ -47,6 +49,7 @@ while [ $# -gt 0 ]; do
     --skip) SKIP="${2:?}"; shift 2 ;;
     --firewall) FIREWALL=1; shift ;;
     --dry-run|-n) DRY=1; shift ;;
+    --quiet|-q) export SIWO_QUIET=1; shift ;;
     --yes|-y) YES=1; shift ;;
     --host) HOST="${2:?}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -67,7 +70,7 @@ ITEMS="timezone swap packages docker harden"
 want() { local i="$1"
   [ -n "$ONLY" ] && { [[ ",$ONLY," == *",$i,"* ]] || return 1; }
   [[ ",$SKIP," == *",$i,"* ]] && return 1; return 0; }
-pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed'; }
+pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep 'install ok installed' >/dev/null; }
 BASE_PKGS="ca-certificates curl gnupg jq unzip htop"
 F_SWAP="$R/swapfile" F_FSTAB="$R/etc/fstab" F_SWAPPY="$R/etc/sysctl.d/91-workbench-swap.conf"
 F_DAEMON="$R/etc/docker/daemon.json" F_DKEY="$R/etc/apt/keyrings/docker.asc" F_DLIST="$R/etc/apt/sources.list.d/docker.list"
@@ -112,7 +115,7 @@ plan_item() {
       local hargs=(--role "$ROLE" --dry-run); [ "$FIREWALL" = 1 ] && [ "$PLOI" = 0 ] && hargs+=(--firewall)
       local out; out="$(bash "$HERE/harden.sh" "${hargs[@]}" 2>&1 || true)"
       if grep -q 'nothing to change' <<<"$out"; then ok "harden: baseline in place"
-      else todo "harden: $(grep -c '^  todo' <<<"$out" || true) change(s) (see: workbench server harden --role $ROLE)"; PENDING+=(harden)
+      else todo "harden: $(grep -c '^  todo' <<<"$out" || true) change(s) (see: siwo server harden --role $ROLE)"; PENDING+=(harden)
         grep -E '^  (todo|FAIL)' <<<"$out" | sed 's/^/    /' || true; fi ;;
   esac
 }
@@ -131,12 +134,13 @@ apply_item() {
         chmod 600 "$F_SWAP"; mkswap "$F_SWAP" >/dev/null; swapon "$F_SWAP"
         grep -qE '^/swapfile[[:space:]]' "$F_FSTAB" 2>/dev/null || { backup "$F_FSTAB" >/dev/null; echo '/swapfile none swap sw 0 0' >> "$F_FSTAB"; }
       fi
-      if [ "$ROLE" = db ]; then printf '# Managed by vps-server-workbench init.sh\nvm.swappiness = 10\n' | write_file "$F_SWAPPY" 644
+      if [ "$ROLE" = db ]; then printf '# Managed by server-infra-workbench init.sh\nvm.swappiness = 10\n' | write_file "$F_SWAPPY" 644
         sysctl -p "$F_SWAPPY" >/dev/null 2>&1 || true; fi ;;
     packages)
-      DEBIAN_FRONTEND=noninteractive apt-get update -q >/dev/null
+      export DEBIAN_FRONTEND=noninteractive
+      progress_run "apt-get update" mute apt-get update -q
       # shellcheck disable=SC2086  # word list
-      DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends $BASE_PKGS >/dev/null ;;
+      progress_run "apt-get install base packages" mute apt-get install -y -q --no-install-recommends $BASE_PKGS ;;
     docker)
       if ! { have docker && docker compose version >/dev/null 2>&1; }; then
         mkdir -p "$(dirname "$F_DKEY")"; install -d -m 755 "$(dirname "$F_DKEY")"
@@ -144,8 +148,9 @@ apply_item() {
         chmod a+r "$F_DKEY"
         printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu %s stable\n' \
           "$(dpkg --print-architecture 2>/dev/null || echo amd64)" "$(codename)" | write_file "$F_DLIST" 644
-        DEBIAN_FRONTEND=noninteractive apt-get update -q >/dev/null
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null
+        export DEBIAN_FRONTEND=noninteractive
+        progress_run "apt-get update (Docker repo)" mute apt-get update -q
+        progress_run "install Docker Engine + compose" mute apt-get install -y -q docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       fi
       if [ ! -f "$F_DAEMON" ]; then daemon_json | write_file "$F_DAEMON" 644; systemctl restart docker 2>/dev/null || true; fi
       systemctl enable --now docker >/dev/null 2>&1 || true ;;
@@ -168,4 +173,4 @@ audit confirmed "items=${PENDING[*]} role=$ROLE"
 for i in "${PENDING[@]}"; do apply_item "$i"; done
 summary
 audit succeeded "items=${PENDING[*]} role=$ROLE"
-say "next: workbench server inventory   (record what this server is now)"
+say "next: siwo server inventory   (record what this server is now)"

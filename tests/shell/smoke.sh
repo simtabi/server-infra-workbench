@@ -6,6 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+gen() { openssl rand -hex "${1:-12}"; }  # repo rule: test secrets are generated per run, never hardcoded
 pass=0
 ok()   { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
@@ -49,13 +50,14 @@ PG_EXTENSIONS="vector pg_trgm" PRIVATE_IP=10.0.0.5 DB_DIR="$T/x" bash -c 'mkdir 
 if PRIVATE_IP=10.0.0.5 "$M" create-db 'bad;name' 2>/dev/null; then fail "create-db name"; else ok "create-db rejects unsafe names"; fi
 
 # --- update-env-db ----------------------------------------------------------
-printf 'APP_NAME=x\nDB_HOST=old\nDB_SSLMODE=prefer\nDB_PASSWORD=old\n' > "$T/app.env"
-printf '# from env\nDB_HOST=10.0.0.5\nDB_PASSWORD=s3cret\n' > "$T/v.env"
+OLDPW="$(gen)"; NEWPW="$(gen)"
+printf 'APP_NAME=x\nDB_HOST=old\nDB_SSLMODE=prefer\nDB_PASSWORD=%s\n' "$OLDPW" > "$T/app.env"
+printf '# from env\nDB_HOST=10.0.0.5\nDB_PASSWORD=%s\n' "$NEWPW" > "$T/v.env"
 "$W" --env "$T/app.env" --from "$T/v.env" --set DB_PORT=5432 > "$T/out"
 "$W" --env "$T/app.env" --from "$T/v.env" --set DB_PORT=5432 --no-backup > /dev/null
 [ "$(grep -c '^DB_HOST=' "$T/app.env")" = 1 ] && ok "update-env-db is idempotent" || fail "update-env-db is idempotent"
 grep -q '^DB_SSLMODE=prefer$' "$T/app.env" && grep -q '^APP_NAME=x$' "$T/app.env" && ok "other keys kept" || fail "other keys kept"
-grep -q 'DB_PASSWORD=\*\*\*' "$T/out" && ! grep -q s3cret "$T/out" && ok "password masked in output" || fail "password masked in output"
+grep -q 'DB_PASSWORD=\*\*\*' "$T/out" && ! grep -q "$NEWPW" "$T/out" && ok "password masked in output" || fail "password masked in output"
 ls "$T"/app.env.bak.* >/dev/null && ok "backup written" || fail "backup written"
 if "$W" --env "$T/app.env" --set APP_KEY=x 2>/dev/null; then fail "non-DB key"; else ok "non-DB_* keys refused"; fi
 for i in 1 2 3 4 5 6 7; do touch "$T/app.env.bak.2026010100000$i"; done
@@ -129,10 +131,13 @@ grep -q 'doctl compute droplet-action snapshot 123456 --snapshot-name db-pre-upg
   && ok "snapshot chain 1: doctl first, then --snapshot-taken" || fail "snapshot chain doctl: $(cat "$L" "$T/rr.out")"
 STUB_DOCTL=0 STUB_WB=1 rr -- upgrade
 grep -q 'workbench digitalocean snapshot 123456 --name db-pre-upgrade-.* --wait --yes' "$L" && grep -q 'upgrade --snapshot-taken' "$L" && ! grep -q '^doctl' "$L" \
-  && ok "snapshot chain 2: bin/workbench when doctl is not set up" || fail "snapshot chain workbench: $(cat "$L" "$T/rr.out")"
+  && ok "snapshot chain 2: bin/siwo when doctl is not set up" || fail "snapshot chain workbench: $(cat "$L" "$T/rr.out")"
 STUB_DOCTL=0 STUB_WB=0 rr -- upgrade
 grep -q 'the server will use its own token' "$T/rr.out" && grep -q 'docker-db-server-manager.sh upgrade$' "$L" && ! grep -qE '^(doctl|workbench) ' "$L" \
   && ok "snapshot chain 3/4: falls through to the server (token there, or typed CONTINUE)" || fail "snapshot chain server: $(cat "$L" "$T/rr.out")"
+STUB_DOCTL=1 STUB_WB=1 rr --snapshot-with siwo -- upgrade
+grep -q 'workbench digitalocean snapshot 123456' "$L" && ! grep -q '^doctl' "$L" \
+  && ok "--snapshot-with siwo uses bin/siwo even when doctl works" || fail "snapshot-with siwo: $(cat "$L" "$T/rr.out")"
 set +e; STUB_DOCTL=0 STUB_WB=0 rr --snapshot-with none -- upgrade; rc=$?; set -e
 [ "$rc" -ne 0 ] && grep -q 'not confirmed; nothing changed' "$T/rr.out" && [ ! -s "$L" ] \
   && ok "snapshot skip needs explicit confirmation" || fail "snapshot skip: rc=$rc $(cat "$T/rr.out")"
@@ -142,6 +147,16 @@ STUB_DOCTL=1 rr -- upgrade --no-snapshot
 ! grep -q '^doctl' "$L" && grep -q 'upgrade --no-snapshot' "$L" && ok "an explicit snapshot flag skips the chain" || fail "explicit flag"
 STUB_DOCTL=1 rr -- verify
 ! grep -q '^doctl' "$L" && ok "no snapshot offer for non-upgrade commands" || fail "non-upgrade snapshot"
+STUB_DOCTL=1 rr -- env-apply, pg-major-upgrade --to 19 --dry-run
+! grep -q '^doctl' "$L" && ! grep -q 'snapshot-taken' "$L" \
+  && ok "env-apply / pg-major-upgrade are not mistaken for upgrade" || fail "substring upgrade match: $(cat "$L")"
+STUB_DOCTL=1 rr -- env-apply, upgrade
+grep -q 'env-apply$' "$L" && grep -q 'upgrade --snapshot-taken' "$L" \
+  && ok "the snapshot flag goes to the upgrade command, not the first match" || fail "flag placement: $(cat "$L")"
+printf '#!/usr/bin/env bash\necho "scp $*" >> "%s"\n' "$L" > "$SB/scp"; chmod +x "$SB/scp"
+: > "$T/c.conf"; rr --no-upload --config "$T/c.conf" -- verify
+grep -q "scp -q $T/c.conf h:.vsw-upload-docker-db-server-manager.conf" "$L" && ! grep -q 'docker-db-server-manager.sh h:' "$L" \
+  && ok "--no-upload still uploads --config (no stale config installed)" || fail "--no-upload --config: $(cat "$L")"
 
 # --- deploy script: no Ploi placeholder collisions ---------------------------
 if grep -nE '\$\{(BRANCH|SITE|RELEASE|DOMAIN|REPOSITORY|REPOSITORY_NAME|PROJECT_ROOT|TIME)\}' "$D"; then
@@ -152,25 +167,29 @@ ok "deploy script avoids Ploi placeholder names"
 # --- deploy script sandbox (generic preset, hooks, first-install marker) -----
 bash tests/shell/deploy-sandbox.sh | grep -qE 'deploy sandbox (ok|skipped)' && ok "deploy sandbox" || fail "deploy sandbox"
 
-# --- bin/workbench dispatcher ------------------------------------------------------
-grep -q 'src/shell/db/remote-run.sh' <<<"$(bin/workbench list)" && ok "workbench list" || fail "workbench list"
-bin/workbench db remote-run --dry-run --host h --expect-ip 10.0.0.5 -- env | grep 'docker-db-server-manager.sh env' >/dev/null \
-  && ok "workbench <area> <tool> runs shell tools" || fail "workbench <area> <tool>"
-if bin/workbench 'db;id' x 2>/dev/null || bin/workbench db ../../etc 2>/dev/null; then fail "workbench accepted a bad tool name"; fi
-ok "workbench rejects bad area/tool names"
+# --- bin/siwo dispatcher ------------------------------------------------------
+grep -q 'src/shell/db/remote-run.sh' <<<"$(bin/siwo list)" && ok "siwo list" || fail "siwo list"
+out="$(env -u SIWO_SHIM_NOTED -u SIWO_QUIET bin/workbench list 2>&1)"
+grep -q 'bin/workbench is deprecated, use bin/siwo' <<<"$out" && grep -q 'src/shell/db/remote-run.sh' <<<"$out" \
+  && ok "bin/workbench shim: one notice, then runs bin/siwo" || fail "bin/workbench shim: $out"
+[ -z "$(env -u SIWO_SHIM_NOTED SIWO_QUIET=1 bin/workbench list 2>&1 >/dev/null)" ] && ok "shim notice hidden by SIWO_QUIET=1" || fail "shim notice not hidden"
+bin/siwo db remote-run --dry-run --host h --expect-ip 10.0.0.5 -- env | grep 'docker-db-server-manager.sh env' >/dev/null \
+  && ok "siwo <area> <tool> runs shell tools" || fail "siwo <area> <tool>"
+if bin/siwo 'db;id' x 2>/dev/null || bin/siwo db ../../etc 2>/dev/null; then fail "siwo accepted a bad tool name"; fi
+ok "siwo rejects bad area/tool names"
 [ ! -e scripts ] && [ ! -e tools ] && [ ! -e bin/vsw ] && ok "no legacy scripts/, tools/ or bin/vsw" || fail "legacy paths are back"
 if command -v python3 >/dev/null 2>&1; then
-  set +e; bin/workbench py ping 127.0.0.1 notaport >/dev/null 2>&1; rc=$?; set -e; [ "$rc" -eq 2 ] && ok "workbench py validates input" || fail "workbench py validation"
+  set +e; bin/siwo py ping 127.0.0.1 notaport >/dev/null 2>&1; rc=$?; set -e; [ "$rc" -eq 2 ] && ok "siwo py validates input" || fail "siwo py validation"
 fi
 if command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' && [ -f src/php/vendor/autoload.php ]; then
-  out="$(DIGITALOCEAN_TOKEN=smoke-not-a-token VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 --name pre-upgrade --dry-run)"
-  grep -q 'DRY RUN — nothing sent.*POST /v2/droplets/42/actions' <<<"$out" && ok "workbench do snapshot --dry-run sends nothing" || fail "do snapshot dry-run: $out"
-  set +e; DIGITALOCEAN_TOKEN=smoke-not-a-token VSW_AUDIT_LOG=off bin/workbench digitalocean snapshot 42 </dev/null 2>/dev/null; rc=$?; set -e
-  [ "$rc" -eq 3 ] && ok "workbench writes refuse without --yes" || fail "write without --yes exit $rc"
-  set +e; env -u DIGITALOCEAN_TOKEN VSW_CREDENTIALS_FILE=/nonexistent bin/workbench digitalocean droplets 2>"$T/cred"; rc=$?; set -e
-  [ "$rc" -eq 4 ] && grep -q 'DIGITALOCEAN_TOKEN is not set' "$T/cred" && ok "workbench reports missing credentials" || fail "missing credentials exit $rc"
+  out="$(DIGITALOCEAN_TOKEN="$(gen)" SIWO_AUDIT_LOG=off bin/siwo digitalocean snapshot 42 --name pre-upgrade --dry-run)"
+  grep -q 'DRY RUN — nothing sent.*POST /v2/droplets/42/actions' <<<"$out" && ok "siwo do snapshot --dry-run sends nothing" || fail "do snapshot dry-run: $out"
+  set +e; DIGITALOCEAN_TOKEN="$(gen)" SIWO_AUDIT_LOG=off bin/siwo digitalocean snapshot 42 </dev/null 2>/dev/null; rc=$?; set -e
+  [ "$rc" -eq 3 ] && ok "siwo writes refuse without --yes" || fail "write without --yes exit $rc"
+  set +e; env -u DIGITALOCEAN_TOKEN SIWO_CREDENTIALS_FILE=/nonexistent bin/siwo digitalocean droplets 2>"$T/cred"; rc=$?; set -e
+  [ "$rc" -eq 4 ] && grep -q 'DIGITALOCEAN_TOKEN is not set' "$T/cred" && ok "siwo reports missing credentials" || fail "missing credentials exit $rc"
 else
-  ok "workbench PHP checks skipped (php 8.4+ with src/php/vendor not available)"
+  ok "siwo PHP checks skipped (php 8.4+ with src/php/vendor not available)"
 fi
 
 # --- no client data in tracked files -------------------------------------------

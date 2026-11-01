@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
-use Simtabi\VpsServerWorkbench\Support\ExportsProperties;
+use Simtabi\ServerInfraWorkbench\Support\ExportsProperties;
 
 /** An account (dashboard) SSH key as a provider reports it. Fingerprint and key may be empty. */
 final readonly class SshKey implements \JsonSerializable

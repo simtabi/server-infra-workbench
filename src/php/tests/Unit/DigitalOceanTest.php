@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\ActionStatus;
-use Simtabi\VpsServerWorkbench\DigitalOcean\Data\DropletStatus;
-use Simtabi\VpsServerWorkbench\DigitalOcean\DigitalOcean;
-use Simtabi\VpsServerWorkbench\Exception\ActionFailedException;
-use Simtabi\VpsServerWorkbench\Exception\CredentialException;
-use Simtabi\VpsServerWorkbench\Exception\TimeoutException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\ActionStatus;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\Data\DropletStatus;
+use Simtabi\ServerInfraWorkbench\DigitalOcean\DigitalOcean;
+use Simtabi\ServerInfraWorkbench\Exception\ActionFailedException;
+use Simtabi\ServerInfraWorkbench\Exception\CredentialException;
+use Simtabi\ServerInfraWorkbench\Exception\TimeoutException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class DigitalOceanTest extends TestCase
 {
     private function do(): DigitalOcean
     {
-        return DigitalOcean::make(self::TOKEN, $this->options());
+        return DigitalOcean::make(self::token(), $this->options());
     }
 
     /** @return array<string, mixed> */
@@ -46,7 +46,7 @@ final class DigitalOceanTest extends TestCase
         self::assertSame('10.0.0.5', $droplets[1]->privateIpv4);
         self::assertSame('203.0.113.7', $droplets[1]->publicIpv4);
         self::assertSame(['GET /v2/droplets?per_page=200', 'GET /v2/droplets?page=2&per_page=200'], $this->http->log());
-        self::assertSame('Bearer '.self::TOKEN, $this->http->last()->getHeaderLine('Authorization'));
+        self::assertSame('Bearer '.self::token(), $this->http->last()->getHeaderLine('Authorization'));
     }
 
     public function test_snapshot_is_pending_until_confirmed(): void
@@ -117,10 +117,27 @@ final class DigitalOceanTest extends TestCase
         try {
             $this->do()->droplets()->snapshot(5, 'x')->confirm();
             self::fail('expected exception');
-        } catch (\Simtabi\VpsServerWorkbench\Exception\AuthenticationException) {
+        } catch (\Simtabi\ServerInfraWorkbench\Exception\AuthenticationException) {
         }
         self::assertSame(['confirmed', 'failed'], $this->audit->outcomes());
         self::assertStringContainsString('403', (string) $this->audit->entries[1]->error);
+    }
+
+    public function test_droplet_snapshots_carry_the_droplet_id(): void
+    {
+        // GET /v2/droplets/{id}/snapshots returns images without resource_id; /v2/snapshots includes it as a string
+        $this->http
+            ->json(['snapshots' => [['id' => 501, 'name' => 'pre-upgrade', 'size_gigabytes' => 2.5, 'created_at' => '2026-11-01T00:00:00Z']], 'links' => []])
+            ->json(['snapshots' => [['id' => '502', 'name' => 'nightly', 'resource_id' => '124', 'resource_type' => 'droplet', 'size_gigabytes' => 3]], 'links' => []]);
+
+        $one = $this->do()->droplets()->snapshots(123);
+        $all = $this->do()->snapshots()->list();
+
+        self::assertSame('123', $one[0]->resourceId);
+        self::assertSame('droplet', $one[0]->resourceType);
+        self::assertSame('501', $one[0]->id);
+        self::assertSame('124', $all[0]->resourceId);
+        self::assertSame(['GET /v2/droplets/123/snapshots?per_page=200', 'GET /v2/snapshots?per_page=200&resource_type=droplet'], $this->http->log());
     }
 
     public function test_snapshot_delete_is_destructive(): void

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Support;
+namespace Simtabi\ServerInfraWorkbench\Support;
 
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
 
 /**
  * Input validation shared by the clients and the CLI. Everything that ends up in a URL path is checked
@@ -26,6 +26,32 @@ final class Validate
     {
         if (preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/', $value) !== 1) {
             throw new ValidationException(sprintf('%s "%s" is not a valid identifier', $what, self::show($value)));
+        }
+
+        return $value;
+    }
+
+    /**
+     * One URL path segment that is not a plain number or simple token: GitHub owner/repo names, release
+     * tags, workflow file names, Spaces access keys, bucket names. Never empty, never "." or "..".
+     */
+    public static function segment(string $value, string $what = 'name', int $max = 255): string
+    {
+        if ($value === '.' || $value === '..' || preg_match('/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,'.($max - 1).'}$/', $value) !== 1) {
+            throw new ValidationException(sprintf('%s "%s" may only contain letters, digits, _ . - (max %d)', $what, self::show($value), $max));
+        }
+
+        return $value;
+    }
+
+    /** An IPv4/IPv6 address or CIDR block. */
+    public static function cidr(string $value, string $what = 'address'): string
+    {
+        [$ip, $bits] = array_pad(explode('/', $value, 2), 2, null);
+        $v4 = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+        $v6 = ! $v4 && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
+        if ((! $v4 && ! $v6) || ($bits !== null && (! ctype_digit($bits) || (int) $bits > ($v4 ? 32 : 128)))) {
+            throw new ValidationException(sprintf('%s "%s" is not an IP address or CIDR block', $what, self::show($value)));
         }
 
         return $value;

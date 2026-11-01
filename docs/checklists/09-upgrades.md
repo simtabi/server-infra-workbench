@@ -4,9 +4,9 @@
 
 | # | Step | Command | Verify | Why |
 |---|---|---|---|---|
-| 1 | See what's pending | `bin/workbench server update --host <alias>` (plan only) | list of packages; "reboot required" if a kernel is waiting | know before you change |
-| 2 | Snapshot (DB) | `bin/workbench do snapshot <id> --name pre-update --wait` | `do snapshots <id>` | whole-server undo |
-| 3 | Upgrade with a reboot window | `bin/workbench server update --host <alias> --yes --backup-first --reboot-window 03:00-05:00` | after the reboot: `ssh <alias> uptime`; `M doctor` | Docker is held so containers don't restart mid-day |
+| 1 | See what's pending | `bin/siwo server update --host <alias>` (plan only) | list of packages; "reboot required" if a kernel is waiting | know before you change |
+| 2 | Snapshot (DB) | `bin/siwo do snapshot <id> --name pre-update --wait` | `do snapshots <id>` | whole-server undo |
+| 3 | Upgrade with a reboot window | `bin/siwo server update --host <alias> --yes --backup-first --reboot-window 03:00-05:00` | after the reboot: `ssh <alias> uptime`; `M doctor` | Docker is held so containers don't restart mid-day |
 
 ## DB manager upgrade
 
@@ -24,7 +24,7 @@
 | # | Step | Command | Verify | Why |
 |---|---|---|---|---|
 | 1 | Decide from data | `M doctor` RAM line; DO memory graph | sustained >80% memory, or alerts firing | in dev, turning engines off is cheaper than resizing |
-| 2 | Snapshot, then resize (CPU/RAM only) | `bin/workbench do resize <id> --size s-2vcpu-4gb --dry-run`, then `--yes` | droplet active; `M doctor` | a few minutes of downtime; `--disk` is permanent (can't shrink back) |
+| 2 | Snapshot, then resize (CPU/RAM only) | `bin/siwo do resize <id> --size s-2vcpu-4gb --dry-run`, then `--yes` | droplet active; `M doctor` | a few minutes of downtime; `--disk` is permanent (can't shrink back) |
 
 ## Engines on or off
 

@@ -1,9 +1,9 @@
 {
-    "name": "simtabi/vps-server-workbench",
-    "description": "PHP core of vps-server-workbench: safe, fluent clients for DigitalOcean, Ploi, Cloudflare and Google Cloud, plus the workbench CLI.",
+    "name": "simtabi/server-infra-workbench",
+    "description": "PHP core of server-infra-workbench: safe, fluent clients for DigitalOcean, Ploi, Cloudflare, Google Cloud and GitHub, plus the siwo CLI.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["digitalocean", "ploi", "cloudflare", "gcp", "vps", "devops", "psr-18"],
+    "keywords": ["digitalocean", "ploi", "cloudflare", "gcp", "github", "vps", "devops", "psr-18"],
     "authors": [
         {"name": "Simtabi LLC", "email": "opensource@simtabi.com", "homepage": "https://opensource.simtabi.com", "role": "Organization"},
         {"name": "Imani Manyara", "email": "imani@simtabi.com", "role": "Maintainer"}
@@ -18,6 +18,9 @@
         "psr/http-message": "^2.0",
         "psr/log": "^3.0"
     },
+    "suggest": {
+        "ext-sodium": "Required for `siwo github secrets set` (GitHub secrets are sealed with libsodium)"
+    },
     "require-dev": {
         "laravel/pint": "^1.32",
         "phpstan/phpstan": "^2.3",
@@ -25,12 +28,12 @@
         "phpunit/phpunit": "^12.0 || ^13.0"
     },
     "autoload": {
-        "psr-4": {"Simtabi\\VpsServerWorkbench\\": "src/"}
+        "psr-4": {"Simtabi\\ServerInfraWorkbench\\": "src/"}
     },
     "autoload-dev": {
-        "psr-4": {"Simtabi\\VpsServerWorkbench\\Tests\\": "tests/"}
+        "psr-4": {"Simtabi\\ServerInfraWorkbench\\Tests\\": "tests/"}
     },
-    "bin": ["bin/workbench-php"],
+    "bin": ["bin/siwo-php"],
     "scripts": {
         "test": "phpunit --no-coverage",
         "lint": ["@pint", "@phpstan"],

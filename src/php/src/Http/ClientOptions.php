@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Http;
+namespace Simtabi\ServerInfraWorkbench\Http;
 
 use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Psr7\HttpFactory;
@@ -11,8 +11,8 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
-use Simtabi\VpsServerWorkbench\Safety\AuditLog;
-use Simtabi\VpsServerWorkbench\Safety\JsonlAuditLog;
+use Simtabi\ServerInfraWorkbench\Safety\AuditLog;
+use Simtabi\ServerInfraWorkbench\Safety\JsonlAuditLog;
 
 /**
  * Immutable settings shared by every provider client. Each with*() returns a copy.
@@ -40,7 +40,7 @@ final class ClientOptions
 
     private Sleeper $sleeper;
 
-    private string $userAgent = 'vps-server-workbench/'.self::VERSION;
+    private string $userAgent = 'server-infra-workbench/'.self::VERSION;
 
     private function __construct()
     {

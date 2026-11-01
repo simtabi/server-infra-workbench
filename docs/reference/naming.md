@@ -13,7 +13,7 @@ With `APP` set, the DB manager names every database and login the same way on ev
 | App login | `<app>_<env>_app` | `myapp_prd_app` |
 | Read-only login | `<app>_<env>_ro` | `myapp_prd_ro` |
 | Migrator login (only with `ENV_MIGRATOR=1`) | `<app>_<env>_migrator` | `myapp_prd_migrator` |
-| Secrets file on the server | `$ENV_SECRETS_DIR/<env>.env` (chmod 600) | `/etc/vps-server-workbench/secrets/prd.env` |
+| Secrets file on the server | `$ENV_SECRETS_DIR/<env>.env` (chmod 600) | `/etc/server-infra-workbench/secrets/prd.env` |
 
 ## Rules
 
@@ -38,3 +38,23 @@ With `APP` set, the DB manager names every database and login the same way on ev
 
 Protected means destructive commands need `--force-prod`, the env name typed (or `WORKBENCH_CONFIRM=<env>`),
 and a verified backup younger than `FRESH_BACKUP_MIN` minutes (taken automatically if missing); drops are soft.
+
+## Frozen identifiers
+
+The project was called `vps-server-workbench` until November 2026 ([ADR 0014](../adr/0014-rename-to-server-infra-workbench.md)).
+These names were created on servers under the old name and keep their short `vsw` prefix, because renaming
+them would be a migration on every live server (roles, metric history, containers):
+
+| Kind | Names |
+|---|---|
+| Database roles | `vsw_admin` (Postgres admin), `vsw_monitor` (metrics login), `vsw_migrate` |
+| Prometheus metrics, rules, Grafana dashboard uids | `vsw_*` series, `rules/vsw.yml`, `vsw-overview`, `vsw-backups`, `vsw-containers`, `vsw-postgres` |
+| Directories and files on servers | `/opt/vsw-monitor`, `/opt/vsw-addons`, `/etc/vsw-monitor.conf`, `/etc/vsw-addons.conf`, `/var/lib/vsw-monitor`, `/etc/ssl/certs/vsw-db-ca.crt`, `/etc/cron.d/vsw-inventory`, `/run/lock/vsw-<tool>.lock` |
+| Docker | network `vsw_db`, `vsw-*` add-on compose projects, `vsw-rt-*` restore-test containers, `/etc/postgresql/vsw` in the Postgres container |
+| Integration tests | container, network and volume prefix `vsw` (`SIWO_IT_PREFIX`), matching what the code under test creates |
+
+The command is `siwo` and its settings are `SIWO_*`. New resource names use `siw` (temporary files, the
+`siw-livetest` tag) or the full `server-infra-workbench` (directories). Labels already written to cloud
+resources (`managed-by: workbench`, `managed by workbench`, `workbench: ...` alert descriptions) are kept. Directories under `/etc`, `/var/lib`, `/var/log` and `/usr/local/lib` named
+`vps-server-workbench` keep being used on a server where they already exist. `VSW_*` environment
+variables still work, with a deprecation notice; use `SIWO_*`.

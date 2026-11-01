@@ -1,6 +1,7 @@
 # Optional local hooks: pip install pre-commit && pre-commit install
 # They run the same checks as `make ci`, only on staged files where possible.
 # Do not set core.hooksPath for this repo; pre-commit installs into .git/hooks.
+default_install_hook_types: [pre-commit, pre-push]
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -24,6 +25,19 @@ repos:
 
   - repo: local
     hooks:
+      - id: no-hardcoded-secrets
+        name: no hardcoded passwords/secrets (staged files)
+        entry: python3 tests/security/no-hardcoded-secrets.py --staged
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: secrets-check
+        name: secrets-check (scanner + gitleaks full history)
+        entry: make secrets-check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
       - id: smoke
         name: smoke tests (make test)
         entry: make test

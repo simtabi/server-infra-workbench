@@ -3,12 +3,18 @@
 # The tools embed nothing from here at run time on a server: `--host` copies the tool AND this file.
 # Every tool: plan first, confirm (--yes, typed "yes", or a typed name on prd), lock, audit log, backups.
 #
-#   VSW_SYSROOT   prefix for every file the tools read or write (tests point it at a temp dir)
-#   VSW_LOG_DIR   audit log dir (default /var/log/vps-server-workbench)
-#   VSW_TTY       where typed confirmations are read from (default /dev/tty; tests use a file)
-#   VSW_LOCK_DIR  lock dir (default /run/lock)
+#   SIWO_SYSROOT   prefix for every file the tools read or write (tests point it at a temp dir)
+#   SIWO_LOG_DIR   audit log dir (default /var/log/server-infra-workbench, or the pre-rename
+#                 /var/log/vps-server-workbench while only that exists: siw_path)
+#   (VSW_* names from before the rename are still read: lib/progress.sh)
+#   SIWO_TTY       where typed confirmations are read from (default /dev/tty; tests use a file)
+#   SIWO_LOCK_DIR  lock dir (default /run/lock)
+#   SIWO_PROGRESS / SIWO_QUIET / NO_COLOR  progress output (lib/progress.sh, loaded below)
 
-R="${VSW_SYSROOT:-}"
+# shellcheck source=src/shell/lib/progress.sh
+. "$(dirname "${BASH_SOURCE[0]}")/progress.sh"
+
+R="${SIWO_SYSROOT:-}"
 YES="${YES:-0}" DRY="${DRY:-0}"
 c_ok=0 c_warn=0 c_fail=0 c_todo=0
 
@@ -20,16 +26,20 @@ bad()  { c_fail=$((c_fail + 1)); printf '  FAIL  %s\n' "$*"; }
 todo() { c_todo=$((c_todo + 1)); printf '  todo  %s\n' "$*"; }
 why()  { printf '        why: %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
+siw_path() { # a server-infra-workbench path, or the pre-rename vps-server-workbench one while only that exists (ADR 0014)
+  local old="${1/server-infra-workbench/vps-server-workbench}"
+  if [ ! -e "$1" ] && [ -e "$old" ]; then printf '%s\n' "$old"; else printf '%s\n' "$1"; fi; }
+mute() { "$@" >/dev/null; }   # stdout off, errors still shown (progress_run "label" mute cmd)
 
 audit() { # audit <outcome> <details...>; never logs values, only what was done
-  local d="${VSW_LOG_DIR:-$R/var/log/vps-server-workbench}"
+  local d="${SIWO_LOG_DIR:-$(siw_path "$R/var/log/server-infra-workbench")}"
   { mkdir -p "$d" && chmod 700 "$d"; } 2>/dev/null || return 0
   printf '%s tool=%s by=%s host=%s outcome=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TOOL" \
     "${SUDO_USER:-$(id -un)}" "$(hostname 2>/dev/null || echo '?')" "$1" "${*:2}" >> "$d/audit.log" 2>/dev/null || true
 }
 
 lock() { # one run at a time per tool; mkdir is atomic everywhere (no flock on macOS)
-  LOCK="${VSW_LOCK_DIR:-$R/run/lock}/vsw-$TOOL.lock"
+  LOCK="${SIWO_LOCK_DIR:-$R/run/lock}/vsw-$TOOL.lock"
   mkdir -p "$(dirname "$LOCK")" 2>/dev/null || true
   if ! mkdir "$LOCK" 2>/dev/null; then
     local pid; pid="$(cat "$LOCK/pid" 2>/dev/null || true)"
@@ -40,32 +50,38 @@ lock() { # one run at a time per tool; mkdir is atomic everywhere (no flock on m
 }
 
 confirm() { # confirm "<what>" [typed-word]; --yes skips the plain prompt, never the typed word
-  local what="$1" word="${2:-}" tty="${VSW_TTY:-/dev/tty}" reply=""
+  local what="$1" word="${2:-}" tty="${SIWO_TTY:-/dev/tty}" reply=""
+  # /dev/tty can exist and be readable yet fail to open without a controlling terminal (ssh without -t,
+  # cron, CI): test that it opens, so a plan-only run ends with the clean message instead of a shell error
+  { : < "$tty"; } 2>/dev/null || tty=/nonexistent
   if [ -n "$word" ]; then
-    { [ -r "$tty" ] && printf 'Type %s to %s: ' "$word" "$what" > /dev/stderr && IFS= read -r reply < "$tty"; } || true
+    { [ -r "$tty" ] && printf 'Type %s to %s: ' "$word" "$what" >&2 && IFS= read -r reply < "$tty"; } || true
     [ "$reply" = "$word" ] && return 0
     audit not-confirmed "$what"; CODE=3 die "not confirmed (expected the typed word '$word')"
   fi
   [ "$YES" = 1 ] && return 0
-  { [ -r "$tty" ] && printf '%s? Type yes: ' "$what" > /dev/stderr && IFS= read -r reply < "$tty"; } || true
+  { [ -r "$tty" ] && printf '%s? Type yes: ' "$what" >&2 && IFS= read -r reply < "$tty"; } || true
   [ "$reply" = yes ] && return 0
   audit not-confirmed "$what"; CODE=3 die "not confirmed (type yes, or pass --yes)"
 }
 
 backup() { # backup FILE -> FILE.bak.<ts> (mode 600); prints the path
+  # Under /etc/apt/*.d the copy is FILE.<ts>.bak instead: apt silently skips names ending in .bak, but warns
+  # "invalid filename extension" on every run for FILE.bak.<ts>.
   [ -e "$1" ] || return 0
-  local b; b="$1.bak.$(date +%Y%m%d%H%M%S)"
+  local b ts; ts="$(date +%Y%m%d%H%M%S)"; b="$1.bak.$ts"
+  case "$1" in */etc/apt/*.d/*) b="$1.$ts.bak" ;; esac
   (umask 077; cp -p "$1" "$b") && chmod 600 "$b" && printf '        backup: %s\n' "$b"
 }
 
 write_file() { # write_file PATH MODE < content ; atomic, keeps a backup when the content changes
   local f="$1" mode="$2" tmp; mkdir -p "$(dirname "$f")"
-  tmp="$(mktemp "$(dirname "$f")/.vsw.XXXXXX")"; cat > "$tmp"; chmod "$mode" "$tmp"
+  tmp="$(mktemp "$(dirname "$f")/.siw.XXXXXX")"; cat > "$tmp"; chmod "$mode" "$tmp"
   if [ -f "$f" ] && cmp -s "$tmp" "$f"; then rm -f "$tmp"; return 0; fi
   backup "$f"; mv "$tmp" "$f"
 }
 
-remote() { # remote HOST TOOL_PATH ARGS... : copy the tool + this file over ssh, run with sudo, clean up
+remote() { # remote HOST TOOL_PATH ARGS... : copy the tool + lib (common, progress) over ssh, run with sudo, clean up
   # (REMOTE_EXTRA=(files) are copied next to the tool, e.g. a tool it calls;
   #  REMOTE_NOTTY=1 runs without a tty and with sudo -n, so stdout can be captured)
   local host="$1" tool="$2"; shift 2
@@ -77,6 +93,7 @@ remote() { # remote HOST TOOL_PATH ARGS... : copy the tool + this file over ssh,
   ssh "$host" "mkdir -p '$rdir/tool' '$rdir/lib'" || die "ssh $host failed"
   scp -q "$tool" "$host:$rdir/tool/" || die "scp to $host failed"
   scp -q "$here" "$host:$rdir/lib/common.sh" || die "scp to $host failed"
+  scp -q "$(dirname "$here")/progress.sh" "$host:$rdir/lib/progress.sh" || die "scp to $host failed"
   for a in "${REMOTE_EXTRA[@]+"${REMOTE_EXTRA[@]}"}"; do scp -q "$a" "$host:$rdir/tool/" || die "scp to $host failed"; done
   local t=-t s=sudo; [ "${REMOTE_NOTTY:-0}" = 1 ] && { t=-T; s="sudo -n"; }
   # shellcheck disable=SC2029

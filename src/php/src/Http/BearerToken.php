@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Http;
+namespace Simtabi\ServerInfraWorkbench\Http;
 
 use Psr\Http\Message\RequestInterface;
-use Simtabi\VpsServerWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
 
 final class BearerToken implements Authenticator
 {

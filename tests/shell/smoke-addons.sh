@@ -7,9 +7,9 @@ A="$ROOT/src/shell/addons/addon.sh"
 W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
 pass=0 fail=0
 ok() { echo "ok   $*"; pass=$((pass + 1)); }
-no() { echo "FAIL $*"; fail=$((fail + 1)); }
-check() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then ok "$d"; else no "$d"; fi; }
-refuses() { local d="$1" pat="$2"; shift 2; local out; if out="$("$@" 2>&1)"; then no "$d (exit 0)"; elif grep -q -- "$pat" <<<"$out"; then ok "$d"; else no "$d: $out"; fi; }
+no() { echo "FAIL $*"; [ -s "$W/last.err" ] && sed "s/^/     /" "$W/last.err" | tail -3; fail=$((fail + 1)); }
+check() { local d="$1"; shift; if "$@" >/dev/null 2>"$W/last.err"; then ok "$d"; else no "$d"; fi; }
+refuses() { local d="$1" pat="$2"; shift 2; local out; rm -f "$W/last.err"; if out="$("$@" 2>&1)"; then no "$d (exit 0)"; elif grep -q -- "$pat" <<<"$out"; then ok "$d"; else no "$d: $out"; fi; }
 cat > "$W/addons.conf" <<CONF
 ADDONS_DIR=$W/root
 AUDIT_LOG=$W/audit.log
@@ -31,10 +31,23 @@ refuses "bad role" "--role must be" "$A" plan garage --role cache --bind 10.10.0
 refuses "rustfs needs --accept-experimental" "EXPERIMENTAL" "$A" plan rustfs --bind 10.10.0.5
 refuses "rustfs refused on prd" "protected env" env ADDON_ENV=prd "$A" plan rustfs --bind 10.10.0.5 --accept-experimental
 refuses "rustfs refuses rustfsadmin" "default credentials" env RUSTFS_ACCESS_KEY=rustfsadmin "$A" plan rustfs --bind 10.10.0.5 --accept-experimental
-refuses "rustfs refuses minioadmin" "default credentials" env RUSTFS_SECRET_KEY=minioadmin "$A" plan rustfs --bind 10.10.0.5 --accept-experimental
+refuses "rustfs refuses minioadmin" "default credentials" env RUSTFS_SECRET_KEY=minioadmin "$A" plan rustfs --bind 10.10.0.5 --accept-experimental  # vsw-secrets: ignore (public vendor default; proves it is refused)
 check "rustfs plan ok with the gate passed" "$A" plan rustfs --bind 10.10.0.5 --accept-experimental
 mkdir -p "$W/root/garage" && echo "ADDON_NAME=garage" > "$W/root/garage/stack.env"
 refuses "one object store per node" "already installed" "$A" plan seaweedfs --bind 10.10.0.5
+rm -rf "$W/root/garage"
+# multi-node Garage: replication is fixed at the first install, peers need host networking and the shared secrets
+PEER="$(openssl rand -hex 32)@10.10.0.6:3901"
+# settings come from the conf file (sourced after the pinned defaults), so each case gets its own conf
+C() { local f; f="$(mktemp "$W/conf.XXXX")"; { cat "$W/addons.conf"; printf '%s\n' "$@"; } > "$f"; echo "$f"; }
+refuses "doctor disk limit must be 0-100" "ADDON_DISK_WARN_PCT" env ADDON_CONF="$(C ADDON_DISK_BAD_PCT=150)" "$A" plan garage --bind 10.10.0.5
+refuses "garage: replication must be 1, 2 or 3" "must be 1, 2 or 3" env ADDON_CONF="$(C GARAGE_REPLICATION=5)" "$A" plan garage --bind 10.10.0.5
+refuses "garage: replication 3 refused in bridge mode" "needs ADDON_NETWORK=host" env ADDON_CONF="$(C GARAGE_REPLICATION=3 ADDON_NETWORK=bridge)" "$A" plan garage --bind 10.10.0.5
+refuses "garage: malformed peer refused" "is not <64-hex" env ADDON_CONF="$(C GARAGE_PEERS=abc@10.10.0.6:3901)" "$A" plan garage --bind 10.10.0.5
+refuses "garage: joining without the cluster's secrets.env refused" "copy secrets.env" env ADDON_CONF="$(C "GARAGE_PEERS=$PEER")" "$A" plan garage --bind 10.10.0.5
+check "garage: replication 3 + peer plan ok with secrets.env present" bash -c "mkdir -p '$W/root/garage' && echo GARAGE_RPC_SECRET=x > '$W/root/garage/secrets.env' && ADDON_CONF='$(C GARAGE_REPLICATION=3 "GARAGE_PEERS=$PEER")' '$A' plan garage --bind 10.10.0.5 | grep -q 'replication 3, zone dc1, 1 peer'"
+printf 'ADDON_NAME=garage\nGARAGE_REPLICATION=1\n' > "$W/root/garage/stack.env"
+refuses "garage: replication cannot change on an installed cluster" "cannot change it in place" env ADDON_CONF="$(C GARAGE_REPLICATION=3)" "$A" plan garage --bind 10.10.0.5
 rm -rf "$W/root/garage"
 refuses "install without a terminal needs --yes" "without a terminal" bash -c "'$A' install gotenberg </dev/null"
 
@@ -43,6 +56,9 @@ check "is_private_ip 10/8, 172.16/12, 192.168/16, 127/8" L 'is_private_ip 10.1.2
 check "is_private_ip rejects public and 172.32" L '! is_private_ip 8.8.8.8 && ! is_private_ip 172.32.0.1 && ! is_private_ip 1.2.3'
 check "garage key id is GK + 24 hex" L '[[ "$(gen_value gk)" =~ ^GK[0-9a-f]{24}$ ]]'
 check "write_secrets: 600, only adds missing keys" L "ADDONS_DIR=$W/s; mkdir -p $W/s/garage; write_secrets garage; a=\$(cat $W/s/garage/secrets.env); write_secrets garage; [ \"\$a\" = \"\$(cat $W/s/garage/secrets.env)\" ] && [ \"\$(perm $W/s/garage/secrets.env)\" = 600 ]"
+check "garage.toml: replication and rpc_public_addr = ADDON_BIND in host mode" L "load_addon garage; ADDONS_DIR=$W/t; mkdir -p $W/t/garage; ADDON_BIND=10.10.0.5; GARAGE_REPLICATION=3; write_secrets garage; garage_toml $W/t/garage.toml; grep -qx 'replication_factor = 3' $W/t/garage.toml && grep -qxE 'rpc_(public|bind)_addr = .10.10.0.5:3901.' $W/t/garage.toml && [ \$(grep -cE '10.10.0.5:3901' $W/t/garage.toml) = 2 ]"
+
+check "compose project: an exported COMPOSE_PROJECT_NAME is ignored (one project per add-on)" L "ADDONS_DIR=$W/p; export COMPOSE_PROJECT_NAME=web; ADDON_PROJECT_PREFIX=vsw; [ \"\$(project_of garage)\" = vsw-garage ] && [ \"\$(project_of gotenberg)\" = vsw-gotenberg ]"
 
 for f in "$ROOT"/stacks/addons/*/addon.env.example; do
   n="$(basename "$(dirname "$f")")"

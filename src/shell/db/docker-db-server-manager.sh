@@ -72,7 +72,7 @@ set -euo pipefail
 trap 'echo "!! ERROR: line $LINENO: \"$BASH_COMMAND\" failed" >&2' ERR
 
 TOOL_NAME="Docker DB Server Setup Manager"
-VERSION="1.4.0"
+VERSION="1.5.0"
 
 # ---- configuration ------------------------------------------------------------
 # A config file is KEY=VALUE lines. It only fills in variables the environment
@@ -140,8 +140,9 @@ PGBOUNCER_ADMIN_USER="${PGBOUNCER_ADMIN_USER:-pgbouncer_admin}"
 PGBOUNCER_POOL_MODE="${PGBOUNCER_POOL_MODE:-session}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-vsw_db}"          # compose network with a fixed subnet
 DOCKER_SUBNET="${DOCKER_SUBNET:-172.30.88.0/24}"    # pg_hba + MySQL root host use it
-TLS_MODE="${TLS_MODE:-off}"                         # off | require (self-signed, made on the server)
+TLS_MODE="${TLS_MODE:-off}"                         # off | require | verify-full (self-signed CA made on the server; verify-full: clients check the CA + host)
 TLS_DAYS="${TLS_DAYS:-825}"
+TLS_CA_WEB_PATH="${TLS_CA_WEB_PATH:-/etc/ssl/certs/vsw-db-ca.crt}"   # where web hosts keep the CA for verify-full
 EXTRA_BIND_IPS="${EXTRA_BIND_IPS:-}"                # more bind addresses (WireGuard IP; public only with the two below)
 ALLOW_PUBLIC_BIND="${ALLOW_PUBLIC_BIND:-0}"         # 1 = a public EXTRA_BIND_IPS entry is intended (needs TLS_MODE=require)
 PEER_REGIONS="${PEER_REGIONS:-}"                    # app server regions, e.g. "nyc1"; doctor compares with this droplet
@@ -153,7 +154,15 @@ PG_IMAGE_LEGACY="${PG_IMAGE_LEGACY:-local/postgres:18-postgis-pgvector}"  # old 
 MARIADB_ED25519="${MARIADB_ED25519:-0}"             # 1 = new MariaDB users use ed25519 (PHP mysqlnd cannot)
 MY_APP_HOST="${MY_APP_HOST:-%}"                     # host part of MySQL/MariaDB app users (ports are VPC-only)
 BINLOG_DAYS="${BINLOG_DAYS:-7}"                     # MySQL/MariaDB binlog retention on the server
-STATE_DIR="${STATE_DIR:-/var/lib/vps-server-workbench/db}"   # status stamps for doctor/monitoring
+siw_path() { # a server-infra-workbench path, or the pre-rename vps-server-workbench one while only that exists (ADR 0014)
+  local old="${1/server-infra-workbench/vps-server-workbench}"
+  if [ ! -e "$1" ] && [ -e "$old" ]; then printf '%s\n' "$old"; else printf '%s\n' "$1"; fi; }
+STATE_DIR="${STATE_DIR:-$(siw_path /var/lib/server-infra-workbench/db)}"   # status stamps for doctor/monitoring
+# ---- monitoring (siwo monitor; docs/tools/monitor.md) --
+MONITOR_USER="${MONITOR_USER:-vsw_monitor}"          # pg_monitor login for the exporters (monitor-user); empty = none
+MONITOR_PASSWORD_FILE="${MONITOR_PASSWORD_FILE:-/etc/vsw-monitor/pg-monitor.pass}"  # 600, read by monitor.sh, never printed
+METRICS_TEXTFILE_DIR="${METRICS_TEXTFILE_DIR:-/var/lib/vsw-monitor/textfile}"     # node-exporter textfile dir; metrics written only when it exists
+DOCKER_GROUP_ALLOW="${DOCKER_GROUP_ALLOW:-}"         # users allowed in the docker group (doctor warns about others)
 # ---- environments (approved design; see docs/database-environments.md) --
 APP="${APP:-}"                                      # empty = no environment layout
 ENVS="${ENVS:-tst dev trn stg prd}"
@@ -161,7 +170,7 @@ TENANT_ENVS="${TENANT_ENVS:-$ENVS}"                 # envs whose app role may CR
 PROTECTED_ENVS="${PROTECTED_ENVS:-stg prd}"
 PRD_LOCATION="${PRD_LOCATION:-local}"               # local | droplet | managed (prd not on this host)
 ENV_MIGRATOR="${ENV_MIGRATOR:-0}"                   # 1 = separate <app>_<env>_migrator for DDL
-ENV_SECRETS_DIR="${ENV_SECRETS_DIR:-/etc/vps-server-workbench/secrets}"
+ENV_SECRETS_DIR="${ENV_SECRETS_DIR:-$(siw_path /etc/server-infra-workbench/secrets)}"
 FRESH_BACKUP_MIN="${FRESH_BACKUP_MIN:-15}"          # protected envs: destructive ops need a backup this fresh
 TRASH_DAYS="${TRASH_DAYS:-7}"                       # soft-dropped Postgres DBs are purged after this
 DROPPED_DUMP_DAYS="${DROPPED_DUMP_DAYS:-30}"        # MySQL/MariaDB: dumps of dropped DBs kept this long
@@ -171,6 +180,9 @@ PITR="${PITR:-off}"                                 # off | pgbackrest
 PITR_DAYS="${PITR_DAYS:-14}"
 PITR_REPO_TYPE="${PITR_REPO_TYPE:-s3}"              # s3 | posix (posix: a local/volume path, tests and NFS)
 PITR_REPO_PATH="${PITR_REPO_PATH:-/pgbackrest}"
+PITR_S3_URI_STYLE="${PITR_S3_URI_STYLE:-host}"        # host (Spaces, AWS) | path (Garage, MinIO, SeaweedFS)
+PITR_S3_CA_FILE="${PITR_S3_CA_FILE:-}"              # PEM CA for a private S3 endpoint; TLS is always verified
+PITR_S3_HOST_IP="${PITR_S3_HOST_IP:-}"              # IPv4 the endpoint host name maps to in the container (a private name not in DNS)
 PITR_FULL_CRON="${PITR_FULL_CRON:-30 2 * * 0}"
 PITR_DIFF_CRON="${PITR_DIFF_CRON:-30 2 * * 1-6}"
 PGBACKREST_PKG="${PGBACKREST_PKG:-pgbackrest}"
@@ -181,8 +193,8 @@ OFFSITE_REGION="${OFFSITE_REGION:-us-east-1}"
 OFFSITE_BUCKET="${OFFSITE_BUCKET:-}"
 OFFSITE_PREFIX="${OFFSITE_PREFIX:-db/$(hostname 2>/dev/null || echo host)}"
 OFFSITE_ENCRYPTION="${OFFSITE_ENCRYPTION:-openssl}" # openssl (AES-256, key file) | age (recipients file)
-OFFSITE_KEY_FILE="${OFFSITE_KEY_FILE:-/etc/vps-server-workbench/backup.key}"   # chmod 600
-OFFSITE_CREDS_FILE="${OFFSITE_CREDS_FILE:-/etc/vps-server-workbench/offsite.env}" # chmod 600: OFFSITE_ACCESS_KEY / OFFSITE_SECRET_KEY
+OFFSITE_KEY_FILE="${OFFSITE_KEY_FILE:-$(siw_path /etc/server-infra-workbench/backup.key)}"   # chmod 600
+OFFSITE_CREDS_FILE="${OFFSITE_CREDS_FILE:-$(siw_path /etc/server-infra-workbench/offsite.env)}" # chmod 600: OFFSITE_ACCESS_KEY / OFFSITE_SECRET_KEY
 OFFSITE_TOOL="${OFFSITE_TOOL:-rclone}"              # rclone | aws
 OFFSITE_KEEP_DAYS="${OFFSITE_KEEP_DAYS:-400}"
 BINLOG_SHIP_CRON="${BINLOG_SHIP_CRON:-*/5 * * * *}"
@@ -195,6 +207,8 @@ HEALTHCHECK_URL="${HEALTHCHECK_URL:-}"              # check-in URL (healthchecks
 ALERT_COMMAND="${ALERT_COMMAND:-}"                  # local hook: <cmd> <event> <ok|fail> <message>
 BACKUP_MAX_AGE_H="${BACKUP_MAX_AGE_H:-26}"
 RESTORE_TEST_MAX_AGE_D="${RESTORE_TEST_MAX_AGE_D:-8}"
+DOCTOR_DISK_WARN_PCT="${DOCTOR_DISK_WARN_PCT:-80}"   # doctor: disk use on DB_DIR that warns
+DOCTOR_DISK_BAD_PCT="${DOCTOR_DISK_BAD_PCT:-90}"     # ... and that is a PROBLEM (Postgres stops at 100%)
 SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 
 log()  { printf '\n==> %s\n' "$*"; }
@@ -229,11 +243,11 @@ Setup and updates
   env-init [flags] [--out F]  environment wizard (prompts; or --app --engines --envs --tenant-dbs
                               --protect --prd-location --pitr --offsite --tls --alert-email --allow env=CIDR
                               --dry-run). Missing value without a terminal: exit 2
-  upgrade|apply [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot]
+  upgrade|apply [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot] [--allow-unhealthy]
                               preflight -> diff -> confirm -> snapshot -> verified backup -> savepoint
                               -> apply (incl. role split, root@'%' removal) -> verify + doctor -> auto-rollback
   install                     first-time setup (keeps an existing .env and data)
-  reset                       DESTRUCTIVE: new passwords, empty databases (type RESET)
+  reset [--force-prod]        DESTRUCTIVE: new passwords, empty databases (type RESET; --force-prod with a protected env)
   engine enable|disable <postgres|pgbouncer|mysql|mariadb|adminer> [--delete-volume] [--dry-run]
   role-split [--rollback]     the 1.4.0 Postgres role split by hand (upgrade does it for you)
 
@@ -257,14 +271,25 @@ Backups and recovery (docs/backups-and-recovery.md)
   offsite backup [dir] | list | verify [name] | fetch <name> [dir]
   pitr setup | backup [full|diff|incr] | status | restore --target 'YYYY-MM-DD HH:MM:SS+00'
   binlog-ship                 copy closed MySQL/MariaDB binlogs (and off-site, encrypted)
+  binlog-replay --target 'YYYY-MM-DD HH:MM:SS' [--engine E] [--from DIR] | --prepare  MySQL/MariaDB point-in-time restore (UTC; DESTRUCTIVE); --prepare builds the decoder image
   cron-install | cron-remove  backup, doctor --alert, restore-test, PITR, binlog-ship, purge-trash jobs
+  gfs-keep "daily=7 weekly=4"  read backup names (YYYYmmdd-HHMMSS) on stdin, print the ones RETENTION keeps (read-only)
 
 Checks
   status | verify | doctor [--alert] | logs [service] | env [engine]
+  log-errors [--since 24h|7d|all] [--service postgres|pgbouncer]   read-only: grouped, masked ERROR/FATAL summary (exit 1 = errors)
+  rebind-ip [--dry-run]       after a restore to a droplet with another private IP: bind the stack to PRIVATE_IP and start
+
+Monitoring, TLS and migrations (docs/tools/monitor.md, docs/recipes/)
+  monitor-user [--rotate]     pg_monitor login for the exporters; password file $MONITOR_PASSWORD_FILE (600)
+  metrics                     write node-exporter textfile metrics now (backup/off-site/restore-test/TLS ages)
+  tls-ca [--out F]            the public CA certificate web hosts need for TLS_MODE=verify-full
+  pg-major-upgrade --to N [--dry-run] | --cleanup OLD   dump + reload into postgres N, auto-rollback
+  migrate-managed --target-env F [--db a,b] [--check]   copy databases to a managed PostgreSQL, row counts compared
 
 Other
-  uninstall [--purge]         --purge is DESTRUCTIVE (type PURGE)
-  help | --version
+  uninstall [--purge] [--force-prod]   --purge is DESTRUCTIVE (type PURGE; --force-prod with a protected env)
+  help | --version            global: --yes/-y, --non-interactive, --config FILE, --quiet/-q (no progress output)
 
 Engines: ENABLE_POSTGRES=$ENABLE_POSTGRES ENABLE_PGBOUNCER=$ENABLE_PGBOUNCER ENABLE_MYSQL=$ENABLE_MYSQL ENABLE_MARIADB=$ENABLE_MARIADB ENABLE_ADMINER=$ENABLE_ADMINER
 Ports (private IP only): $PG_PORT Postgres, $PGBOUNCER_PORT PgBouncer, $MYSQL_PORT MySQL, $MARIADB_PORT MariaDB
@@ -308,7 +333,7 @@ detect_ip() {
 # unless that address is actually configured on this host.
 guard_host() {
   [ -n "${EXPECTED_PRIVATE_IP:-}" ] || return 0
-  ip -4 -o addr show 2>/dev/null | grep -q "inet ${EXPECTED_PRIVATE_IP//./\\.}/" \
+  ip -4 -o addr show 2>/dev/null | grep "inet ${EXPECTED_PRIVATE_IP//./\\.}/" >/dev/null \
     || die "ABORT: $(hostname) does not have $EXPECTED_PRIVATE_IP - wrong server?"
 }
 
@@ -353,6 +378,85 @@ set_env_key() { # key value [file]: replace or append one line, file stays 600
   grep -v "^$1=" "$f" > "$tmp" || true; printf '%s=%s\n' "$1" "$2" >> "$tmp"; mv "$tmp" "$f"
 }
 
+# ---- progress (spinner, bar, ETA on stderr; same code as src/shell/lib/progress.sh) ----
+# SIWO_PROGRESS=auto|tty|plain|off, --quiet (SIWO_QUIET=1), NO_COLOR. Cron runs get plain lines.
+# >>> progress.sh
+# SIWO_* was VSW_* before the rename (ADR 0014): an unset SIWO_X takes VSW_X, with one notice per name
+for _v in $(compgen -e); do case "$_v" in VSW_*)
+  _n="SIWO_${_v#VSW_}"; [ -n "${!_n+x}" ] || export "$_n=${!_v}"
+  case " ${SIWO_COMPAT_NOTED:-} " in *" $_v "*) ;; *) export SIWO_COMPAT_NOTED="${SIWO_COMPAT_NOTED:-} $_v"
+    printf 'note: %s is deprecated, use %s (the old name is still read for now)\n' "$_v" "$_n" >&2 ;; esac ;; esac; done
+PROGRESS_T0="${PROGRESS_T0:-$(date +%s)}" PROGRESS_N=0 PROGRESS_BAR_T0="" PROGRESS_BAR_DEC=-1
+progress_mode() {
+  [ "${SIWO_QUIET:-0}" = 1 ] && { echo off; return; }
+  case "${SIWO_PROGRESS:-auto}" in
+    tty|plain|off) echo "$SIWO_PROGRESS" ;;
+    *) if [ -t 2 ] && [ "${TERM:-dumb}" != dumb ]; then echo tty; else echo plain; fi ;;
+  esac
+}
+progress_fmt() { local s="$1"; if [ "$s" -ge 3600 ]; then printf '%d:%02d:%02d' $((s / 3600)) $((s % 3600 / 60)) $((s % 60)); else printf '%d:%02d' $((s / 60)) $((s % 60)); fi; }
+progress_col() { # progress_col 32 text: colour only on a terminal without NO_COLOR
+  if [ -z "${NO_COLOR:-}" ] && [ "$(progress_mode)" = tty ]; then printf '\033[%sm%s\033[0m' "$1" "$2"; else printf '%s' "$2"; fi
+}
+progress_step() {
+  local m; m="$(progress_mode)"; [ "$m" = off ] && return 0
+  PROGRESS_N=$((PROGRESS_N + 1))
+  local n=""; [ -n "${PROGRESS_TOTAL:-}" ] && n="[$PROGRESS_N/$PROGRESS_TOTAL] "
+  printf '%s %s%s  (%s)\n' "$(progress_col 36 '==>')" "$n" "$1" "$(progress_fmt $(($(date +%s) - PROGRESS_T0)))" >&2
+}
+progress_run() {
+  local label="$1" m t0 pid rc=0 log="" i=0 f="|/-\\"; shift; m="$(progress_mode)"; t0="$(date +%s)"
+  if [ "$m" = tty ]; then
+    log="$(mktemp "${TMPDIR:-/tmp}/siw-progress.XXXXXX")"
+    "$@" >"$log" 2>&1 </dev/null & pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+      printf '\r  %s %s  %s ' "${f:i++%4:1}" "$label" "$(progress_fmt $(($(date +%s) - t0)))" >&2; sleep 0.2
+    done
+    wait "$pid" || rc=$?; printf '\r\033[K' >&2
+  else
+    [ "$m" = plain ] && printf '  ..    %s\n' "$label" >&2
+    "$@" </dev/null & pid=$!; wait "$pid" || rc=$?
+  fi
+  local e; e="$(progress_fmt $(($(date +%s) - t0)))"
+  if [ "$rc" = 0 ]; then [ "$m" = off ] || printf '  %s  %s  (%s)\n' "$(progress_col 32 'done')" "$label" "$e" >&2
+  else [ "$m" = off ] || printf '  %s  %s  (%s, exit %s)\n' "$(progress_col 31 'FAIL')" "$label" "$e" "$rc" >&2; fi
+  if [ -n "$log" ]; then { [ "$rc" != 0 ] || [ "${SIWO_VERBOSE:-0}" = 1 ]; } && sed 's/^/        /' "$log" | tail -n 40 >&2; rm -f "$log"; fi
+  return "$rc"
+}
+progress_bar() {
+  local i="$1" n="$2" label="${3:-}" m now el eta="" pct w=24 fill; m="$(progress_mode)"; [ "$m" = off ] && return 0
+  [ "$n" -gt 0 ] 2>/dev/null || return 0
+  now="$(date +%s)"; { [ -z "$PROGRESS_BAR_T0" ] || [ "$i" -eq 0 ]; } && { PROGRESS_BAR_T0="$now"; PROGRESS_BAR_DEC=-1; }
+  [ "$i" -gt "$n" ] && i="$n"
+  pct=$((i * 100 / n)) el=$((now - PROGRESS_BAR_T0))
+  [ "$i" -gt 0 ] && [ "$i" -lt "$n" ] && eta=" eta $(progress_fmt $((el * (n - i) / i)))"
+  if [ "$m" = tty ]; then
+    fill=$((i * w / n)); printf '\r  [%s%s] %3d%% %d/%d %s  %s%s\033[K' "$(printf '%*s' "$fill" '' | tr ' ' '#')" \
+      "$(printf '%*s' $((w - fill)) '' | tr ' ' '-')" "$pct" "$i" "$n" "$label" "$(progress_fmt "$el")" "$eta" >&2
+    [ "$i" -eq "$n" ] && printf '\n' >&2
+  elif [ $((pct / 10)) -ne "$PROGRESS_BAR_DEC" ]; then
+    PROGRESS_BAR_DEC=$((pct / 10)); printf '  %3d%% %d/%d %s  %s%s\n' "$pct" "$i" "$n" "$label" "$(progress_fmt "$el")" "$eta" >&2
+  fi
+  return 0
+}
+progress_wait() {
+  local label="$1" to="$2" iv="$3" m t0 i=0 f="|/-\\"; shift 3; m="$(progress_mode)"; t0="$(date +%s)"
+  [ "$m" = plain ] && printf '  ..    waiting: %s (up to %ss)\n' "$label" "$to" >&2
+  while ! "$@" >/dev/null 2>&1; do
+    if [ $(($(date +%s) - t0)) -ge "$to" ]; then
+      [ "$m" = tty ] && printf '\r\033[K' >&2
+      [ "$m" = off ] || printf '  %s  %s  (timed out after %s)\n' "$(progress_col 31 'FAIL')" "$label" "$(progress_fmt "$to")" >&2
+      return 1
+    fi
+    [ "$m" = tty ] && printf '\r  %s %s  %s / %s ' "${f:i++%4:1}" "$label" "$(progress_fmt $(($(date +%s) - t0)))" "$(progress_fmt "$to")" >&2
+    sleep "$iv"
+  done
+  [ "$m" = tty ] && printf '\r\033[K' >&2
+  [ "$m" = off ] || printf '  %s  %s  (%s)\n' "$(progress_col 32 'done')" "$label" "$(progress_fmt $(($(date +%s) - t0)))" >&2
+  return 0
+}
+# <<< progress.sh
+
 # ---- small utilities -----------------------------------------------------------
 cidr_mask() { # 24 -> 255.255.255.0
   local b="$1" m=$(( (0xFFFFFFFF << (32 - $1)) & 0xFFFFFFFF )); [ "$b" = 0 ] && m=0
@@ -366,6 +470,32 @@ in_list() { case " $2 " in *" $1 "*) return 0 ;; esac; return 1; } # word "list"
 stamp() { # name [text]: record an event for doctor/monitoring
   mkdir -p "$STATE_DIR" 2>/dev/null && chmod 700 "$STATE_DIR" 2>/dev/null
   printf '%s %s\n' "$(date +%s)" "${2:-ok}" > "$STATE_DIR/$1" 2>/dev/null || true
+  write_metrics
+}
+stamp_ts() { awk '{print $1; exit}' "$STATE_DIR/$1" 2>/dev/null || true; } # name -> epoch or ""
+cert_end_epoch() { # cert file -> notAfter as epoch, or ""
+  local e; e="$(openssl x509 -noout -enddate -in "$1" 2>/dev/null | cut -d= -f2-)" || true
+  [ -n "$e" ] || return 0
+  date -d "$e" +%s 2>/dev/null || date -j -f '%b %e %T %Y %Z' "$e" +%s 2>/dev/null || true
+}
+# Prometheus textfile metrics for node-exporter (stacks/monitor/prometheus/rules/vsw.yml).
+# WHY a file: the alert rules need "last success" times that only this script knows; a
+# textfile is pull-friendly, needs no extra daemon and survives exporter restarts.
+write_metrics() {
+  [ -d "$METRICS_TEXTFILE_DIR" ] && [ -w "$METRICS_TEXTFILE_DIR" ] || return 0
+  local f="$METRICS_TEXTFILE_DIR/vsw_db.prom" t v d
+  t="$(mktemp "$f.XXXX" 2>/dev/null)" || return 0
+  gauge() { printf '# HELP %s %s\n# TYPE %s gauge\n%s%s %s\n' "$1" "$2" "$1" "$1" "$3" "$4"; } # name help labels value
+  {
+    v="$(stamp_ts backup)"; [ -z "$v" ] || gauge vsw_backup_last_success_timestamp_seconds "Last successful backup (unix time)." '{engine="all"}' "$v"
+    for d in offsite:offsite:"off-site copy" restore_test:restore-test:"restore test" pitr:pitr-backup:"pgBackRest backup" binlog_ship:binlog-ship:"binlog shipping"; do
+      IFS=: read -r n s h <<<"$d"; v="$(stamp_ts "$s")"; [ -z "$v" ] || gauge "vsw_${n}_last_success_timestamp_seconds" "Last successful $h (unix time)." "" "$v"
+    done
+    v="$(awk '{print $2, $3; exit}' "$STATE_DIR/doctor" 2>/dev/null || true)"
+    case "$v" in "") ;; fail*) gauge vsw_doctor_problems "Problems found by the last doctor run." "" "${v#fail }" ;; *) gauge vsw_doctor_problems "Problems found by the last doctor run." "" 0 ;; esac
+    v="$(cert_end_epoch "$DB_DIR/tls/server.crt")"; [ -z "$v" ] || gauge vsw_tls_cert_expiry_timestamp_seconds "Database TLS certificate notAfter (unix time)." '{cert="db"}' "$v"
+    gauge vsw_reboot_required "1 when the OS asks for a reboot." "" "$([ -f /var/run/reboot-required ] && echo 1 || echo 0)"
+  } > "$t" 2>/dev/null && chmod 644 "$t" && mv -f "$t" "$f" || rm -f "$t"
 }
 stamp_age_h() { # name -> hours since stamp, or "" if none
   local t; t="$(awk '{print $1; exit}' "$STATE_DIR/$1" 2>/dev/null)" || true
@@ -398,6 +528,7 @@ PG_USER=$PG_USER
 PG_ADMIN_USER=$PG_ADMIN_USER
 PGBOUNCER_AUTH_USER=$PGBOUNCER_AUTH_USER
 PGBOUNCER_ADMIN_USER=$PGBOUNCER_ADMIN_USER
+PGBOUNCER_STATS_USERS=$PGBOUNCER_ADMIN_USER${MONITOR_USER:+,$MONITOR_USER}
 PGBOUNCER_POOL_MODE=$PGBOUNCER_POOL_MODE
 DOCKER_NETWORK=$DOCKER_NETWORK
 DOCKER_SUBNET=$DOCKER_SUBNET
@@ -423,7 +554,8 @@ EOF
 }
 
 pitr_on() { [ "$PITR" = pgbackrest ] && on "$ENABLE_POSTGRES"; }
-tls_on() { [ "$TLS_MODE" = require ]; }
+tls_on() { [ "$TLS_MODE" = require ] || [ "$TLS_MODE" = verify-full ]; }
+tls_verify() { [ "$TLS_MODE" = verify-full ]; }
 
 # pg_hba: loopback + the compose network (PgBouncer, Adminer) + the VPC; never "all".
 # With APP set, each environment's roles may only reach their own databases, and only
@@ -440,6 +572,7 @@ write_pg_hba() { # file
     echo "host     all       all   ::1/128       scram-sha-256"
     echo "host     all       $PGBOUNCER_ADMIN_USER  all  reject"
     echo "host     all       $PG_ADMIN_USER  $DOCKER_SUBNET  scram-sha-256"
+    [ -z "$MONITOR_USER" ] || echo "host     postgres  $MONITOR_USER  $DOCKER_SUBNET  scram-sha-256"
     echo "$h  all       $PG_ADMIN_USER  $VPC_CIDR  scram-sha-256"
     if [ -n "$APP" ]; then
       for e in $(local_envs); do
@@ -472,12 +605,16 @@ write_files() {
   cd "$DB_DIR"
   mkdir -p postgres/init postgres/conf
   {
+    # The ARG default (the configured base; compose passes the same value as a build arg) keeps BuildKit from
+    # warning InvalidDefaultArgInFrom; DEBIAN_FRONTEND as an ARG silences debconf's tty notices during the build
+    # without leaking into the image's environment.
+    echo "# postgis/postgis is amd64-only (fine for DO droplets)"
+    printf 'ARG PG_BASE_IMAGE=%s\n' "$PG_BASE_IMAGE"
     cat <<'EOF'
-# postgis/postgis is amd64-only (fine for DO droplets)
-ARG PG_BASE_IMAGE
 FROM ${PG_BASE_IMAGE}
 ARG PGVECTOR_PKG
 ARG EXTRA_PKGS=""
+ARG DEBIAN_FRONTEND=noninteractive
 # apt packages are GPG-signed; ca-certificates first so the pgdg repo can switch to https
 RUN apt-get -o Acquire::Retries=5 update \
  && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates \
@@ -521,6 +658,9 @@ exec docker-entrypoint.sh "$@"
 EOF
   chmod 755 postgres/conf/entry.sh
   if pitr_on; then write_pgbackrest_conf postgres/conf/pgbackrest.conf; else rm -f postgres/conf/pgbackrest.conf; fi
+  if pitr_on && [ "$PITR_REPO_TYPE" = s3 ] && [ -n "$PITR_S3_CA_FILE" ]; then
+    install -m 644 "$PITR_S3_CA_FILE" postgres/conf/s3-ca.crt   # a CA certificate is public; it goes in read-only
+  else rm -f postgres/conf/s3-ca.crt; fi
   if tls_on; then ensure_tls; fi
 
   write_stack_env
@@ -567,6 +707,10 @@ EOF
     if pitr_on; then
       [ "$PITR_REPO_TYPE" = posix ] && echo "      - pg_pitr:$PITR_REPO_PATH"
       echo "    env_file: [./postgres/pitr.env]"
+      if [ "$PITR_REPO_TYPE" = s3 ] && [ -n "$PITR_S3_HOST_IP" ]; then
+        local s3h="${OFFSITE_ENDPOINT#https://}"; s3h="${s3h%%/*}"; s3h="${s3h%%:*}"
+        echo "    extra_hosts: [\"$s3h:$PITR_S3_HOST_IP\"]"   # Docker DNS ignores the host's /etc/hosts
+      fi
     fi
     cat <<'EOF'
     healthcheck:
@@ -598,15 +742,17 @@ EOF
       MAX_CLIENT_CONN: "${PGBOUNCER_MAX_CLIENT_CONN}"
       DEFAULT_POOL_SIZE: "${PGBOUNCER_POOL_SIZE}"
       ADMIN_USERS: ${PGBOUNCER_ADMIN_USER}
-      STATS_USERS: ${PGBOUNCER_ADMIN_USER}
+      STATS_USERS: ${PGBOUNCER_STATS_USERS}
       LISTEN_PORT: "5432"
 EOF
     if tls_on; then cat <<'EOF'
       CLIENT_TLS_SSLMODE: require
       CLIENT_TLS_KEY_FILE: /etc/pgbouncer/tls/server.key
       CLIENT_TLS_CERT_FILE: /etc/pgbouncer/tls/server.crt
-    volumes: ["./pgbouncer/tls:/etc/pgbouncer/tls:ro"]
 EOF
+      # verify-full: PgBouncer also checks postgres (CA + DNS:postgres in the SAN)
+      if tls_verify; then printf '      SERVER_TLS_SSLMODE: verify-full\n      SERVER_TLS_CA_FILE: /etc/pgbouncer/tls/ca.crt\n'; fi
+      echo '    volumes: ["./pgbouncer/tls:/etc/pgbouncer/tls:ro"]'
     fi
     cat <<'EOF'
     ports: ["${PRIVATE_IP}:${PGBOUNCER_PORT}:5432"]
@@ -632,7 +778,10 @@ EOF
     ports: ["${PRIVATE_IP}:${MYSQL_PORT}:3306"]
     volumes: [mysql_data:/var/lib/mysql]
     healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -uroot --silent"]
+      # TCP, not the socket: the entrypoint's temporary init server (--skip-networking) answers a socket ping,
+      # so the container went healthy, then restarted under the first query (ERROR 2002). ping exits 0 once
+      # mysqld answers on TCP, even before root@127.0.0.1 exists.
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -uroot -h127.0.0.1 --protocol=TCP --silent"]
       interval: 5s
       timeout: 5s
       retries: 60
@@ -705,7 +854,7 @@ ensure_tls() {
   (umask 077; mkdir -p "$d")
   local want_ip have_sans; have_sans="$(openssl x509 -noout -ext subjectAltName -in "$d/server.crt" 2>/dev/null || true)"
   for want_ip in "$PRIVATE_IP" $(extra_binds); do
-    [ -z "$have_sans" ] || grep -q "IP Address:$want_ip\$\|IP Address:$want_ip," <<<"$have_sans" || { echo "TLS: certificate lacks $want_ip - reissuing"; rm -f "$d/server.crt"; break; }
+    [ -z "$have_sans" ] || grep "IP Address:$want_ip\$\|IP Address:$want_ip," >/dev/null <<<"$have_sans" || { echo "TLS: certificate lacks $want_ip - reissuing"; rm -f "$d/server.crt"; break; }
   done
   if [ ! -f "$d/server.crt" ] || ! openssl x509 -checkend $((30 * 86400)) -noout -in "$d/server.crt" >/dev/null 2>&1; then
     echo "TLS: generating a CA and server certificate in $d ($TLS_DAYS days)"
@@ -723,6 +872,7 @@ ensure_tls() {
   # pgbouncer runs as uid 70 and reads the key directly
   install -m 600 "$d/server.key" pgbouncer/tls/server.key; install -m 644 "$d/server.crt" pgbouncer/tls/server.crt
   chown 70:70 pgbouncer/tls/server.key 2>/dev/null || chmod 644 pgbouncer/tls/server.key
+  install -m 644 "$d/ca.crt" pgbouncer/tls/ca.crt
 }
 
 # ---- PITR (pgBackRest) config ----------------------------------------------------
@@ -735,9 +885,14 @@ write_pgbackrest_conf() { # file
     echo "repo1-type=$PITR_REPO_TYPE"
     echo "repo1-path=$PITR_REPO_PATH"
     if [ "$PITR_REPO_TYPE" = s3 ]; then
+      # pgBackRest speaks HTTPS only and wants host and port apart: https://h:9000 -> h + 9000
+      local hp="${OFFSITE_ENDPOINT#https://}"; hp="${hp%%/*}"
       echo "repo1-s3-bucket=$OFFSITE_BUCKET"
-      echo "repo1-s3-endpoint=${OFFSITE_ENDPOINT#https://}"
+      echo "repo1-s3-endpoint=${hp%%:*}"
+      [[ "$hp" == *:* ]] && echo "repo1-storage-port=${hp##*:}"
       echo "repo1-s3-region=$OFFSITE_REGION"
+      echo "repo1-s3-uri-style=$PITR_S3_URI_STYLE"
+      [ -n "$PITR_S3_CA_FILE" ] && echo "repo1-storage-ca-file=/etc/postgresql/vsw/s3-ca.crt"
     fi
     echo "repo1-retention-full-type=time"
     echo "repo1-retention-full=$PITR_DAYS"
@@ -751,7 +906,7 @@ write_pgbackrest_conf() { # file
     echo "log-path=/var/log/pgbackrest"
     echo "lock-path=/tmp/pgbackrest"
     echo "[main]"
-    echo "pg1-path=/var/lib/postgresql/18/docker"
+    echo "pg1-path=/var/lib/postgresql/$(pg_major "$PG_BASE_IMAGE")/docker"
     echo "pg1-socket-path=/var/run/postgresql"
     echo "pg1-user=$PG_ADMIN_USER"
   } > "$1"
@@ -984,6 +1139,41 @@ net_reset_if_changed() {
   docker ps -q --filter "network=$DOCKER_NETWORK" | xargs -r docker network disconnect -f "$DOCKER_NETWORK" 2>/dev/null || true
   docker network rm "$DOCKER_NETWORK" >/dev/null
 }
+# A stack from before the named network (manager < 1.4) sits on compose's "<project>_default". Recreating
+# postgres alone (start_stack does postgres first) makes compose remove that network while mysql, mariadb
+# and pgbouncer are still attached: "network db_default has active endpoints", up fails, upgrade rolls back.
+# Found by the live rehearsal on a snapshot clone; the container tests started from a fresh 1.4+ stack.
+# Move the whole project once: stop its containers (volumes stay), drop its other networks, then start.
+net_migrate_legacy() {
+  local c n project="" legacy=""
+  for c in $(docker ps -aq --filter "label=com.docker.compose.project.working_dir=$DB_DIR" 2>/dev/null); do
+    [ -n "$project" ] || project="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)"
+    for n in $(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c" 2>/dev/null); do
+      [ "$n" = "$DOCKER_NETWORK" ] || in_list "$n" "$legacy" || legacy="$legacy $n"
+    done
+  done
+  [ -n "$legacy" ] || return 0
+  warn "stack containers are on${legacy}, not $DOCKER_NETWORK: stopping the stack once to move it (data volumes stay)"
+  docker ps -aq --filter "label=com.docker.compose.project.working_dir=$DB_DIR" | xargs -r docker rm -f >/dev/null
+  for n in $legacy; do
+    # only networks this compose project created; anything else is left alone
+    [ "$(docker network inspect -f '{{index .Labels "com.docker.compose.project"}}' "$n" 2>/dev/null)" = "$project" ] \
+      && { docker network rm "$n" >/dev/null 2>&1 || warn "could not remove network $n (still in use?)"; }
+  done
+  return 0
+}
+up_wait() { # dc up --wait; on failure say why: state, OOM, the last health probes and a log tail per bad container
+  dc up -d --wait "$@" && return 0
+  local rc=$? c st
+  for c in $(dc ps -aq 2>/dev/null); do
+    st="$(docker inspect -f '{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$c" 2>/dev/null)" || continue
+    case "$st" in *" running healthy "*|*" running  "*) continue ;; esac
+    warn "not healthy: ${st#/}"
+    docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}{{.Output}}{{end}}{{end}}' "$c" 2>/dev/null | grep . | tail -3 | sed 's/^/   probe: /' >&2 || true
+    docker logs --tail 20 "$c" 2>&1 | redact | sed 's/^/   log: /' >&2 || true
+  done
+  return "$rc"
+}
 start_stack() { # $1 = extra build flags. postgres first, then roles, then the rest
   log "Building and starting"
   net_reset_if_changed
@@ -991,11 +1181,12 @@ start_stack() { # $1 = extra build flags. postgres first, then roles, then the r
   if on "$ENABLE_POSTGRES"; then dc build --pull ${1:-}; fi
   # shellcheck disable=SC2046  # service names never contain spaces
   dc pull --ignore-buildable 2>/dev/null || dc pull $(dc config --services | grep -vx postgres || true)
+  net_migrate_legacy   # after build + pull, so the stack is down only for the restart
   if on "$ENABLE_POSTGRES"; then
-    dc up -d --wait --wait-timeout 300 --no-deps postgres
+    up_wait --wait-timeout 300 --no-deps postgres
     PG_SU=""; pg_converge
   fi
-  dc up -d --wait --wait-timeout 300 --remove-orphans
+  up_wait --wait-timeout 300 --remove-orphans
   my_converge mysql; my_converge mariadb; pgbouncer_reload
   retire_legacy_image
 }
@@ -1017,13 +1208,34 @@ firewall() {
         ufw allow proto tcp from "$VPC_CIDR" to any port "$p"
       fi
     done
-    ufw status | grep -q "Status: active" || warn "ufw is installed but NOT active"
+    ufw status | grep "Status: active" >/dev/null || warn "ufw is installed but NOT active"
   else
     warn "ufw not installed - skipping firewall rules (ports are bound to $PRIVATE_IP only)"
   fi
 }
 
 cmd_status() { need_stack; dc ps; }
+# rebind-ip: after a snapshot restore to a droplet with another private IP (disaster recovery, rehearsal
+# clone), the stack's .env still binds the old address, so Docker cannot publish the ports ("cannot assign
+# requested address") and nothing starts. Point the bind address at this host's configured IP and start.
+stack_bind_ip() { sed -n 's/^PRIVATE_IP=//p' "$DB_DIR/.env" 2>/dev/null | tail -1; }
+host_has_ip() { ip -4 -o addr 2>/dev/null | grep -q "inet ${1//./\\.}/"; }
+cmd_rebind_ip() { # [--dry-run]
+  need_stack
+  local dry=0 a old
+  for a in "$@"; do case "$a" in --dry-run) dry=1 ;; *) die "unknown rebind-ip option: $a" ;; esac; done
+  old="$(stack_bind_ip)"
+  [ -n "$old" ] || die "no PRIVATE_IP in $DB_DIR/.env; nothing to rebind (run upgrade)"
+  host_has_ip "$PRIVATE_IP" || die "PRIVATE_IP=$PRIVATE_IP from the config is not on this host; fix the config first"
+  if [ "$old" = "$PRIVATE_IP" ]; then echo "stack already binds $PRIVATE_IP; nothing to do"; return 0; fi
+  host_has_ip "$old" && die "the stack binds $old, which is also on this host; refusing to guess (set PRIVATE_IP in $DB_DIR/.env by hand)"
+  echo "stack binds $old (not on this host); the config and host say $PRIVATE_IP"
+  if [ "$dry" = 1 ]; then echo "dry run: would set PRIVATE_IP=$PRIVATE_IP in $DB_DIR/.env (copy kept as .env.bak.<ts>) and start the stack"; return 0; fi
+  cp -p "$DB_DIR/.env" "$DB_DIR/.env.bak.$(date +%Y%m%d-%H%M%S)"
+  set_env_key PRIVATE_IP "$PRIVATE_IP"
+  up_wait --wait-timeout 300 || die "stack did not become healthy on $PRIVATE_IP (old .env kept as .env.bak.*)"
+  echo "rebound $old -> $PRIVATE_IP; stack up"
+}
 
 cmd_verify() {
   need_stack; load_env
@@ -1064,7 +1276,9 @@ cmd_env() { # [engine]: postgres (default when enabled), mysql, mariadb
     postgres) on "$ENABLE_POSTGRES" || die "postgres is disabled"
       printf 'DB_CONNECTION=pgsql\nDB_HOST=%s\nDB_PORT=%s\nDB_DATABASE=%s\nDB_USERNAME=%s\nDB_PASSWORD=%s\n' \
         "$PRIVATE_IP" "$PG_PORT" "$PG_DB" "$PG_USER" "$PG_PASSWORD"
-      tls_on && echo "DB_SSLMODE=require"
+      if tls_verify; then printf 'DB_SSLMODE=verify-full\nDB_SSLROOTCERT=%s\n' "$TLS_CA_WEB_PATH"
+        echo "# copy the CA first: $(basename "$0") tls-ca --out FILE, then install it as $TLS_CA_WEB_PATH (644) on the web host"
+      elif tls_on; then echo "DB_SSLMODE=require"; fi
       on "$ENABLE_PGBOUNCER" && echo "# pooled alternative: DB_PORT=$PGBOUNCER_PORT (PgBouncer, $PGBOUNCER_POOL_MODE mode). Tenant creation and migrations: direct $PG_PORT."
       [ -z "$APP" ] || echo "# environments: env-creds <env> prints the per-environment block" ;;
     mysql|mariadb) on "$( [ "$e" = mysql ] && echo "$ENABLE_MYSQL" || echo "$ENABLE_MARIADB")" || die "$e is disabled"
@@ -1100,6 +1314,87 @@ cmd_cron_install() {
 cmd_cron_remove() { need_root; rm -f "$CRON_FILE" "$LOGROTATE_FILE"; echo "removed $CRON_FILE"; }
 cmd_logs() { need_stack; dc logs -f --tail=200 "$@"; }
 
+# log-errors: read-only summary of ERROR/FATAL/PANIC lines in the Postgres (or PgBouncer) log, grouped,
+# classified and masked (string literals, passwords, IPs). Uses `docker logs`, so it needs no stack.env
+# and writes nothing. Exit 0 = none in the window, 1 = errors found (cron/monitor friendly).
+# Background: docs/plan/postgres-log-quoting-errors.md
+log_errors_since() { # 30m|24h|7d|all|YYYY-MM-DD -> a docker --since value ("" = all)
+  case "$1" in
+    all) echo "" ;;
+    *[0-9]d) [[ "$1" =~ ^[0-9]+d$ ]] || return 1; echo "$(( ${1%d} * 24 ))h" ;;
+    *) [[ "$1" =~ ^([0-9]+[smh]|[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9:]+Z?)?)$ ]] || return 1; echo "$1" ;;
+  esac
+}
+log_errors_summary() { # $1 = label; log lines on stdin
+  awk -v label="$1" '
+    function mask(s) {
+      if (s ~ /[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd].*(\047|\\x27|SCRAM|md5)/) { sub(/[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd].*/, "password <masked>", s) }
+      gsub(/\\x27[^\\]*\\x27/, "\\x27?\\x27", s)
+      gsub(/\047[^\047]*\047/, "\047?\047", s)
+      gsub(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/, "<ip>", s)
+      s = longs(s, "[A-Za-z0-9+/=_-]+", 32, "<long>")
+      return length(s) > 160 ? substr(s, 1, 157) "..." : s
+    }
+    function longs(s, re, min, rep,   out, t) { # replace runs of re that are >= min chars (no {n,} in mawk)
+      out = ""
+      while (match(s, re)) { t = substr(s, RSTART, RLENGTH); out = out substr(s, 1, RSTART - 1) (RLENGTH >= min ? rep : t); s = substr(s, RSTART + RLENGTH) }
+      return out s
+    }
+    function classify(m, st) {
+      if (st ~ /\\x27|\\047/) return "shell-quoting"
+      if (m ~ /password authentication failed|no pg_hba.conf entry|SSL off|certificate/) return "auth"
+      if (m ~ /permission denied|must be owner|must be superuser/) return "privilege"
+      if (m ~ /does not exist/) return "missing-object"
+      if (m ~ /syntax error|invalid input syntax/) return "sql-syntax"
+      if (m ~ /deadlock|could not serialize|canceling statement|lock timeout/) return "concurrency"
+      if (m ~ /out of memory|No space left|could not write|too many connections|remaining connection slots/) return "resource"
+      return "other"
+    }
+    function stamp(line,   t) { t = line; if (match(t, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][ T][0-9][0-9]:[0-9][0-9]:[0-9][0-9]/)) return substr(t, RSTART, RLENGTH); return "?" }
+    / (ERROR|FATAL|PANIC): / {
+      m = $0; sub(/^.* (ERROR|FATAL|PANIC): +/, "", m); raw = m; lvl = $0; sub(/: .*/, "", lvl); sub(/.* /, "", lvl)
+      gsub(/character [0-9]+/, "character N", m); m = longs(m, "\"[^\"]*\"", 26, "\"...\""); m = lvl ": " mask(m)
+      cur = m; ts = stamp($0); total++
+      if (!(m in cnt)) { order[++n] = m; first[m] = ts; cls[m] = classify(raw, "") }
+      cnt[m]++; last[m] = ts; pend = 1; next
+    }
+    pend && /(STATEMENT|DETAIL): / {
+      s = $0; sub(/^.* (STATEMENT|DETAIL): +/, "", s)
+      if (!(cur in stmt) || stmt[cur] == "") stmt[cur] = mask(s)
+      if (s ~ /\\x27|\\047/) quot[cur] = 1
+      next
+    }
+    { pend = 0 }
+    END {
+      if (!total) { printf "log-errors: %s: no errors\n", label; exit 0 }
+      printf "log-errors: %s: %d error(s) in %d group(s)\n", label, total, n
+      for (i = 1; i <= n; i++) {
+        m = order[i]; c = quot[m] ? "shell-quoting" : cls[m]
+        printf "  %5dx  %-14s %s\n", cnt[m], c, m
+        printf "          first %s, last %s (log time, UTC)\n", first[m], last[m]
+        if (stmt[m] != "") printf "          e.g. %s\n", stmt[m]
+        if (c == "shell-quoting") print "          why: a client sent \\x27 literally (shell quoting in an ad-hoc psql/ssh command); the statement was rejected, nothing changed. Use psql variables or a quoted heredoc (docs/plan/postgres-log-quoting-errors.md)"
+        else if (c == "auth") print "          why: a login was refused (wrong password, pg_hba rule or TLS); check the client env and pg_hba"
+        else if (c == "privilege") print "          why: a role lacks a privilege; check grants (doctor, list-users)"
+        else if (c == "missing-object") print "          why: the client names a database/table/role that does not exist (migrations, wrong env?)"
+        else if (c == "sql-syntax") print "          why: the client sent invalid SQL; find the caller by the statement text"
+      }
+      exit 1
+    }'
+}
+cmd_log_errors() { # [--since 24h|7d|all|YYYY-MM-DD] [--service postgres|pgbouncer]
+  local since=24h svc=postgres a ds cid
+  while [ $# -gt 0 ]; do case "$1" in
+    --since) since="${2:-}"; shift ;; --service) svc="${2:-}"; shift ;;
+    *) die "unknown log-errors option: $1 (log-errors [--since 24h|7d|all] [--service postgres|pgbouncer])" ;; esac; shift; done
+  case "$svc" in postgres|pgbouncer) ;; *) die "log-errors: --service postgres or pgbouncer" ;; esac
+  ds="$(log_errors_since "$since")" || die "log-errors: --since takes 30m, 24h, 7d, all or YYYY-MM-DD"
+  cid="$(docker ps -aq --filter "label=com.docker.compose.service=$svc" --filter "label=com.docker.compose.project.working_dir=$DB_DIR" | head -n1)"
+  [ -n "$cid" ] || die "log-errors: no $svc container for the stack in $DB_DIR"
+  a=(--timestamps); [ -z "$ds" ] || a+=(--since "$ds")
+  docker logs "${a[@]}" "$cid" 2>&1 | log_errors_summary "$svc, since $since"
+}
+
 # env-init: the interactive setup wizard (or flags). Writes config KEY=VALUE lines only;
 # nothing on the server changes until env-apply / upgrade. Exit 2 = a value is missing.
 cmd_env_init() {
@@ -1131,7 +1426,7 @@ cmd_env_init() {
   v_prd() { case "$1" in local|droplet|managed) ;; *) return 1 ;; esac; }
   v_pitr() { case "$1" in off|pgbackrest) ;; *) return 1 ;; esac; }
   v_off() { case "$1" in none|s3) ;; *) return 1 ;; esac; }
-  v_tls() { case "$1" in off|require) ;; *) return 1 ;; esac; }
+  v_tls() { case "$1" in off|require|verify-full) ;; *) return 1 ;; esac; }
   v_mail() { [ "$1" = none ] || [[ "$1" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[a-z]{2,}$ ]]; }
   ask w_app app "" v_app
   ask w_eng engines postgres v_eng
@@ -1222,7 +1517,7 @@ valid_ident() { # name, what
 }
 valid_exts() { local x; for x in $1; do [[ "$x" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "bad extension name: $x"; done; }
 protected_db() { case "$1" in postgres|template0|template1|mysql|sys|information_schema|performance_schema|"$PG_DB") return 0 ;; esac; return 1; }
-protected_user() { case "$1" in postgres|root|mysql|mariadb.sys|mysql.sys|mysql.session|mysql.infoschema|healthcheck|vsw_migrate|"$PG_USER"|"$PG_ADMIN_USER"|"$PGBOUNCER_AUTH_USER"|"$PGBOUNCER_ADMIN_USER") return 0 ;; esac; return 1; }
+protected_user() { case "$1" in postgres|root|mysql|mariadb.sys|mysql.sys|mysql.session|mysql.infoschema|healthcheck|vsw_migrate|"$PG_USER"|"$PG_ADMIN_USER"|"$PGBOUNCER_AUTH_USER"|"$PGBOUNCER_ADMIN_USER"|"${MONITOR_USER:-$PG_USER}") return 0 ;; esac; return 1; }
 new_password() { openssl rand -hex 24; }
 my_db_pat() { printf '%s' "${1//_/\\_}"; }   # GRANT treats _ and % as wildcards: escape _
 
@@ -1532,7 +1827,7 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
     [ "$v" = "${PRIVATE_IP:-}" ] && err "EXTRA_BIND_IPS repeats PRIVATE_IP $v"
     if ! ip_private "$v"; then
       [ "$ALLOW_PUBLIC_BIND" = 1 ] || err "EXTRA_BIND_IPS $v is public: set ALLOW_PUBLIC_BIND=1 on purpose (and a DO cloud firewall allowlist; Docker ports bypass ufw)"
-      [ "$TLS_MODE" = require ] || err "EXTRA_BIND_IPS $v is public: TLS_MODE=require is mandatory"
+      tls_on || err "EXTRA_BIND_IPS $v is public: TLS_MODE=require or verify-full is mandatory"
     fi
   done
   case "$ALLOW_PUBLIC_BIND" in 0|1) ;; *) err "ALLOW_PUBLIC_BIND must be 0 or 1" ;; esac
@@ -1552,10 +1847,23 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
     [[ "${!v}" =~ ^[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?$ ]] || err "$v '${!v}' is not an image reference"
     [[ "${!v}" =~ :latest$ ]] && err "$v uses :latest; pin a version"
   done
+  # postgis is in the default PG_EXTENSIONS but only postgis/* bases ship it: on postgres:NN the first boot's
+  # CREATE EXTENSION fails mid-init, the container restarts on a half-initialised cluster (no extensions).
+  # Only when Postgres runs: a MySQL/MariaDB-only server never builds the Postgres image.
+  on "$ENABLE_POSTGRES" && case " $PG_EXTENSIONS " in *" postgis "*) case "$PG_BASE_IMAGE" in *postgis*) ;;
+    *) err "PG_EXTENSIONS has postgis but PG_BASE_IMAGE '$PG_BASE_IMAGE' is not a postgis image (drop postgis or use postgis/postgis:NN-x.y)" ;; esac ;; esac
   [[ "$DB_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] && [ "$DB_DIR" != / ] || err "DB_DIR '$DB_DIR' must be an absolute path"
-  case "$TLS_MODE" in off|require) ;; *) err "TLS_MODE must be off or require" ;; esac
+  case "$TLS_MODE" in off|require|verify-full) ;; *) err "TLS_MODE must be off, require or verify-full" ;; esac
+  [ -z "$MONITOR_USER" ] || [[ "$MONITOR_USER" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || err "MONITOR_USER '$MONITOR_USER' must match [a-z_][a-z0-9_]*"
   case "$PITR" in off|pgbackrest) ;; *) err "PITR must be off or pgbackrest" ;; esac
   case "$PITR_REPO_TYPE" in s3|posix) ;; *) err "PITR_REPO_TYPE must be s3 or posix" ;; esac
+  case "$PITR_S3_URI_STYLE" in host|path) ;; *) err "PITR_S3_URI_STYLE must be host or path" ;; esac
+  if [ "$PITR" = pgbackrest ] && [ "$PITR_REPO_TYPE" = s3 ]; then
+    [ -n "$OFFSITE_BUCKET" ] || err "PITR_REPO_TYPE=s3 needs OFFSITE_BUCKET"
+    [[ "$OFFSITE_ENDPOINT" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]] || err "PITR_REPO_TYPE=s3 needs OFFSITE_ENDPOINT=https://host[:port] (pgBackRest speaks HTTPS only)"
+    [ -z "$PITR_S3_CA_FILE" ] || [ -r "$PITR_S3_CA_FILE" ] || err "PITR_S3_CA_FILE '$PITR_S3_CA_FILE' is not readable"
+    [ -z "$PITR_S3_HOST_IP" ] || [[ "$PITR_S3_HOST_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || err "PITR_S3_HOST_IP '$PITR_S3_HOST_IP' must be an IPv4 address"
+  fi
   case "$OFFSITE" in none|s3) ;; *) err "OFFSITE must be none or s3" ;; esac
   [ "$OFFSITE" = none ] || [ -n "$OFFSITE_BUCKET" ] || err "OFFSITE=s3 needs OFFSITE_BUCKET"
   case "$PGBOUNCER_POOL_MODE" in session|transaction) ;; *) err "PGBOUNCER_POOL_MODE must be session or transaction" ;; esac
@@ -1565,6 +1873,8 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
   [ "$PG_ADMIN_USER" != "$PG_USER" ] || err "PG_ADMIN_USER must differ from PG_USER"
   if [ -n "$RETENTION" ]; then for v in $RETENTION; do [[ "$v" =~ ^(daily|weekly|monthly|yearly)=[0-9]+$ ]] || err "RETENTION item '$v' (want daily=N weekly=N monthly=N yearly=N)"; done; fi
   for v in BINLOG_DAYS PITR_DAYS FRESH_BACKUP_MIN TRASH_DAYS BACKUP_MAX_AGE_H TLS_DAYS; do [[ "${!v}" =~ ^[0-9]+$ ]] || err "$v must be a whole number"; done
+  { [[ "$DOCTOR_DISK_WARN_PCT" =~ ^[0-9]+$ ]] && [[ "$DOCTOR_DISK_BAD_PCT" =~ ^[0-9]+$ ]] && [ "$DOCTOR_DISK_WARN_PCT" -le "$DOCTOR_DISK_BAD_PCT" ] && [ "$DOCTOR_DISK_BAD_PCT" -le 100 ]; } \
+    || err "DOCTOR_DISK_WARN_PCT <= DOCTOR_DISK_BAD_PCT <= 100 (whole numbers)"
   unset -f err
   [ "$bad" = 0 ] || die "config invalid - fix it (see config/db-server.env.example); nothing was changed"
   echo "config ok"
@@ -1626,13 +1936,21 @@ preflight() {
   done < <(dc ps -a --format '{{.Service}}{{"\t"}}{{.State}}{{"\t"}}{{.Health}}')
   if [ "$bad" = 1 ]; then
     warn "some containers are not healthy before the upgrade"
-    ask_yn "Continue anyway (the upgrade may fix it; rollback returns to this state)?" n || die "aborted; nothing changed"
+    local sb; sb="$(stack_bind_ip)"
+    if [ -n "$sb" ] && [ "$sb" != "$PRIVATE_IP" ] && ! host_has_ip "$sb"; then
+      die "the stack binds $sb, which is not on this host (restored to a new droplet?). Run: rebind-ip --dry-run, then rebind-ip; then upgrade again"
+    fi
+    if [ "${UPG_DRY:-0}" = 1 ]; then echo "dry run: continuing to the plan (a real run needs a yes or --allow-unhealthy)"
+    elif [ "${ALLOW_UNHEALTHY:-0}" = 1 ]; then echo "continuing: --allow-unhealthy (rollback returns to this state)"
+    elif [ "$INTERACTIVE" = 1 ]; then
+      ask_yn "Continue anyway (the upgrade may fix it; rollback returns to this state)?" n || die "aborted; nothing changed"
+    else die "containers not healthy before the upgrade; pass --allow-unhealthy to continue without a terminal (the upgrade may fix it, e.g. after a restore to a new private IP)"; fi
   fi
   ports="$(dc ps --format '{{.Service}} {{.Ports}}')"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    if echo "$line" | grep -qE '(^| |,)(0\.0\.0\.0|\[?::\]?):[0-9]+->'; then echo "  PUBLIC port: $line - PROBLEM"; bad=2; fi
-    case "$line" in adminer*) echo "$line" | grep -qE '127\.0\.0\.1:[0-9]+->' || { echo "  adminer not on loopback: $line - PROBLEM"; bad=2; } ;; esac
+    if echo "$line" | grep -E '(^| |,)(0\.0\.0\.0|\[?::\]?):[0-9]+->' >/dev/null; then echo "  PUBLIC port: $line - PROBLEM"; bad=2; fi
+    case "$line" in adminer*) echo "$line" | grep -E '127\.0\.0\.1:[0-9]+->' >/dev/null || { echo "  adminer not on loopback: $line - PROBLEM"; bad=2; } ;; esac
   done <<<"$ports"
   [ "$bad" = 2 ] && warn "a port is published on every interface now; the upgrade rewrites bindings to $PRIVATE_IP / 127.0.0.1"
   echo "preflight ok"
@@ -1682,7 +2000,7 @@ savepoint() {
   if [ -f "$prev" ]; then cp -p "$prev" "$SAVE/manager.sh"; else warn "manager script not found at $SELF; savepoint has no script copy"; fi
   local cfg="${DBM_PREV_CONFIG:-$DBM_CONFIG.prev}"; [ -f "$cfg" ] || cfg="$DBM_CONFIG"
   [ -f "$cfg" ] && cp -p "$cfg" "$SAVE/manager.conf"
-  if on "$ENABLE_PGBOUNCER" && dc ps --status running --services 2>/dev/null | grep -qx pgbouncer; then
+  if on "$ENABLE_PGBOUNCER" && dc ps --status running --services 2>/dev/null | grep -x pgbouncer >/dev/null; then
     mkdir -p "$SAVE/pgbouncer"
     dc exec -T pgbouncer cat /etc/pgbouncer/pgbouncer.ini > "$SAVE/pgbouncer/pgbouncer.ini" 2>/dev/null || true
     dc exec -T pgbouncer cat /etc/pgbouncer/userlist.txt > "$SAVE/pgbouncer/userlist.txt" 2>/dev/null || true
@@ -1729,40 +2047,51 @@ rollback() {
 }
 
 LAST_BACKUP=""
-cmd_upgrade() { # [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot]
+cmd_upgrade() { # [--dry-run] [--yes|--non-interactive] [--snapshot|--snapshot-taken|--no-snapshot] [--allow-unhealthy]
   need_root
   local dry=0 a
   for a in "$@"; do case "$a" in
     --dry-run) dry=1 ;; --yes|-y) FORCE=1 ;; --non-interactive) NONINTERACTIVE=1 ;;
     --snapshot) SNAP_MODE=yes ;; --snapshot-taken) SNAP_MODE=taken ;; --no-snapshot) SNAP_MODE=no ;;
+    --allow-unhealthy) ALLOW_UNHEALTHY=1 ;;
     *) die "unknown upgrade option: $a (see help)" ;; esac; done
+  UPG_DRY="$dry"
   if is_interactive; then INTERACTIVE=1; fi
   [ "$dry" = 1 ] || start_log upgrade
   banner upgrade
   [ "$dry" = 1 ] || snapshot_policy_check
+  PROGRESS_N=0 PROGRESS_TOTAL=9; [ "$dry" = 1 ] && PROGRESS_TOTAL=2
+  progress_step "preflight"
   preflight
   # a stack built with another image tag (old default or a custom one) gets the new tag; the old one is retired after success
   local prev_img; prev_img="$(sed -n 's/^PG_IMAGE=//p' "$DB_DIR/stack.env" 2>/dev/null)"
+  # a stack from before stack.env (installed version "unknown") names its image only on the container
+  [ -n "$prev_img" ] || prev_img="$(docker ps -a --filter "label=com.docker.compose.project.working_dir=$DB_DIR" \
+    --filter label=com.docker.compose.service=postgres --format '{{.Image}}' 2>/dev/null | head -1 || true)"
   [ -z "$prev_img" ] || [ "$prev_img" = "$PG_IMAGE" ] || in_list "$prev_img" "$PG_IMAGE_LEGACY" || PG_IMAGE_LEGACY="$PG_IMAGE_LEGACY $prev_img"
   local changes=0 cur; cur="$(installed_version)"
+  progress_step "plan"
   if plan; then changes=1; fi
   if [ "$changes" = 0 ] && [ "$cur" = "$VERSION" ]; then
-    rm -rf "$PLAN_DIR"; echo "already up to date ($VERSION); nothing to do"; return 0
+    rm -rf "$PLAN_DIR"; echo "already up to date ($VERSION); nothing to do"
+    # the running stack already uses $PG_IMAGE (its upgrade passed), so an old tag is no rollback image
+    [ "$dry" = 1 ] || retire_legacy_image; return 0
   fi
   if [ "$dry" = 1 ]; then rm -rf "$PLAN_DIR"; echo "dry run: nothing changed"; return 0; fi
   if [ "$INTERACTIVE" = 1 ]; then ask_yn "Apply these changes ($cur -> $VERSION)?" n || { rm -rf "$PLAN_DIR"; die "aborted; nothing changed"; }
   elif [ "$FORCE" != 1 ]; then rm -rf "$PLAN_DIR"; die "non-interactive upgrade needs --yes to apply"; fi
   rm -rf "$PLAN_DIR"
-  snapshot_step
-  cmd_backup
+  progress_step "snapshot"; snapshot_step
+  progress_step "backup"; cmd_backup
   LAST_BACKUP="$(newest_backup)"
-  verify_backup "$LAST_BACKUP"
-  savepoint
+  progress_step "verify backup"; verify_backup "$LAST_BACKUP"
+  progress_step "savepoint"; savepoint
+  progress_step "apply"
   log "Apply"
   set +e
   ( set -e; ensure_env_keys; load_env; write_files; start_stack; firewall; [ "${DBM_TEST_FAIL_APPLY:-0}" != 1 ] || { echo "test hook: forced apply failure"; exit 1; } ); local rc=$?
-  if [ "$rc" = 0 ]; then ( set -e; load_env; PG_SU=""; cmd_verify; [ "${DBM_TEST_FAIL_VERIFY:-0}" != 1 ] || { echo "test hook: forced verify failure"; exit 1; } ); rc=$?; fi
-  if [ "$rc" = 0 ]; then ( set -e; load_env; PG_SU=""; DOCTOR_CONTEXT=upgrade cmd_doctor ); rc=$?; fi
+  if [ "$rc" = 0 ]; then progress_step "verify"; ( set -e; load_env; PG_SU=""; cmd_verify; [ "${DBM_TEST_FAIL_VERIFY:-0}" != 1 ] || { echo "test hook: forced verify failure"; exit 1; } ); rc=$?; fi
+  if [ "$rc" = 0 ]; then progress_step "doctor"; ( set -e; load_env; PG_SU=""; DOCTOR_CONTEXT=upgrade cmd_doctor ); rc=$?; fi
   set -e
   if [ "$rc" != 0 ]; then
     warn "apply/verify/doctor failed (exit $rc) - rolling back automatically"
@@ -1792,12 +2121,13 @@ take_snapshot() { # server-side, DigitalOcean API; waits for completion
     -d "{\"type\":\"snapshot\",\"name\":\"$name\"}" "https://api.digitalocean.com/v2/droplets/$id/actions" \
     | sed -n 's/.*"action":{"id":\([0-9]*\).*/\1/p')"
   [ -n "$act" ] || { warn "snapshot request failed"; return 1; }
-  for i in $(seq 1 240); do
+  snap_settled() { # sets st; true once the action is no longer in progress
     st="$(curl -fsS -H "Authorization: Bearer $tok" "https://api.digitalocean.com/v2/actions/$act" | sed -n 's/.*"status":"\([a-z-]*\)".*/\1/p')"
-    case "$st" in completed) echo "snapshot completed: $name"; return 0 ;; errored) warn "snapshot errored"; return 1 ;; esac
-    sleep 15
-  done
-  warn "snapshot still running after 60 min"; return 1
+    case "$st" in completed|errored) return 0 ;; esac; return 1
+  }
+  st=""; progress_wait "DigitalOcean snapshot $name" 3600 15 snap_settled || { warn "snapshot still running after 60 min"; return 1; }
+  [ "$st" = completed ] && { echo "snapshot completed: $name"; return 0; }
+  warn "snapshot errored"; return 1
 }
 SNAP_MODE=ask   # ask | yes | no | taken
 snapshot_policy_check() { # fail fast, before any work, if a non-interactive run can't decide
@@ -1981,9 +2311,9 @@ soft_drop() { # engine db: protected envs never lose data in one step
       echo "undo: ALTER DATABASE \"${2}__trash_$ts\" ALLOW_CONNECTIONS true; ALTER DATABASE \"${2}__trash_$ts\" RENAME TO \"$2\";" ;;
     mysql|mariadb)
       local d="$BACKUP_DIR/dropped"; (umask 077; mkdir -p "$d")
-      local cli=mysqldump rv=MYSQL_ROOT_PASSWORD; [ "$1" = mariadb ] && cli=mariadb-dump rv=MARIADB_ROOT_PASSWORD
+      local cli="mysqldump --set-gtid-purged=OFF" rv=MYSQL_ROOT_PASSWORD; [ "$1" = mariadb ] && cli=mariadb-dump rv=MARIADB_ROOT_PASSWORD
       dc exec -T "$1" sh -c "MYSQL_PWD=\"\$$rv\" exec $cli -uroot --databases '$2' --single-transaction --routines --events --triggers" | gzip > "$d/$2-$ts.sql.gz"
-      gzip -cd "$d/$2-$ts.sql.gz" | tail -c 500 | grep -q 'Dump completed' || die "dump of $2 failed; NOT dropped"
+      gzip -cd "$d/$2-$ts.sql.gz" | tail -c 500 | grep 'Dump completed' >/dev/null || die "dump of $2 failed; NOT dropped"
       chmod 600 "$d/$2-$ts.sql.gz"
       printf 'DROP DATABASE `%s`;\n' "$2" | my_q "$1"
       echo "dropped $2 after a dump to $d/$2-$ts.sql.gz (kept $DROPPED_DUMP_DAYS days)" ;;
@@ -2051,9 +2381,18 @@ prune_backups() {
   else keep="$(printf '%s\n' "$all" | head -n "$KEEP")"; fi
   keep="$keep
 $(printf '%s\n' "$all" | head -1)"   # never delete the newest
-  for old in $all; do printf '%s\n' "$keep" | grep -qx "$old" || { echo "pruning $old"; rm -rf "${BACKUP_DIR:?}/$old"; }; done
+  for old in $all; do printf '%s\n' "$keep" | grep -x "$old" >/dev/null || { echo "pruning $old"; rm -rf "${BACKUP_DIR:?}/$old"; }; done
 }
 
+bk_pg() { dc exec -T postgres pg_dumpall -U "$(pg_su)" --clean --if-exists | gzip > "$1"; }
+bk_my() { # engine cli dump out
+  # --source-data=2 / --master-data=2: the dump header records (as a comment) the binlog file and
+  # position it is consistent with, the starting point for binlog-replay (point-in-time restore)
+  # --set-gtid-purged=OFF (MySQL): GTIDs are on in MySQL 9, and a dump that sets GTID_PURGED cannot be
+  # loaded back into the server it came from (ERROR 3546), which is what restore and binlog-replay do
+  local sd="--source-data=2 --set-gtid-purged=OFF"; [ "$1" = mariadb ] && sd=--master-data=2
+  my_sh "$1" "DBS=\$($2 -uroot -NBe \"select schema_name from information_schema.schemata where schema_name not in ($MY_SYS_DBS)\"); [ -z \"\$DBS\" ] && exit 0; exec $3 -uroot --databases \$DBS --single-transaction $sd --routines --events --triggers" | gzip > "$4"
+}
 cmd_backup() { # [--cron]
   need_root; need_stack; load_env
   local ts free dest tmp cron=0; [ "${1:-}" = --cron ] && cron=1
@@ -2066,7 +2405,7 @@ cmd_backup() { # [--cron]
   (umask 077; mkdir -p "$tmp")
   log "Backing up to $dest"
   if on "$ENABLE_POSTGRES"; then
-    dc exec -T postgres pg_dumpall -U "$(pg_su)" --clean --if-exists | gzip > "$tmp/postgres.sql.gz"
+    progress_run "postgres: pg_dumpall" bk_pg "$tmp/postgres.sql.gz"
   fi
   # MySQL/MariaDB: user databases only (system schemas are skipped so a restore never
   # overwrites root/users; .env passwords stay valid). Users + grants go to grants-*.sql.gz.
@@ -2074,7 +2413,8 @@ cmd_backup() { # [--cron]
   local e cli dump; for e in mysql mariadb; do
     on "$( [ "$e" = mysql ] && echo "$ENABLE_MYSQL" || echo "$ENABLE_MARIADB")" || continue
     cli=mysql dump=mysqldump; [ "$e" = mariadb ] && cli=mariadb dump=mariadb-dump
-    my_sh "$e" "DBS=\$($cli -uroot -NBe \"select schema_name from information_schema.schemata where schema_name not in ($MY_SYS_DBS)\"); [ -z \"\$DBS\" ] && exit 0; exec $dump -uroot --databases \$DBS --single-transaction --routines --events --triggers" | gzip > "$tmp/$e.sql.gz"
+    progress_run "$e: dump" bk_my "$e" "$cli" "$dump" "$tmp/$e.sql.gz"
+    date -u '+%Y-%m-%d %H:%M:%S' > "$tmp/$e.completed-utc"   # binlog-replay picks the newest dump finished before its target
     printf '%s;\n' "$users_sql" | my_q "$e" | while read -r u; do printf 'show create user %s;\nshow grants for %s;\n' "$u" "$u" | my_q "$e" | sed 's/$/;/'; done | gzip > "$tmp/grants-$e.sql.gz"
   done
   manifest > "$tmp/manifest.txt"
@@ -2096,12 +2436,12 @@ cmd_backup() { # [--cron]
 }
 verify_backup() { # $1 dir: every enabled engine present, gzip ok, dump trailer present, checksums
   local d="$1"; [ -n "$d" ] && [ -d "$d" ] || die "no backup to verify"
-  on "$ENABLE_POSTGRES" && { gzip -cd "$d/postgres.sql.gz" | tail -c 2000 | grep -q 'dump complete' || die "postgres dump in $d is incomplete"; }
+  on "$ENABLE_POSTGRES" && { gzip -cd "$d/postgres.sql.gz" | tail -c 2000 | grep 'dump complete' >/dev/null || die "postgres dump in $d is incomplete"; }
   local e; for e in mysql mariadb; do
     if [ "$e" = mysql ]; then on "$ENABLE_MYSQL" || continue; else on "$ENABLE_MARIADB" || continue; fi
     [ -f "$d/$e.sql.gz" ] || die "$e dump missing in $d"
     if [ -n "$(gzip -cd "$d/$e.sql.gz" | head -c 1)" ]; then
-      gzip -cd "$d/$e.sql.gz" | tail -c 500 | grep -q 'Dump completed' || die "$e dump in $d is incomplete"
+      gzip -cd "$d/$e.sql.gz" | tail -c 500 | grep 'Dump completed' >/dev/null || die "$e dump in $d is incomplete"
     fi
   done
   if [ -f "$d/SHA256SUMS" ]; then
@@ -2130,7 +2470,8 @@ cmd_restore() { # <dir> [engine|all]
     if on "$ENABLE_PGBOUNCER"; then dc stop pgbouncer >/dev/null; fi
     # skip role DDL for the roles we manage (admin we are connected as; app/pgbouncer roles are
     # re-asserted by converge), so a pre-1.4 dump cannot make the app a superuser again
-    local skip; skip="$PG_USER|$PG_ADMIN_USER|$PGBOUNCER_AUTH_USER|$PGBOUNCER_ADMIN_USER"
+    local skip; skip="$PG_USER|$PG_ADMIN_USER|$PGBOUNCER_AUTH_USER|$PGBOUNCER_ADMIN_USER${MONITOR_USER:+|$MONITOR_USER}"
+    progress_step "restore test: loading postgres dump"
     gunzip -c "$src/postgres.sql.gz" | grep -vE "^(DROP|CREATE|ALTER) ROLE (IF EXISTS )?\"?($skip)\"?( |;)" \
       | dc exec -T postgres psql -X -q -v ON_ERROR_STOP=0 -U "$(pg_su)" -d postgres >/dev/null
     pg_converge
@@ -2146,6 +2487,7 @@ cmd_restore() { # <dir> [engine|all]
 # ---- restore test: load the newest backup into throwaway containers ------------
 # No network (--network none), random passwords, removed afterwards. Compares the
 # manifest (tables per database). Cron: RESTORE_TEST_CRON via cron-install.
+rt_load_my() { gunzip -c "$1" | docker exec -i -e MYSQL_PWD="$2" "$3" "$4" -uroot; } # dump pw container cli
 cmd_restore_test() { # [dir] [--cron]
   need_root; need_stack; load_env
   local src="" cron=0 a; for a in "$@"; do case "$a" in --cron) cron=1 ;; *) src="$a" ;; esac; done
@@ -2164,7 +2506,7 @@ cmd_restore_test() { # [dir] [--cron]
   rt_wait() { local i; for i in $(seq 1 "$((RESTORE_TEST_TIMEOUT / 2))"); do docker exec "$1" sh -c "$2" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
   if on "$ENABLE_POSTGRES" && [ -f "$src/postgres.sql.gz" ]; then
     docker run -d --name "$tag-postgres" --network none -e POSTGRES_PASSWORD="$pw" -e POSTGRES_USER="$PG_ADMIN_USER" -e POSTGRES_DB=postgres "$PG_IMAGE" >/dev/null
-    rt_wait "$tag-postgres" "pg_isready -U $PG_ADMIN_USER -h 127.0.0.1" || rt_die "restore test: postgres did not start"
+    progress_wait "restore test: postgres starting" "$RESTORE_TEST_TIMEOUT" 2 docker exec "$tag-postgres" pg_isready -U "$PG_ADMIN_USER" -h 127.0.0.1 || rt_die "restore test: postgres did not start"
     sleep 2
     gunzip -c "$src/postgres.sql.gz" | grep -vE "^(DROP|CREATE|ALTER) ROLE (IF EXISTS )?\"?$PG_ADMIN_USER\"?( |;)" | docker exec -i "$tag-postgres" psql -X -q -v ON_ERROR_STOP=0 -U "$PG_ADMIN_USER" -d postgres >/dev/null 2>&1 || true
     for d in $(docker exec "$tag-postgres" psql -X -U "$PG_ADMIN_USER" -d postgres -tAc "select datname from pg_database where datallowconn and not datistemplate order by 1"); do
@@ -2176,8 +2518,9 @@ cmd_restore_test() { # [dir] [--cron]
     [ -f "$src/$e.sql.gz" ] || continue
     img="$MYSQL_IMAGE"; local cli=mysql pv=MYSQL_ROOT_PASSWORD; [ "$e" = mariadb ] && img="$MARIADB_IMAGE" cli=mariadb pv=MARIADB_ROOT_PASSWORD
     docker run -d --name "$tag-$e" --network none -e "$pv=$pw" "$img" >/dev/null
-    rt_wait "$tag-$e" "MYSQL_PWD='$pw' $cli -uroot -e 'select 1'" || rt_die "restore test: $e did not start"
-    gunzip -c "$src/$e.sql.gz" | docker exec -i -e MYSQL_PWD="$pw" "$tag-$e" $cli -uroot || { warn "$e load reported errors"; rc=1; }
+    # over TCP: the image's init server runs with --skip-networking and answers on the socket, then restarts
+    rt_wait "$tag-$e" "MYSQL_PWD='$pw' $cli -uroot -h127.0.0.1 --protocol=TCP -e 'select 1'" || rt_die "restore test: $e did not start"
+    progress_run "restore test: loading $e dump" rt_load_my "$src/$e.sql.gz" "$pw" "$tag-$e" "$cli" || { warn "$e load reported errors"; rc=1; }
     docker exec -e MYSQL_PWD="$pw" "$tag-$e" $cli -uroot -NBe "select s.schema_name, count(t.table_name) from information_schema.schemata s left join information_schema.tables t on t.table_schema=s.schema_name and t.table_type='BASE TABLE' where s.schema_name not in ($MY_SYS_DBS) group by s.schema_name order by 1" \
       | awk -v e="$e" '{print e, $1, $2}' >> "/tmp/$tag.got"
   done
@@ -2211,30 +2554,37 @@ offsite_env() { # export tool credentials for one command (values never printed)
   local OFFSITE_ACCESS_KEY="" OFFSITE_SECRET_KEY="" PITR_CIPHER_PASS=""
   offsite_creds || die "missing $OFFSITE_CREDS_FILE (chmod 600) with OFFSITE_ACCESS_KEY and OFFSITE_SECRET_KEY"
   [ -n "$OFFSITE_BUCKET" ] || die "OFFSITE_BUCKET is not set"
-  export RCLONE_CONFIG_VSW_TYPE=s3 RCLONE_CONFIG_VSW_PROVIDER=Other RCLONE_CONFIG_VSW_ENDPOINT="$OFFSITE_ENDPOINT" \
-    RCLONE_CONFIG_VSW_REGION="$OFFSITE_REGION" RCLONE_CONFIG_VSW_ACCESS_KEY_ID="$OFFSITE_ACCESS_KEY" \
-    RCLONE_CONFIG_VSW_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" RCLONE_CONFIG_VSW_NO_CHECK_BUCKET=true
+  export RCLONE_CONFIG_SIWO_TYPE=s3 RCLONE_CONFIG_SIWO_PROVIDER=Other RCLONE_CONFIG_SIWO_ENDPOINT="$OFFSITE_ENDPOINT" \
+    RCLONE_CONFIG_SIWO_REGION="$OFFSITE_REGION" RCLONE_CONFIG_SIWO_ACCESS_KEY_ID="$OFFSITE_ACCESS_KEY" \
+    RCLONE_CONFIG_SIWO_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" RCLONE_CONFIG_SIWO_NO_CHECK_BUCKET=true \
+    RCLONE_CONFIG=/dev/null   # remote from the env only; also silences "config file not found"
+  # a private endpoint's CA (PITR_S3_CA_FILE) is trusted by the off-site tools too; TLS stays verified
+  # (one variable per tool: rclone's S3 SDK refuses AWS_CA_BUNDLE with "unsupported transport")
+  if [ -n "$PITR_S3_CA_FILE" ] && [ -r "$PITR_S3_CA_FILE" ]; then
+    if [ "$OFFSITE_TOOL" = aws ]; then export AWS_CA_BUNDLE="$PITR_S3_CA_FILE"; else export RCLONE_CA_CERT="$PITR_S3_CA_FILE"; fi
+  fi
   export AWS_ACCESS_KEY_ID="$OFFSITE_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$OFFSITE_SECRET_KEY" AWS_DEFAULT_REGION="$OFFSITE_REGION"
 }
 remote_put() { # local remote-name
   case "$OFFSITE_TOOL" in
-    rclone) rclone copyto --s3-no-check-bucket "$1" "vsw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/$2" ;;
+    rclone) rclone copyto --s3-no-check-bucket "$1" "siw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/$2" ;;
     aws) aws s3 cp --only-show-errors ${OFFSITE_ENDPOINT:+--endpoint-url "$OFFSITE_ENDPOINT"} "$1" "s3://$OFFSITE_BUCKET/$OFFSITE_PREFIX/$2" ;;
     *) die "OFFSITE_TOOL must be rclone or aws" ;;
   esac
 }
 remote_get() { # remote-name local
   case "$OFFSITE_TOOL" in
-    rclone) rclone copyto "vsw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/$1" "$2" ;;
+    rclone) rclone copyto "siw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/$1" "$2" ;;
     aws) aws s3 cp --only-show-errors ${OFFSITE_ENDPOINT:+--endpoint-url "$OFFSITE_ENDPOINT"} "s3://$OFFSITE_BUCKET/$OFFSITE_PREFIX/$1" "$2" ;;
   esac
 }
 remote_ls() {
   case "$OFFSITE_TOOL" in
-    rclone) rclone lsf "vsw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/" 2>/dev/null ;;
+    rclone) rclone lsf "siw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/" 2>/dev/null ;;
     aws) aws s3 ls ${OFFSITE_ENDPOINT:+--endpoint-url "$OFFSITE_ENDPOINT"} "s3://$OFFSITE_BUCKET/$OFFSITE_PREFIX/" | awk '{print $4}' ;;
   esac
 }
+offsite_pack() { tar -C "$(dirname "$1")" -cz "$(basename "$1")" | offsite_encrypt > "$2"; } # dir out
 offsite_upload() { # backup dir
   [ "$OFFSITE" = s3 ] || die "OFFSITE is '$OFFSITE' (set OFFSITE=s3 + OFFSITE_BUCKET/ENDPOINT/CREDS_FILE)"
   command -v "$OFFSITE_TOOL" >/dev/null 2>&1 || die "$OFFSITE_TOOL is not installed (apt install rclone)"
@@ -2242,12 +2592,12 @@ offsite_upload() { # backup dir
   local n t; n="$(basename "$1").tar.gz.enc"; [ "$OFFSITE_ENCRYPTION" = age ] && n="$(basename "$1").tar.gz.age"
   install -d -m 700 "$BACKUP_DIR"; t="$(mktemp "$BACKUP_DIR/.offsite-XXXX")"; chmod 600 "$t"
   log "Off-site copy $n -> $OFFSITE_BUCKET/$OFFSITE_PREFIX ($OFFSITE_ENCRYPTION)"
-  tar -C "$(dirname "$1")" -cz "$(basename "$1")" | offsite_encrypt > "$t"
+  progress_run "encrypt $n" offsite_pack "$1" "$t" || { rm -f "$t"; return 1; }
   (cd "$(dirname "$t")" && { sha256sum "$(basename "$t")" 2>/dev/null || shasum -a 256 "$(basename "$t")"; }) | awk -v n="$n" '{print $1"  "n}' > "$t.sha256"
-  remote_put "$t" "$n" && remote_put "$t.sha256" "$n.sha256"; local rc=$?
+  local rc=0; progress_run "upload $n" remote_put "$t" "$n" && remote_put "$t.sha256" "$n.sha256" || rc=$?
   rm -f "$t" "$t.sha256"
   [ "$rc" = 0 ] || return 1
-  if [ "$OFFSITE_TOOL" = rclone ]; then rclone delete --min-age "${OFFSITE_KEEP_DAYS}d" "vsw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/" >/dev/null 2>&1 || warn "off-site prune failed"; fi
+  if [ "$OFFSITE_TOOL" = rclone ]; then rclone delete --min-age "${OFFSITE_KEEP_DAYS}d" "siw:$OFFSITE_BUCKET/$OFFSITE_PREFIX/" >/dev/null 2>&1 || warn "off-site prune failed"; fi
   stamp offsite "$n"; echo "off-site ok: $n"
 }
 cmd_offsite() { # backup [dir] | list | verify [name] | fetch <name> [dir]
@@ -2258,7 +2608,7 @@ cmd_offsite() { # backup [dir] | list | verify [name] | fetch <name> [dir]
     list) offsite_env; remote_ls ;;
     verify|fetch)
       offsite_key; offsite_env
-      local n="${1:-}"; [ -n "$n" ] || n="$(remote_ls | grep -E '\.tar\.gz\.(enc|age)$' | sort | tail -1)"
+      local n="${1:-}"; [ -n "$n" ] || n="$(remote_ls | grep -E '\.tar\.gz\.(enc|age)$' | sort | tail -1 || true)"
       [ -n "$n" ] || die "no off-site copies found"
       local t; t="$(mktemp -d)"; chmod 700 "$t"
       remote_get "$n" "$t/$n"; remote_get "$n.sha256" "$t/$n.sha256"
@@ -2293,11 +2643,130 @@ cmd_binlog_ship() {
   stamp binlog-ship
 }
 
+# ---- MySQL/MariaDB point-in-time restore: newest dump before T + shipped binlogs up to T ----
+# The official mysql image (Oracle Linux, server-minimal) has no mysqlbinlog, so the decoder runs
+# in a local image built once from MYSQL_IMAGE plus the signed mysql-community-client RPM of the
+# SAME version (repo.mysql.com; set MYSQLBINLOG_IMAGE to use a prebuilt one offline).
+# MariaDB images ship mariadb-binlog, so MARIADB_IMAGE itself decodes.
+my_binlog_image() { # engine -> image name on stdout (progress on stderr)
+  if [ "$1" = mariadb ]; then echo "$MARIADB_IMAGE"; return 0; fi
+  if [ -n "${MYSQLBINLOG_IMAGE:-}" ]; then echo "$MYSQLBINLOG_IMAGE"; return 0; fi
+  local tag c
+  tag="vsw-local/mysqlbinlog:$(printf '%s' "$MYSQL_IMAGE" | tr -c 'A-Za-z0-9_.-' '-')"
+  docker image inspect "$tag" >/dev/null 2>&1 && { echo "$tag"; return 0; }
+  log "building $tag (mysqlbinlog for $MYSQL_IMAGE, one time)" >&2
+  c="vsw-mybl-build-$$"; docker rm -f "$c" >/dev/null 2>&1 || true
+  docker run --name "$c" --entrypoint sh "$MYSQL_IMAGE" -c '
+    set -e
+    r="$(sed -n "s#^baseurl=\(.*\)/docker/\(el/.*\)#\1/\2#p" /etc/yum.repos.d/mysql-community-minimal.repo | head -1)"
+    [ -n "$r" ] || { echo "cannot derive the MySQL client repo from the image"; exit 1; }
+    v="$(rpm -q --qf "%{VERSION}-%{RELEASE}" mysql-community-server-minimal)"
+    printf "[vsw-mysql-client]\nname=MySQL client\nbaseurl=%s\ngpgcheck=1\ngpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-mysql\nenabled=1\n" "$r" > /etc/yum.repos.d/vsw-mysql-client.repo
+    cd /tmp && microdnf -y download "mysql-community-client-$v" >/dev/null
+    rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-mysql
+    rpm -K mysql-community-client-*.rpm | grep -q "digests signatures OK" || { echo "mysql-community-client signature check failed"; exit 1; }
+    rpm -i --nodeps --replacefiles mysql-community-client-*.rpm
+    rm -f /tmp/*.rpm /etc/yum.repos.d/vsw-mysql-client.repo; microdnf clean all >/dev/null 2>&1 || true
+    mysqlbinlog --version' >&2 || { docker rm -f "$c" >/dev/null 2>&1; die "could not build $tag (needs repo.mysql.com once; or set MYSQLBINLOG_IMAGE)"; }
+  docker commit --change 'ENTRYPOINT []' --change 'CMD ["mysqlbinlog","--version"]' "$c" "$tag" >/dev/null
+  docker rm -f "$c" >/dev/null 2>&1 || true
+  echo "$tag"
+}
+dump_coords() { # dump.sql.gz -> "file pos" from the --source-data/--master-data header comment
+  { gzip -cd "$1" 2>/dev/null || true; } | head -n 80 \
+    | sed -nE "s/.*(SOURCE|MASTER)_LOG_FILE='([^']+)', *(SOURCE|MASTER)_LOG_POS=([0-9]+).*/\2 \4/p" | head -1
+}
+# Account statements are not replayed: dumps hold user databases only, so users, grants and
+# passwords stay as they are now (replaying an old ALTER USER would revert a rotated password).
+binlog_filter() { # stdin: decoded binlog SQL; $1 = file to write the skipped count to
+  LC_ALL=C awk -v out="$1" 'BEGIN { s = 1; k = 0; n = 0 }
+    k { if ($0 ~ /\/\*!\*\/;$/) { k = 0; s = 1 }; next }
+    s && /^#/ { print; next }
+    s && toupper($0) ~ /^((CREATE|ALTER|DROP|RENAME) (USER|ROLE)|GRANT |REVOKE |SET PASSWORD|SET DEFAULT ROLE)/ {
+      if ($0 !~ /\/\*!\*\/;$/) k = 1; n++; next }
+    { print; s = ($0 ~ /\/\*!\*\/;$/) }
+    END { print n > out }'
+}
+cmd_binlog_replay() { # --target 'YYYY-MM-DD HH:MM:SS' (UTC) [--engine mysql|mariadb] [--from DIR] [--force-prod] | --prepare
+  need_root; need_stack; load_env
+  local target="" e="" from="" force=0 prep=0 usage="usage: binlog-replay --target 'YYYY-MM-DD HH:MM:SS' (UTC) [--engine mysql|mariadb] [--from <backup-dir>] [--force-prod] | binlog-replay --prepare [--engine E]"
+  while [ $# -gt 0 ]; do case "$1" in
+    --target) target="${2:-}"; shift ;; --engine) e="${2:-}"; shift ;; --from) from="${2:-}"; shift ;;
+    --force-prod) force=1 ;; --prepare) prep=1 ;; *) die "$usage" ;; esac; shift; done
+  if [ -z "$e" ]; then
+    on "$ENABLE_MYSQL" && e=mysql
+    if on "$ENABLE_MARIADB"; then [ -z "$e" ] || die "both MySQL and MariaDB are enabled: add --engine"; e=mariadb; fi
+    [ -n "$e" ] || die "MySQL and MariaDB are disabled: nothing to replay"
+  fi
+  case "$e" in mysql|mariadb) ;; *) die "$usage" ;; esac
+  in_list "$e" "$(engines)" || die "$e is disabled"
+  local img; img="$(my_binlog_image "$e")" || exit 1
+  if [ "$prep" = 1 ]; then echo "binlog decoder ready: $img"; return 0; fi
+  [[ "$target" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]] || die "$usage"
+  # the starting dump: the newest whose dump finished at or before the target
+  if [ -z "$from" ]; then
+    local b; for b in $(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '20*' 2>/dev/null | sort -r); do
+      [ -f "$b/$e.completed-utc" ] || continue
+      if [[ "$(cat "$b/$e.completed-utc")" < "$target" ]] || [ "$(cat "$b/$e.completed-utc")" = "$target" ]; then from="$b"; break; fi
+    done
+    [ -n "$from" ] || die "no $e backup finished before $target (older backups lack $e.completed-utc: pass --from)"
+  fi
+  [ -d "$from" ] && [ -f "$from/$e.sql.gz" ] || die "no $e.sql.gz in ${from:-?}"
+  verify_backup "$from"
+  local start pos; read -r start pos <<< "$(dump_coords "$from/$e.sql.gz")"
+  [ -n "${start:-}" ] && [ -n "${pos:-}" ] || die "$from/$e.sql.gz has no binlog coordinates (backups made before binlog-replay existed lack them): point-in-time replay needs a newer backup"
+  banner "binlog-replay $e to $target"
+  echo "Restores $e user databases from $from (binlog $start:$pos) and replays the binlogs up to $target UTC."
+  echo "Everything in those databases after $target is lost (a safety backup is taken first)."
+  local pe=""; for a in $(local_envs); do env_protected "$a" && pe="$a"; done
+  if [ -n "$pe" ]; then guard_destructive "$e" "$pe" "$force"; else confirm RESTORE; fi
+  log "shipping the binlogs written so far"
+  cmd_binlog_ship
+  local bd="$BACKUP_DIR/binlogs/$e" base="${start%.*}" files=() f n prev=""
+  for f in $(find "$bd" -maxdepth 1 -name "$base.[0-9]*.gz" -exec basename {} .gz \; | sort); do
+    [[ "$f" < "$start" ]] && continue
+    n=$((10#${f##*.}))
+    [ -z "$prev" ] || [ "$n" = $((prev + 1)) ] || die "binlog gap before $f in $bd: cannot replay past it"
+    prev="$n"; files+=("$f")
+  done
+  [ "${files[0]:-}" = "$start" ] || die "$start (where $from starts) is not in $bd: it was never shipped or has expired (BINLOG_DAYS=$BINLOG_DAYS)"
+  log "safety backup before the replay"
+  cmd_backup
+  # --skip-gtids (MySQL): the server already executed these GTIDs and would silently skip every
+  # replayed transaction; without them each one gets a new GTID
+  local tmpd="$BACKUP_DIR/.replay-$$" cli=mysql rv=MYSQL_ROOT_PASSWORD bin=mysqlbinlog gt=(--skip-gtids)
+  [ "$e" = mariadb ] && cli=mariadb rv=MARIADB_ROOT_PASSWORD bin=mariadb-binlog gt=()
+  (umask 077; mkdir -p "$tmpd")
+  for f in "${files[@]}"; do gzip -cd "$bd/$f.gz" > "$tmpd/$f"; done
+  chmod 644 "$tmpd"/*; chmod 755 "$tmpd"   # read by the decoder container (not root in every image); parent dir stays 700
+  log "restoring $from/$e.sql.gz"
+  local d; for d in $(printf 'select schema_name from information_schema.schemata where schema_name not in (%s);\n' "$MY_SYS_DBS" | my_q "$e"); do
+    printf 'SET SESSION sql_log_bin=0; DROP DATABASE `%s`;\n' "$d" | my_q "$e"
+  done
+  { echo 'SET SESSION sql_log_bin=0;'; gunzip -c "$from/$e.sql.gz"; } | my_q "$e" >/dev/null || { rm -rf "$tmpd"; die "loading $from/$e.sql.gz failed; the safety backup is $(newest_backup)"; }
+  log "replaying ${#files[@]} binlog(s) from $start:$pos to $target UTC"
+  if ! docker run --rm --network none -e TZ=UTC -v "$tmpd:/b:ro" --entrypoint "$bin" "$img" \
+        --disable-log-bin "${gt[@]+"${gt[@]}"}" "--start-position=$pos" "--stop-datetime=$target" "${files[@]/#//b/}" \
+      | binlog_filter "$tmpd/.skipped" \
+      | dc exec -T "$e" sh -c "MYSQL_PWD=\"\$$rv\" exec $cli -uroot --binary-mode"; then
+    rm -rf "$tmpd"; die "binlog replay failed; $e is between $from and $target. Restore the safety backup with: restore $(newest_backup) $e"
+  fi
+  local skipped; skipped="$(cat "$tmpd/.skipped" 2>/dev/null || echo 0)"; rm -rf "$tmpd"
+  [ "$skipped" = 0 ] || echo "skipped $skipped account statement(s) (users and grants stay as they are now)"
+  printf 'FLUSH BINARY LOGS;\n' | my_q "$e"
+  stamp binlog-replay "$e $target"
+  log "new backup (the starting point for the next point-in-time restore)"
+  cmd_backup
+  echo "binlog replay done: $e at $target UTC; run: verify, doctor"
+}
+
 # ---- PITR: pgBackRest inside the postgres container -----------------------------
 pgbr() { dc exec -T -u postgres postgres pgbackrest --config=/etc/postgresql/vsw/pgbackrest.conf --stanza=main "$@"; }
 pgbr_version_ok() {
-  local v; v="$(dc exec -T postgres pgbackrest version 2>/dev/null | awk '{print $2}')"
-  [ -n "$v" ] || { echo "pgbackrest missing"; return 1; }
+  # "pgBackRest 2.x" only: a missing binary makes docker print "OCI runtime exec failed ..." on stdout,
+  # whose second word ("runtime") used to pass as a version
+  local v; v="$(dc exec -T postgres pgbackrest version 2>/dev/null | awk '$1 == "pgBackRest" {print $2}' || true)"
+  [[ "$v" =~ ^[0-9]+\.[0-9]+ ]] || { echo "pgbackrest missing from the postgres image (set PITR=pgbackrest, then run upgrade)"; return 1; }
   printf '%s\n%s\n' "$PGBACKREST_MIN_VERSION" "$v" | sort -V -C || { echo "pgbackrest $v < $PGBACKREST_MIN_VERSION"; return 1; }
   echo "pgbackrest $v"
 }
@@ -2306,7 +2775,7 @@ cmd_pitr() { # setup | backup [full|diff|incr] | status | restore --target "YYYY
   pitr_on || die "PITR is off (set PITR=pgbackrest, then upgrade)"
   local sub="${1:-status}"; shift || true
   case "$sub" in
-    setup) pgbr_version_ok || die "need pgBackRest >= $PGBACKREST_MIN_VERSION in the image (PGBACKREST_PKG)"
+    setup) pgbr_version_ok || die "need pgBackRest >= $PGBACKREST_MIN_VERSION in the image: run upgrade after setting PITR=pgbackrest (PGBACKREST_PKG pins the package)"
       pgbr stanza-create; pgbr check; pgbr --type=full backup; stamp pitr-backup full; echo "PITR ready" ;;
     backup) pgbr --type="${1:-diff}" backup && stamp pitr-backup "${1:-diff}" || { notify pitr fail "pgbackrest ${1:-diff} backup failed"; die "pgbackrest backup failed"; } ;;
     status) pgbr_version_ok || true; pgbr info ;;
@@ -2351,7 +2820,7 @@ d_ok() { echo "  ok    $*"; }
 d_warn() { echo "  warn  $*"; D_WARN=$((D_WARN + 1)); }
 d_bad() { echo "  PROBLEM  $*"; D_BAD=$((D_BAD + 1)); }
 d_stale() { if [ "${DOCTOR_CONTEXT:-}" = upgrade ]; then d_warn "$*"; else d_bad "$*"; fi; }
-stack_up() { [ -f "$DB_DIR/docker-compose.yml" ] && (cd "$DB_DIR" && dc ps --status running --services 2>/dev/null | grep -qx "$1"); }
+stack_up() { [ -f "$DB_DIR/docker-compose.yml" ] && (cd "$DB_DIR" && dc ps --status running --services 2>/dev/null | grep -x "$1" >/dev/null); }
 
 doctor_exposure() {
   log "Exposure: DB ports must listen on $PRIVATE_IP${EXTRA_BIND_IPS:+ and $EXTRA_BIND_IPS} only"
@@ -2360,17 +2829,17 @@ doctor_exposure() {
     l="$(listen_addrs "$p")"
     if [ "$l" = "?" ]; then d_warn "$p: unknown (no ss or lsof)"
     elif [ -z "$l" ]; then d_warn "$p: not listening"
-    elif echo "$l" | grep -qE '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):'; then d_bad "$p: PUBLIC ($l)"
+    elif echo "$l" | grep -E '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):' >/dev/null; then d_bad "$p: PUBLIC ($l)"
     else
       x=""; for a in $l; do a="${a%:*}"; [ "$a" = "$PRIVATE_IP" ] || in_list "$a" "$(extra_binds)" || x="$x $a"; done
       if [ -n "$x" ]; then d_bad "$p: listens on unexpected address(es)$x ($l)"; else d_ok "$p: $l"; fi
     fi
   done
-  for a in $(extra_binds); do ip_private "$a" || d_warn "$a is a public bind: Docker ports bypass ufw, so a DO cloud firewall must allow only the app servers (workbench do firewall-apply db ...)"; done
+  for a in $(extra_binds); do ip_private "$a" || d_warn "$a is a public bind: Docker ports bypass ufw, so a DO cloud firewall must allow only the app servers (siwo do firewall-apply db ...)"; done
   echo "  (Docker-published ports bypass ufw; binding to the private IP keeps them off the internet.)"
   if on "$ENABLE_ADMINER"; then
     l="$(listen_addrs "$ADMINER_PORT")"
-    if [ -n "$l" ] && [ "$l" != "?" ] && echo "$l" | grep -qvE '^(127\.0\.0\.1:[0-9]+[[:space:]]*)+$'; then d_bad "adminer $ADMINER_PORT not loopback-only ($l)"
+    if [ -n "$l" ] && [ "$l" != "?" ] && echo "$l" | grep -vE '^(127\.0\.0\.1:[0-9]+[[:space:]]*)+$' >/dev/null; then d_bad "adminer $ADMINER_PORT not loopback-only ($l)"
     else d_ok "adminer: ${l:-not listening} (tunnel only)"; fi
   fi
 }
@@ -2381,7 +2850,7 @@ doctor_network() { # region / VPC sanity: DO VPCs are per region (docs/cross-reg
   local region="" r wg=0 a
   command -v curl >/dev/null 2>&1 && region="$(curl -fsS --max-time 2 "$METADATA_URL/region" 2>/dev/null || true)"
   [[ "$region" =~ ^[a-z]{3}[0-9]$ ]] || region=""
-  for a in $(extra_binds); do ip -4 -o addr show dev wg0 2>/dev/null | grep -q "inet $a/" && wg=1; done
+  for a in $(extra_binds); do ip -4 -o addr show dev wg0 2>/dev/null | grep "inet $a/" >/dev/null && wg=1; done
   if [ -z "$region" ]; then d_warn "region: unknown (not a DigitalOcean droplet, or metadata unreachable)"; return 0; fi
   d_ok "this droplet is in $region"
   [ -n "$PEER_REGIONS" ] || { echo "  (set PEER_REGIONS to the app servers' regions to check them)"; return 0; }
@@ -2389,31 +2858,42 @@ doctor_network() { # region / VPC sanity: DO VPCs are per region (docs/cross-reg
     if [ "$r" = "$region" ]; then d_ok "peer region $r: same region, the VPC works"
     elif [ "$VPC_PEERING" = 1 ]; then d_ok "peer region $r: different region, VPC peering (private IPs; \$0.01/GiB between regions)"
     elif [ "$wg" = 1 ]; then d_ok "peer region $r: different region, reached over WireGuard (wg0)"
-    elif [ "$TLS_MODE" = require ] && [ "$ALLOW_PUBLIC_BIND" = 1 ]; then d_warn "peer region $r: different region over a public address with TLS; check the cloud firewall allowlist"
-    else d_bad "peer region $r differs from $region: the app can't reach $PRIVATE_IP (VPCs are per region). Move the servers, peer the VPCs (then VPC_PEERING=1), or: workbench net wireguard setup (docs/cross-region.md)"; fi
+    elif tls_on && [ "$ALLOW_PUBLIC_BIND" = 1 ]; then d_warn "peer region $r: different region over a public address with TLS; check the cloud firewall allowlist"
+    else d_bad "peer region $r differs from $region: the app can't reach $PRIVATE_IP (VPCs are per region). Move the servers, peer the VPCs (then VPC_PEERING=1), or: siwo net wireguard setup (docs/cross-region.md)"; fi
   done
 }
 doctor_host() {
   log "Host"
   if command -v ufw >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
-    if ufw status verbose | grep -q 'Status: active'; then d_ok "ufw active"; else d_bad "ufw is not active"; fi
-    ufw status verbose | grep -q 'deny (incoming)' && d_ok "ufw default deny incoming" || d_bad "ufw default incoming is not deny"
+    if ufw status verbose | grep 'Status: active' >/dev/null; then d_ok "ufw active"; else d_bad "ufw is not active"; fi
+    ufw status verbose | grep 'deny (incoming)' >/dev/null && d_ok "ufw default deny incoming" || d_bad "ufw default incoming is not deny"
   else d_warn "ufw: unknown (needs root and ufw)"; fi
-  if systemctl is-enabled unattended-upgrades >/dev/null 2>&1; then d_ok "unattended-upgrades enabled"
+  # the apt-daily-upgrade timer runs it when APT::Periodic::Unattended-Upgrade is 1; the service unit is
+  # only a shutdown hook and is often disabled, so it is not the signal
+  if command -v unattended-upgrade >/dev/null 2>&1 && apt-config shell v APT::Periodic::Unattended-Upgrade 2>/dev/null | grep -q "='1'"; then
+    d_ok "unattended-upgrades enabled (APT::Periodic)"
+  elif systemctl is-enabled unattended-upgrades >/dev/null 2>&1; then d_ok "unattended-upgrades enabled"
   else d_warn "unattended-upgrades not enabled (apt install unattended-upgrades)"; fi
   [ -f /var/run/reboot-required ] && d_warn "reboot required (server update --reboot-window)" || d_ok "no reboot pending"
   local use; use="$(df -P "$DB_DIR" 2>/dev/null | awk 'NR==2 {gsub("%","",$5); print $5}')"
-  if [ -n "$use" ]; then if [ "$use" -ge 90 ]; then d_bad "disk $use% used on $DB_DIR"; elif [ "$use" -ge 80 ]; then d_warn "disk $use% used on $DB_DIR"; else d_ok "disk $use% used"; fi; fi
+  if [ -n "$use" ]; then if [ "$use" -ge "$DOCTOR_DISK_BAD_PCT" ]; then d_bad "disk $use% used on $DB_DIR (limit $DOCTOR_DISK_BAD_PCT%)"; elif [ "$use" -ge "$DOCTOR_DISK_WARN_PCT" ]; then d_warn "disk $use% used on $DB_DIR"; else d_ok "disk $use% used"; fi; fi
   local need have; need="$(engine_ram_mb)"; have="$(host_ram_mb)"
   if [ "$have" -gt 0 ] && [ "$have" -lt "$((need * 90 / 100))" ]; then
-    d_warn "RAM ${have}MB < ${need}MB for the enabled engines. Resize: bin/workbench do resize <droplet> --size $(size_for_mb "$need")  (or disable an engine: engine disable mysql)"
+    d_warn "RAM ${have}MB < ${need}MB for the enabled engines. Resize: bin/siwo do resize <droplet> --size $(size_for_mb "$need")  (or disable an engine: engine disable mysql)"
   elif [ "$have" -gt 0 ]; then d_ok "RAM ${have}MB (engines need ~${need}MB)"; fi
   if [ -n "$(docker network ls --filter "name=^${DOCKER_NETWORK}\$" -q 2>/dev/null)" ]; then
     local sn; sn="$(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' "$DOCKER_NETWORK" 2>/dev/null)"
     [ "$sn" = "$DOCKER_SUBNET" ] && d_ok "docker network $DOCKER_NETWORK $sn" || d_bad "docker network $DOCKER_NETWORK is $sn, config says $DOCKER_SUBNET"
   fi
   docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep -E '(^| |,)0\.0\.0\.0:' | grep -v '^vsw-rt-' | while read -r l; do echo "  warn  another container publishes on all interfaces: $l"; done || true
+  local dm; dm="$(docker_group_members)"
+  [ -z "$dm" ] && d_ok "docker group: no non-root members" \
+    || d_warn "docker group has $dm (root-equivalent). Fix: bin/siwo server harden --host <db> --only dockergroup --fix-docker-group (or keep them: --docker-allow ${dm// /,} and DOCKER_GROUP_ALLOW in the manager config)"
   return 0
+}
+docker_group_members() { # non-root, non-allowed members of the docker group, space-separated
+  local u out="" m; m="$(awk -F: '$1=="docker"{gsub(",", " ", $4); print $4}' "${GROUP_FILE:-/etc/group}" 2>/dev/null)"
+  for u in $m; do [ "$u" = root ] || in_list "$u" "${DOCKER_GROUP_ALLOW//,/ }" || out="$out $u"; done; echo "${out# }"
 }
 doctor_postgres() {
   on "$ENABLE_POSTGRES" && stack_up postgres || return 0
@@ -2437,6 +2917,10 @@ doctor_postgres() {
   x="$(pg_val postgres "show log_min_duration_statement")"; [ "$x" != -1 ] && d_ok "slow query log at $x" || d_warn "slow query log off"
   if tls_on; then
     [ "$(pg_val postgres "show ssl")" = on ] && d_ok "TLS on" || d_bad "TLS_MODE=require but ssl is off"
+    if tls_verify; then
+      [ -s "$DB_DIR/tls/ca.crt" ] && openssl verify -CAfile "$DB_DIR/tls/ca.crt" "$DB_DIR/tls/server.crt" >/dev/null 2>&1 \
+        && d_ok "verify-full: server certificate chains to the CA" || d_bad "verify-full: server certificate does not verify against $DB_DIR/tls/ca.crt"
+    fi
     x="$DB_DIR/tls/server.crt"; if openssl x509 -checkend $((21 * 86400)) -noout -in "$x" >/dev/null 2>&1; then d_ok "TLS certificate valid > 21 days"; else d_bad "TLS certificate expires within 21 days (upgrade renews it)"; fi
   fi
   for x in $PG_EXTENSIONS; do
@@ -2446,6 +2930,16 @@ doctor_postgres() {
   on "$ENABLE_PGBOUNCER" && { [ "$x" = 1 ] && d_ok "pgbouncer.get_auth present (SECURITY DEFINER)" || d_bad "pgbouncer.get_auth missing (run upgrade)"; }
   if [ -n "$(docker image ls -q "$PG_IMAGE_LEGACY" 2>/dev/null)" ] && [ "$PG_IMAGE_LEGACY" != "$PG_IMAGE" ]; then d_warn "old image tag $PG_IMAGE_LEGACY still present (upgrade retires it)"; fi
   doctor_pg_users
+}
+doctor_pg_log() { # Postgres ERROR/FATAL lines in the last 24 h: a warning with the first group (details: log-errors)
+  [ "$ENABLE_POSTGRES" = 1 ] || return 0
+  local out rc
+  out="$(cmd_log_errors --since 24h 2>&1)" && rc=0 || rc=$?
+  case "$rc" in
+    0) d_ok "postgres log: no ERROR/FATAL in the last 24 h" ;;
+    1) d_warn "postgres log: $(printf '%s\n' "$out" | sed -n '1s/^log-errors: [^:]*: //p') - $(printf '%s\n' "$out" | sed -n '2s/^ *//p' | tr -s ' ') (run: log-errors --since 24h)" ;;
+    *) d_warn "postgres log: could not read it ($(printf '%s\n' "$out" | tail -n1))" ;;
+  esac
 }
 doctor_pg_users() { # every login vs the privilege model (docs/reference/privileges.md)
   local x
@@ -2501,11 +2995,15 @@ doctor_backups() {
   [ -n "$age" ] && [ "$age" -le "$((RESTORE_TEST_MAX_AGE_D * 24))" ] && d_ok "restore test ${age}h ago" || d_warn "no restore test in ${RESTORE_TEST_MAX_AGE_D} days (restore-test)"
   if pitr_on && stack_up postgres; then
     if pgbr info >/dev/null 2>&1; then
-      x="$(pgbr info --output=json 2>/dev/null | grep -o '"status":{"code":[0-9]*' | head -1 | grep -o '[0-9]*$')"
-      [ "${x:-1}" = 0 ] && d_ok "pgBackRest stanza ok" || d_bad "pgBackRest stanza not ok (pitr setup)"
-      [ "$(pg_val postgres "select coalesce(extract(epoch from now() - last_archived_time)::int, 999999) < 3600 from pg_stat_archiver")" = t ] && d_ok "WAL archiving within the last hour" || d_stale "WAL archiving is behind or failing (pg_stat_archiver)"
-      [ "$(pg_val postgres "select failed_count > 0 and coalesce(last_failed_time > last_archived_time, false) from pg_stat_archiver")" = t ] && d_bad "last WAL archive attempt failed"
-    else d_bad "PITR=pgbackrest but pgbackrest info fails (pitr setup)"; fi
+      x="$(pgbr info --output=json 2>/dev/null | grep -o '"status":{"code":[0-9]*' | head -1 | grep -o '[0-9]*$' || true)"
+      # the upgrade that turns PITR on comes before "pitr setup" creates the stanza: a missing stanza
+      # is a warning there (d_stale), or the upgrade would roll itself back
+      if [ "${x:-1}" = 0 ]; then
+        d_ok "pgBackRest stanza ok"
+        [ "$(pg_val postgres "select coalesce(extract(epoch from now() - last_archived_time)::int, 999999) < 3600 from pg_stat_archiver")" = t ] && d_ok "WAL archiving within the last hour" || d_stale "WAL archiving is behind or failing (pg_stat_archiver)"
+        [ "$(pg_val postgres "select failed_count > 0 and coalesce(last_failed_time > last_archived_time, false) from pg_stat_archiver")" = t ] && d_bad "last WAL archive attempt failed"
+      else d_stale "pgBackRest stanza not set up or not ok (run: pitr setup)"; fi
+    else d_stale "PITR=pgbackrest but pgbackrest info fails (run: pitr setup)"; fi
   fi
   return 0
 }
@@ -2514,13 +3012,249 @@ cmd_doctor() { # [--alert]
   D_BAD=0 D_WARN=0
   [ -f "$DB_DIR/.env" ] && { cd "$DB_DIR"; load_env; }
   # a check that errors out must not stop the others: run each section on its own
-  local s; for s in doctor_exposure doctor_network doctor_host doctor_postgres "doctor_mysql mysql" "doctor_mysql mariadb" doctor_backups; do
+  local s; for s in doctor_exposure doctor_network doctor_host doctor_postgres doctor_pg_log "doctor_mysql mysql" "doctor_mysql mariadb" doctor_backups; do
     $s || d_bad "check '$s' could not finish (exit $?)"
   done
   echo
   if [ "$D_BAD" = 0 ]; then echo "doctor: no problems ($D_WARN warnings)"; stamp doctor ok; [ "$alert" = 0 ] || notify doctor ok "no problems"
   else echo "doctor: $D_BAD problems, $D_WARN warnings (see PROBLEM lines)"; stamp doctor "fail $D_BAD"
     [ "$alert" = 0 ] || notify doctor fail "$D_BAD problems: run doctor on $(hostname)"; return 1; fi
+}
+
+# ---- monitoring, TLS CA, major upgrades, managed migration (P2) ---------------------
+# monitor-user: a pg_monitor login for postgres-exporter + pgbouncer-exporter.
+# WHY a separate role: exporters must never hold the app or admin password; pg_monitor
+# reads statistics only, the role may only reach the "postgres" database (pg_hba), and
+# PgBouncer lists it in stats_users (SHOW STATS/POOLS, no admin commands).
+cmd_monitor_user() { # [--rotate]
+  need_stack; load_env
+  on "$ENABLE_POSTGRES" || die "postgres is disabled"
+  [ -n "$MONITOR_USER" ] || die "MONITOR_USER is empty (monitoring role disabled)"
+  local rotate=0 pw f="$MONITOR_PASSWORD_FILE"; [ "${1:-}" = --rotate ] && rotate=1
+  if [ -s "$f" ] && [ "$rotate" = 0 ]; then pw="$(head -n1 "$f")"; else pw="$(new_password)"; fi
+  [[ "$pw" =~ ^[A-Za-z0-9]{24,}$ ]] || die "$f does not hold a generated password (delete it or use --rotate)"
+  {
+    printf "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = %s) THEN CREATE ROLE \"%s\" LOGIN; END IF; END \$\$;\n" "$(sql_lit "$MONITOR_USER")" "$MONITOR_USER"
+    printf 'ALTER ROLE "%s" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 5 PASSWORD %s;\n' "$MONITOR_USER" "$(sql_lit "$pw")"
+    printf 'GRANT pg_monitor TO "%s";\n' "$MONITOR_USER"
+    printf 'GRANT CONNECT ON DATABASE postgres TO "%s";\n' "$MONITOR_USER"
+  } | pg_q
+  (umask 077; mkdir -p "$(dirname "$f")"; t="$(mktemp "$f.XXXX")"; printf '%s\n' "$pw" > "$t"; chmod 600 "$t"; mv -f "$t" "$f")
+  if [ -f "$DB_DIR/postgres/conf/pg_hba.conf" ] && ! grep -q " $MONITOR_USER " "$DB_DIR/postgres/conf/pg_hba.conf"; then
+    write_pg_hba "$DB_DIR/postgres/conf/pg_hba.conf"; pg_val postgres "select pg_reload_conf()" >/dev/null
+  fi
+  if on "$ENABLE_PGBOUNCER" && ! dc exec -T pgbouncer sh -c 'grep -q "^stats_users = .*'"$MONITOR_USER"'" /etc/pgbouncer/pgbouncer.ini' 2>/dev/null; then
+    echo "note: PgBouncer does not list $MONITOR_USER in stats_users yet: run 'upgrade' (or 'apply') once"
+  fi
+  echo "monitor-user ok: role $MONITOR_USER (pg_monitor), password in $f (600, not printed)"
+  echo "next: siwo monitor install (on this host) picks it up automatically"
+}
+
+cmd_metrics() { # write the textfile metrics now (cron jobs refresh them through stamp)
+  [ -d "$METRICS_TEXTFILE_DIR" ] || die "$METRICS_TEXTFILE_DIR does not exist (siwo monitor install creates it)"
+  write_metrics; cat "$METRICS_TEXTFILE_DIR/vsw_db.prom"
+}
+
+cmd_tls_ca() { # [--out FILE]: the public CA certificate web hosts need for verify-full
+  local out=""; [ "${1:-}" = --out ] && out="${2:-}"
+  local ca="$DB_DIR/tls/ca.crt"; [ -s "$ca" ] || die "no CA yet ($ca): set TLS_MODE=require|verify-full and run upgrade"
+  openssl x509 -noout -in "$ca" >/dev/null 2>&1 || die "$ca is not a certificate"
+  if [ -n "$out" ]; then install -m 644 "$ca" "$out"; echo "CA certificate written to $out (public; install it as $TLS_CA_WEB_PATH on web hosts)"
+  else cat "$ca"; fi
+}
+
+# ---- pg-major-upgrade: dump + reload into the next major, old data kept for rollback ---
+# WHY dump/reload and not pg_upgrade: the official images ship one major each, so
+# pg_upgrade needs both binaries in one container; a dump is engine-neutral, verifiable
+# and our databases are small. The postgres 18+ images keep data in
+# /var/lib/postgresql/<major>/docker, so the new major gets its own directory in the
+# same volume. The old directory is renamed to .pg<old>-old (the 18+ entrypoint refuses
+# to init a new major while <old>/docker exists) and stays there for rollback until --cleanup.
+pg_major() { if [[ "$1" =~ :([0-9]+) ]]; then echo "${BASH_REMATCH[1]}"; else echo 18; fi; }  # image -> major (default 18)
+pg_swap_major() { # string from to -> string with the major replaced (image tags, package names)
+  local s="$1"; s="${s//postgresql-$2-/postgresql-$3-}"; s="$(sed -E "s/:$2([^0-9]|\$)/:$3\\1/" <<<"$s")"; s="${s//postgres:$2-/postgres:$3-}"; echo "$s"
+}
+pg_volume() { docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql"}}{{.Name}}{{end}}{{end}}' "$(dc ps -q postgres)"; }
+pg_inventory() { # one line per database: name tables sequences extensions (for before/after)
+  local d; for d in $(pg_val postgres "select string_agg(datname, ' ' order by datname) from pg_database where datallowconn and datname <> 'template1'"); do
+    printf '%s %s\n' "$d" "$(pg_val "$d" "select (select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p','v','m','S') and n.nspname not in ('pg_catalog','information_schema') and n.nspname not like 'pg_toast%') || ' ' || (select string_agg(extname || '=' || split_part(extversion, '.', 1), ',' order by extname) from pg_extension)")"
+  done
+}
+cmd_pg_major_upgrade() { # --to N [--base-image IMG] [--pgvector-pkg PKG] [--dry-run] [--yes] | --cleanup N
+  need_stack; load_env
+  on "$ENABLE_POSTGRES" || die "postgres is disabled"
+  local to="" base="" vec="" dry=0 cleanup=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --to) to="${2:-}"; shift ;; --base-image) base="${2:-}"; shift ;; --pgvector-pkg) vec="${2:-}"; shift ;;
+    --cleanup) cleanup="${2:-}"; shift ;; --dry-run) dry=1 ;; --yes|-y) FORCE=1 ;;
+    *) die "unknown pg-major-upgrade option: $1" ;; esac; shift; done
+  local cur; cur="$(pg_val postgres "select current_setting('server_version_num')::int / 10000")"
+  if [ -n "$cleanup" ]; then
+    [[ "$cleanup" =~ ^[0-9]{2}$ ]] && [ "$cleanup" -lt "$cur" ] || die "--cleanup takes an OLD major below the running $cur"
+    local vol; vol="$(pg_volume)"; [ -n "$vol" ] || die "cannot find the postgres volume"
+    echo "removes the old $cleanup data (/var/lib/postgresql/.pg$cleanup-old) from volume $vol (the running $cur data is not touched)"
+    confirm CLEANUP
+    docker run --rm -v "$vol:/v" --entrypoint sh "$PG_IMAGE" -c "rm -rf /v/.pg$cleanup-old /v/$cleanup"; echo "old $cleanup data removed"; return 0
+  fi
+  [[ "$to" =~ ^[0-9]{2}$ ]] || die "usage: pg-major-upgrade --to <major> (e.g. --to 19) [--dry-run]"
+  [ "$to" -gt "$cur" ] || die "target $to is not newer than the running major $cur"
+  local pgdata; pgdata="$(dc exec -T postgres sh -c 'echo "$PGDATA"')"
+  [[ "$pgdata" == "/var/lib/postgresql/$cur/"* ]] || die "PGDATA is $pgdata: only postgres 18+ layouts (/var/lib/postgresql/<major>/docker) are supported"
+  local o_base="$PG_BASE_IMAGE" o_img="$PG_IMAGE" o_vec="$PGVECTOR_PKG"
+  local n_base="${base:-$(pg_swap_major "$PG_BASE_IMAGE" "$cur" "$to")}" n_vec="${vec:-$(pg_swap_major "$PGVECTOR_PKG" "$cur" "$to")}" n_img
+  n_img="$(pg_swap_major "$PG_IMAGE" "$cur" "$to")"; [ "$n_img" = "$PG_IMAGE" ] && n_img="${PG_IMAGE%%:*}:pg$to"
+  [ "$(pg_major "$n_base")" = "$to" ] || die "base image $n_base is not postgres $to (pass --base-image)"
+  local vol size free need; vol="$(pg_volume)"
+  size="$(pg_val postgres "select ceil(sum(pg_database_size(datname)) / 1048576.0)::bigint from pg_database")"
+  free="$(df -Pm "$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /)" 2>/dev/null | awk 'NR==2{print $4}')" || free=""
+  need=$(( ${size:-0} * 2 + 512 ))
+  echo "pg-major-upgrade: $cur -> $to"
+  printf '  %-14s %s -> %s\n' base-image "$o_base" "$n_base" image "$o_img" "$n_img" pgvector "$o_vec" "$n_vec"
+  printf '  %-14s %s MB in databases, %s MB free, need about %s MB\n' disk "$size" "${free:-?}" "$need"
+  printf '  %-14s %s (old data kept as /var/lib/postgresql/.pg%s-old until --cleanup %s)\n' volume "$vol" "$cur" "$cur"
+  echo "  steps          verified backup -> dumpall -> stop -> build $to -> init + reload -> converge -> verify (rollback on failure)"
+  pitr_on && echo "  pitr           pgbackrest stanza-upgrade + full backup afterwards"
+  [ -z "$free" ] || [ "$free" -ge "$need" ] || die "not enough disk: $free MB free, need about $need MB"
+  docker run --rm -v "$vol:/v" --entrypoint sh "$o_img" -c "test ! -e /v/$to && test ! -e /v/.pg$cur-old" || die "/var/lib/postgresql/$to or .pg$cur-old already exists in $vol (leftover of a failed attempt? remove it first)"
+  [ "$dry" = 1 ] && { echo "dry run: nothing changed"; return 0; }
+  [ -f "$DBM_CONFIG" ] || die "the new image settings are saved in the config file: create $DBM_CONFIG first (init > $DBM_CONFIG)"
+  confirm UPGRADE
+  start_log pg-major-upgrade
+  PROGRESS_N=0 PROGRESS_TOTAL=7
+  progress_step "verified backup"; cmd_backup >/dev/null || die "backup failed: nothing changed"
+  local b; b="$(newest_backup)"; verify_backup "$b" >/dev/null || die "backup $b does not verify: nothing changed"
+  local before dump; dump="$BACKUP_DIR/pg-major-$cur-to-$to-$(date +%Y%m%d-%H%M%S).sql.gz"
+  before="$(pg_inventory)"
+  progress_step "dumpall from $cur"
+  (umask 077; bk_pg "$dump") || die "pg_dumpall failed: nothing changed"
+  progress_step "stop $cur"
+  on "$ENABLE_PGBOUNCER" && dc stop pgbouncer >/dev/null
+  dc stop postgres >/dev/null
+  docker run --rm -v "$vol:/v" --entrypoint sh "$o_img" -c "mv /v/$cur /v/.pg$cur-old" || { dc up -d --wait >/dev/null 2>&1 || true; die "could not set the old data aside: nothing changed (stack restarted)"; }
+  pgmu_rollback() {
+    warn "pg-major-upgrade failed: rolling back to $cur"
+    echo "---- postgres $to log (last 30 lines) ----" >&2; dc logs --no-color --tail 30 postgres >&2 2>/dev/null || true
+    dc stop pgbouncer postgres >/dev/null 2>&1 || true
+    set_conf_key PG_BASE_IMAGE "$o_base"; set_conf_key PG_IMAGE "$o_img"; set_conf_key PGVECTOR_PKG "$o_vec"
+    PG_BASE_IMAGE="$o_base" PG_IMAGE="$o_img" PGVECTOR_PKG="$o_vec"; write_files >/dev/null
+    docker run --rm -v "$vol:/v" --entrypoint sh "$o_img" -c "rm -rf /v/$to; if [ -d /v/.pg$cur-old ] && [ ! -e /v/$cur ]; then mv /v/.pg$cur-old /v/$cur; fi" || true
+    dc up -d --wait --wait-timeout 300 >/dev/null 2>&1 && PG_SU="" && pgbouncer_reload
+    notify pg-major-upgrade fail "upgrade to $to failed, rolled back to $cur"
+    die "ROLLED BACK to $cur (dump kept: $dump)"
+  }
+  progress_step "build postgres $to"
+  set_conf_key PG_BASE_IMAGE "$n_base"; set_conf_key PG_IMAGE "$n_img"; set_conf_key PGVECTOR_PKG "$n_vec"
+  PG_BASE_IMAGE="$n_base" PG_IMAGE="$n_img" PGVECTOR_PKG="$n_vec"
+  { write_files >/dev/null && dc build --pull postgres >/dev/null; } || pgmu_rollback
+  progress_step "init $to + reload"
+  dc up -d --wait --wait-timeout 300 --no-deps postgres >/dev/null || pgmu_rollback
+  PG_SU=""
+  # roles and databases that already exist (bootstrap admin, main DB, init extensions) report harmless errors
+  gunzip -c "$dump" | dc exec -T postgres psql -X -q -v ON_ERROR_STOP=0 -U "$(pg_su)" -d postgres >/dev/null 2>"$DB_DIR/.pgmu-errors" || true
+  progress_step "converge + verify"
+  { pg_converge >/dev/null && dc up -d --wait --wait-timeout 300 >/dev/null && pgbouncer_reload; } || pgmu_rollback
+  local after; after="$(pg_inventory)"
+  if [ "$before" != "$after" ]; then
+    diff <(echo "$before") <(echo "$after") | sed 's/^/  /' >&2 || true
+    pgmu_rollback
+  fi
+  [ "${DBM_TEST_FAIL_PGMU:-0}" = 1 ] && pgmu_rollback
+  cmd_verify >/dev/null || pgmu_rollback
+  dc exec -T postgres vacuumdb -U "$(pg_su)" --all --analyze-in-stages -q >/dev/null 2>&1 || warn "analyze after reload failed (run vacuumdb --all --analyze by hand)"
+  progress_step "post-upgrade"
+  if pitr_on; then write_pgbackrest_conf postgres/conf/pgbackrest.conf; dc restart postgres >/dev/null; pgbr stanza-upgrade && pgbr --type=full backup && stamp pitr-backup full || warn "pgbackrest stanza-upgrade/backup failed: run pitr setup"; fi
+  stamp pg-major-upgrade "$cur->$to"
+  echo "inventory matches ($(echo "$after" | wc -l | tr -d ' ') databases); reload notices in $DB_DIR/.pgmu-errors"
+  echo "PG MAJOR UPGRADE OK: $cur -> $to. Old data kept in /var/lib/postgresql/.pg$cur-old (volume $vol)."
+  echo "after a week of normal running: $(basename "$0") pg-major-upgrade --cleanup $cur"
+  finish_log
+}
+
+# ---- migrate-managed: copy databases to a managed PostgreSQL (DO Managed DB, RDS, ...) --
+# WHY a copy and not a cutover: the source keeps running; you re-run it in a maintenance
+# window and switch DB_HOST yourself. The target credentials come from a root-only file,
+# reach pg_dump/pg_restore through an env-file (never argv) and are never printed.
+mm_load_target() { # file -> TARGET_* (strict KEY=VALUE, no shell execution)
+  local f="$1" line k v
+  [ -f "$f" ] || die "target env file $f not found"
+  [ "$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f")" = 600 ] || die "$f must be chmod 600"
+  TARGET_HOST="" TARGET_PORT=25060 TARGET_USER="" TARGET_PASSWORD="" TARGET_DB_PREFIX="" TARGET_SSLMODE=require TARGET_SSLROOTCERT=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" =~ ^(TARGET_[A-Z_]+)=(.*)$ ]] || continue
+    k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"; v="${v%\"}"; v="${v#\"}"
+    case "$k" in TARGET_HOST|TARGET_PORT|TARGET_USER|TARGET_PASSWORD|TARGET_DB_PREFIX|TARGET_SSLMODE|TARGET_SSLROOTCERT) printf -v "$k" '%s' "$v" ;; esac
+  done < "$f"
+  [[ "$TARGET_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || die "TARGET_HOST missing or invalid"
+  valid_port "$TARGET_PORT" || die "TARGET_PORT invalid"
+  [[ "$TARGET_USER" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "TARGET_USER missing or invalid"
+  [ -n "$TARGET_PASSWORD" ] || die "TARGET_PASSWORD missing"
+  case "$TARGET_SSLMODE" in disable|require|verify-ca|verify-full) ;; *) die "TARGET_SSLMODE must be require, verify-ca or verify-full" ;; esac
+  [ "$TARGET_SSLMODE" != disable ] || [ "${MM_ALLOW_PLAIN:-0}" = 1 ] || die "TARGET_SSLMODE=disable is refused (MM_ALLOW_PLAIN=1 for tests only)"
+  case "$TARGET_SSLMODE" in verify-*) [ -s "$TARGET_SSLROOTCERT" ] || die "TARGET_SSLMODE=$TARGET_SSLMODE needs TARGET_SSLROOTCERT (the provider's CA file)" ;; esac
+}
+mm_run() { # [-i] cmd...: run a postgres client against the target in a throwaway container
+  local it=() envf; [ "${1:-}" = -i ] && { it=(-i); shift; }
+  envf="$(mktemp)"; chmod 600 "$envf"
+  printf 'PGHOST=%s\nPGPORT=%s\nPGUSER=%s\nPGPASSWORD=%s\nPGSSLMODE=%s\n' "$TARGET_HOST" "$TARGET_PORT" "$TARGET_USER" "$TARGET_PASSWORD" "$TARGET_SSLMODE" > "$envf"
+  local mounts=(); [ -n "$TARGET_SSLROOTCERT" ] && { mounts=(-v "$TARGET_SSLROOTCERT:/ca.crt:ro"); echo "PGSSLROOTCERT=/ca.crt" >> "$envf"; }
+  local rc=0; docker run --rm "${it[@]}" --network host --env-file "$envf" "${mounts[@]}" --entrypoint "$1" "$PG_IMAGE" "${@:2}" || rc=$?
+  rm -f "$envf"; return "$rc"
+}
+mm_counts() { # side db -> "table rows" lines (exact counts, sorted)
+  local q="select format('select %L || '' '' || count(*) from %I.%I;', n.nspname||'.'||c.relname, n.nspname, c.relname) from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p') and n.nspname not in ('pg_catalog','information_schema') and n.nspname not like 'pg_toast%' and n.nspname <> 'pgbouncer' order by 1"
+  if [ "$1" = source ]; then pg_val "$2" "$q" | pg_q "$2"
+  else mm_run psql -X -tA -d "$2" -c "$q" | mm_run -i psql -X -tA -q -d "$2"; fi | sort
+}
+cmd_migrate_managed() { # --target-env FILE [--db a,b] [--check] [--yes]
+  need_stack; load_env
+  on "$ENABLE_POSTGRES" || die "postgres is disabled"
+  local tf="" dbs="" check=0 d
+  while [ $# -gt 0 ]; do case "$1" in
+    --target-env) tf="${2:-}"; shift ;; --db) dbs="${2//,/ }"; shift ;; --check|--dry-run) check=1 ;; --yes|-y) FORCE=1 ;;
+    *) die "unknown migrate-managed option: $1" ;; esac; shift; done
+  [ -n "$tf" ] || die "usage: migrate-managed --target-env FILE [--db a,b] [--check] (docs/recipes/migrate-to-managed.md)"
+  mm_load_target "$tf"
+  [ -n "$dbs" ] || dbs="$(pg_val postgres "select string_agg(datname, ' ' order by datname) from pg_database d join pg_roles r on r.oid=d.datdba where datallowconn and not datistemplate and datname <> 'postgres' and (r.rolname in ('$PG_USER', '$(pg_su)') or datname = '$PG_DB')")"
+  for d in $dbs; do valid_ident "$d" database; done
+  echo "migrate-managed: $(echo "$dbs" | wc -w | tr -d ' ') databases -> $TARGET_USER@$TARGET_HOST:$TARGET_PORT (sslmode=$TARGET_SSLMODE)"
+  local tv sv; tv="$(mm_run psql -X -tA -d postgres -c "select current_setting('server_version_num')::int / 10000" 2>/dev/null)" || die "cannot connect to the target (check host, port, firewall/trusted sources, credentials)"
+  sv="$(pg_val postgres "select current_setting('server_version_num')::int / 10000")"
+  [ "$tv" -ge "$sv" ] || die "target is postgres $tv, older than the source $sv (pg_dump output may not load)"
+  echo "  versions      source $sv, target $tv"
+  local missing="" have; have=" $(mm_run psql -X -tA -d postgres -c "select string_agg(name, ' ') from pg_available_extensions") "
+  for d in $dbs; do
+    local tdb="$TARGET_DB_PREFIX$d" x
+    for x in $(pg_val "$d" "select string_agg(extname, ' ') from pg_extension where extname <> 'plpgsql'"); do
+      [[ "$have" == *" $x "* ]] || missing="$missing $d:$x"
+    done
+    printf '  %-13s -> %s  %s\n' "$d" "$tdb" "$(pg_val "$d" "select pg_size_pretty(pg_database_size(current_database()))")"
+  done
+  [ -z "$missing" ] || die "extensions not available on the target:$missing"
+  echo "  extensions    all available on the target"
+  [ "$check" = 1 ] && { echo "check: nothing copied"; return 0; }
+  echo "copies the data; existing target databases with the same name are REPLACED (objects dropped first)"
+  confirm MIGRATE
+  start_log migrate-managed
+  PROGRESS_N=0 PROGRESS_TOTAL=$(( $(echo "$dbs" | wc -w) * 3 ))
+  local fails=0
+  for d in $dbs; do
+    local tdb="$TARGET_DB_PREFIX$d"
+    progress_step "$d: create on target"
+    [ -n "$(mm_run psql -X -tA -d postgres -c "select 1 from pg_database where datname = '$tdb'")" ] \
+      || mm_run psql -X -q -d postgres -c "create database \"$tdb\"" || die "cannot create $tdb on the target (does $TARGET_USER have CREATEDB?)"
+    progress_step "$d: dump | restore"
+    dc exec -T postgres pg_dump -U "$(pg_su)" -Fc --no-owner --no-privileges -d "$d" \
+      | mm_run -i pg_restore --no-owner --no-privileges --clean --if-exists -d "$tdb" 2> "$DB_DIR/.mm-$d.errors" || true
+    progress_step "$d: compare row counts"
+    if diff <(mm_counts source "$d") <(mm_counts target "$tdb") > "$DB_DIR/.mm-$d.diff"; then
+      echo "  ok    $d: every table has the same row count on the target"
+    else echo "  FAIL  $d: row counts differ (see $DB_DIR/.mm-$d.diff and .mm-$d.errors)"; fails=$((fails + 1)); fi
+  done
+  [ "$fails" = 0 ] || { finish_log; die "migrate-managed: $fails databases differ"; }
+  stamp migrate-managed "$TARGET_HOST"
+  echo "MIGRATE OK. Cutover: maintenance mode -> re-run this -> set DB_HOST=$TARGET_HOST DB_PORT=$TARGET_PORT DB_SSLMODE=$TARGET_SSLMODE"
+  echo "(and the target user/password from $tf) in the web .env -> deploy -> keep this server read-only for a week"
+  finish_log
 }
 
 # ---- engines: enable / disable without losing data ------------------------------
@@ -2558,7 +3292,7 @@ cmd_engine() { # enable|disable <engine> [--delete-volume] [--dry-run]
       on "${!v}" && { echo "$e is already enabled"; return 0; }
       [ "$e" = pgbouncer ] && ! on "$ENABLE_POSTGRES" && die "enable postgres first"
       local need have; printf -v "$v" 1; need="$(engine_ram_mb)"; have="$(host_ram_mb)"; printf -v "$v" 0
-      [ "$have" = 0 ] || [ "$have" -ge "$((need * 90 / 100))" ] || warn "RAM ${have}MB < ${need}MB needed with $e on; consider: bin/workbench do resize <droplet> --size $(size_for_mb "$need")"
+      [ "$have" = 0 ] || [ "$have" -ge "$((need * 90 / 100))" ] || warn "RAM ${have}MB < ${need}MB needed with $e on; consider: bin/siwo do resize <droplet> --size $(size_for_mb "$need")"
       echo "plan: set $v=1 in $DBM_CONFIG, start $e (existing volume reused), converge, run doctor"
       [ "$dry" = 1 ] && return 0
       confirm ENABLE
@@ -2578,7 +3312,8 @@ cmd_init() { # [file]: starter config for this host, no secrets
     IFS=. read -r a b c d <<<"$ip"; n=$(( (a<<24)|(b<<16)|(c<<8)|d )); m=$(( (0xFFFFFFFF << (32-bits)) & 0xFFFFFFFF ))
     n=$((n & m)); net="$((n>>24&255)).$((n>>16&255)).$((n>>8&255)).$((n&255))/$bits"
   fi
-  cat > "$out" <<EOF
+  # writing to the /dev/stdout path would reopen (and truncate) a redirected stdout on Linux: use fd 1
+  if [ "$out" = /dev/stdout ]; then cat; else cat > "$out"; fi <<EOF
 # $TOOL_NAME config for $(hostname) - written by init on $(date +%F). No secrets.
 # Install: sudo install -m 600 THIS_FILE $DBM_CONFIG
 EXPECTED_PRIVATE_IP=${ip}
@@ -2636,11 +3371,13 @@ cmd_install() {
   load_env; write_files; start_stack; firewall; cmd_verify; summary
 }
 
-cmd_reset() {
+cmd_reset() { # [--force-prod] (or RESET_FORCE_PROD=1): needed when APP has a protected env
+  local fp="${RESET_FORCE_PROD:-0}" a
+  for a in "$@"; do case "$a" in --force-prod) fp=1 ;; *) die "reset: unknown option $a" ;; esac; done
   need_root; banner reset
   echo "This will DELETE all PostgreSQL, MySQL and MariaDB data in $DB_DIR"
   echo "(containers, volumes, image $PG_IMAGE) and create NEW passwords. Backups in $BACKUP_DIR are kept."
-  if [ -n "$APP" ]; then local e; for e in $(local_envs); do env_protected "$e" && guard_destructive server "$e" "${RESET_FORCE_PROD:-0}" && break; done; fi
+  if [ -n "$APP" ]; then local e; for e in $(local_envs); do env_protected "$e" && guard_destructive server "$e" "$fp" && break; done; fi
   confirm RESET
   ensure_docker
   log "Tearing down old stack"
@@ -2662,11 +3399,12 @@ cmd_reset() {
 
 cmd_uninstall() {
   need_root
-  local purge=0; [ "${1:-}" = "--purge" ] && purge=1
+  local purge=0 fp="${PURGE_FORCE_PROD:-0}" a # [--purge] [--force-prod] (or PURGE_FORCE_PROD=1)
+  for a in "$@"; do case "$a" in --purge) purge=1 ;; --force-prod) fp=1 ;; *) die "uninstall: unknown option $a" ;; esac; done
   banner "uninstall$([ $purge = 1 ] && echo ' --purge')"
   if [ "$purge" = 1 ]; then
     echo "This DELETES all data, backups in $BACKUP_DIR, the image and $DB_DIR."
-    if [ -n "$APP" ]; then local e; for e in $(local_envs); do env_protected "$e" && guard_destructive server "$e" "${PURGE_FORCE_PROD:-0}" && break; done; fi
+    if [ -n "$APP" ]; then local e; for e in $(local_envs); do env_protected "$e" && guard_destructive server "$e" "$fp" && break; done; fi
     confirm PURGE
   fi
   if [ -f "$DB_DIR/docker-compose.yml" ]; then
@@ -2691,6 +3429,7 @@ for a in "$@"; do
     -y|--yes) FORCE=1 ;;
     --non-interactive) NONINTERACTIVE=1 ;;
     --config) skip_next=1 ;;
+    -q|--quiet) export SIWO_QUIET=1 ;;
     --version) echo "$TOOL_NAME $VERSION"; exit 0 ;;
     *) ARGS+=("$a") ;;
   esac
@@ -2704,14 +3443,15 @@ case "$CMD" in help|-h|--help|init|env-init|env-sql|env-list|gfs-keep) ;; *) che
 case "$CMD" in help|-h|--help|init|env-init) ;; *) validate_envs ;; esac
 case "$CMD" in # mutating commands: one at a time
   upgrade|apply|install|reset|restore|backup|uninstall|create-db|create-user|grant|drop-db|drop-user|rotate-password|\
-  env-apply|role-split|purge-trash|engine|offsite|binlog-ship|pitr|restore-test)
+  env-apply|role-split|rebind-ip|purge-trash|engine|offsite|binlog-ship|binlog-replay|pitr|restore-test|monitor-user|pg-major-upgrade|migrate-managed)
     need_root; take_lock ;;
 esac
 case "$CMD" in
   upgrade|apply) cmd_upgrade "$@" ;;
   install)      cmd_install ;;
-  reset)        cmd_reset ;;
+  reset)        cmd_reset "$@" ;;
   status)       cmd_status ;;
+  rebind-ip)    cmd_rebind_ip "$@" ;;
   verify)       cmd_verify ;;
   env)          cmd_env "$@" ;;
   init)         cmd_init "$@" ;;
@@ -2730,18 +3470,25 @@ case "$CMD" in
   env-sql)      cmd_env_sql "$@" ;;
   env-creds)    cmd_env_creds "$@" ;;
   purge-trash)  cmd_purge_trash "$@" ;;
-  doctor)       cmd_doctor "$@" ;;
+  doctor)       cmd_doctor "$@" || exit $? ;;   # a failed check is a result, not a script error (no ERR trap line)
   backup)       cmd_backup "$@" ;;
   restore)      cmd_restore "$@" ;;
   restore-test) cmd_restore_test "$@" ;;
   offsite)      cmd_offsite "$@" ;;
   binlog-ship)  cmd_binlog_ship ;;
+  binlog-replay) cmd_binlog_replay "$@" ;;
   pitr)         cmd_pitr "$@" ;;
   engine)       cmd_engine "$@" ;;
   gfs-keep)     gfs_keep "$*" ;;
   cron-install) cmd_cron_install ;;
   cron-remove)  cmd_cron_remove ;;
   logs)         cmd_logs "$@" ;;
+  log-errors)   cmd_log_errors "$@" || exit $? ;;   # errors found = exit 1, a result (no ERR trap line)
+  monitor-user) cmd_monitor_user "$@" ;;
+  metrics)      cmd_metrics ;;
+  tls-ca)       cmd_tls_ca "$@" ;;
+  pg-major-upgrade) cmd_pg_major_upgrade "$@" ;;
+  migrate-managed)  cmd_migrate_managed "$@" ;;
   uninstall)    cmd_uninstall "$@" ;;
   help|-h|--help) usage ;;
   *) usage >&2; die "unknown command: $CMD" ;;

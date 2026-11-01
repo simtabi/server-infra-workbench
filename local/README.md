@@ -25,6 +25,6 @@ src/shell/db/remote-run.sh --host db-01 --expect-ip 10.0.0.5 --config local/myap
 Rules:
 
 - No secrets here either: passwords live on the server (`docker-db-server-manager.sh env`) and API
-  tokens in `~/.config/vps-server-workbench/credentials` (chmod 600).
+  tokens in `~/.config/server-infra-workbench/credentials` (chmod 600).
 - Client identifiers (names, hosts, IPs, domains) go in `.client-denylist` at the repo root (also
   ignored). `make client-check` fails if any of them shows up in a tracked file.

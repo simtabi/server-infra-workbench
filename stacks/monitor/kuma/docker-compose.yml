@@ -1,0 +1,18 @@
+# Uptime Kuma. Rendered and started by src/shell/monitor/monitor.sh; do not edit on the server.
+# UI on MONITOR_BIND (loopback) only. Kuma has no env-based admin: open the tunnel right after install and
+# create the admin account (until then the first visitor through the tunnel sets it).
+name: vsw-mon-kuma
+services:
+  kuma:
+    image: ${KUMA_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    environment:
+      UPTIME_KUMA_DB_TYPE: sqlite
+    ports: ["${MONITOR_BIND:?}:${KUMA_PORT:-3001}:3001"]
+    volumes: ["./data:/app/data"]
+    networks: [vsw_monitor]
+    mem_limit: 512m
+    security_opt: [no-new-privileges:true]
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+networks:
+  vsw_monitor: {external: true, name: vsw_monitor}

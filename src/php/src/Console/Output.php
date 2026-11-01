@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Console;
+namespace Simtabi\ServerInfraWorkbench\Console;
 
-use Simtabi\VpsServerWorkbench\Security\Redactor;
+use Simtabi\ServerInfraWorkbench\Security\Redactor;
 
 /** Everything printed goes through the redactor, as a last line of defence. */
 final class Output

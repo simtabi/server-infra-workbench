@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Ploi;
+namespace Simtabi\ServerInfraWorkbench\Ploi;
 
-use Simtabi\VpsServerWorkbench\Http\Paginator;
-use Simtabi\VpsServerWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Http\Paginator;
+use Simtabi\ServerInfraWorkbench\Support\Data;
 
 /** Ploi (Laravel style): {data: [...], meta: {current_page, last_page}}. */
 final class PloiPaginator implements Paginator

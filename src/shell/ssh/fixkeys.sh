@@ -27,7 +27,7 @@
 #  ENV  FIXKEYS_TTY  where prompts are read from (default /dev/tty; tests use a file)
 #
 #  Every change: backup <file>.bak.<ts> (600), atomic write, owner + modes
-#  restored, a line in <root>/var/log/vps-server-workbench/audit.log
+#  restored, a line in <root>/var/log/server-infra-workbench/audit.log
 #  (fingerprints only). Keys are validated with ssh-keygen before they go in.
 # =============================================================================
 # shellcheck disable=SC2015  # 'test && say || say': say cannot fail
@@ -50,7 +50,9 @@ own_ok() { [ -z "$UID_GID" ] || [ "$1" = "$UID_GID" ]; }
 gw() { [ -n "$1" ] && [ $(( 8#$1 & 8#022 )) -ne 0 ]; }   # group/other writable
 fmode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null; }
 fowner() { stat -c '%u:%g' "$1" 2>/dev/null || stat -f '%u:%g' "$1" 2>/dev/null; }
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
+# usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
+# title box, so --help printed one line; awk counts the rules instead.
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,""); print}' "$0"; }
 
 CMD="" ARG="" AK_USER="" FILE="" ROOT="" KEYFILE="" YES=0
 while [ $# -gt 0 ]; do
@@ -73,7 +75,9 @@ done
 
 # ---- who and which file -------------------------------------------------------------------
 pw() { awk -F: -v u="$1" -v f="$2" '$1 == u { print $f; exit }' "$ROOT/etc/passwd" 2>/dev/null; }   # pw user field
-audit() { local d="$ROOT/var/log/vps-server-workbench"; { mkdir -p "$d" && chmod 700 "$d"; } 2>/dev/null || return 0
+audit() { local d="$ROOT/var/log/server-infra-workbench"   # pre-rename vps-server-workbench while only that exists
+  [ -e "$d" ] || [ ! -e "$ROOT/var/log/vps-server-workbench" ] || d="$ROOT/var/log/vps-server-workbench"
+  { mkdir -p "$d" && chmod 700 "$d"; } 2>/dev/null || return 0
   printf '%s tool=fixkeys by=%s host=%s outcome=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${SUDO_USER:-$(id -un)}" \
     "$(hostname 2>/dev/null || echo '?')" "$1" "${*:2}" >> "$d/audit.log" 2>/dev/null || true
   have logger && [ -z "$ROOT" ] && logger -t fixkeys "outcome=$1 ${*:2}" 2>/dev/null || true; }
@@ -120,7 +124,7 @@ valid_key() { # ssh-keygen must parse it; without ssh-keygen, the type + base64 
   awk '{ exit !($2 ~ /^[A-Za-z0-9+\/]+=*$/ && length($2) >= 60) }' <<<"$(key_of "$1")"; }
 key_lines() { [ -f "$AK_FILE" ] || return 0; while IFS= read -r l || [ -n "$l" ]; do case "$l" in ''|\#*) continue ;; esac; [ -n "$(key_of "$l")" ] && printf '%s\n' "$l"; done <"$AK_FILE"; }
 count_keys() { key_lines | grep -c . || true; }
-has_key() { local want; want="$(key_of "$1")"; key_lines | while IFS= read -r l; do [ "$(key_of "$l")" = "$want" ] && { echo y; break; }; done | grep -q y; }
+has_key() { local want; want="$(key_of "$1")"; key_lines | while IFS= read -r l; do [ "$(key_of "$l")" = "$want" ] && { echo y; break; }; done | grep y >/dev/null; }
 
 set_owner() { [ -n "$UID_GID" ] && [ "$(id -u)" -eq 0 ] && chown "$UID_GID" "$@" 2>/dev/null; have restorecon && [ -z "$ROOT" ] && restorecon -F "$@" 2>/dev/null; return 0; }
 ensure_file() { # ~/.ssh: 700 + owner; a shared dir from AuthorizedKeysFile (/etc/ssh/keys) is only created, never re-owned
@@ -210,7 +214,7 @@ do_diagnose() { local m o hm
       grep -q '^pubkeyauthentication no' <<<"$t" && say "  FIX   PubkeyAuthentication is off"
       [ "$AK_USER" = root ] && grep -q '^permitrootlogin no' <<<"$t" && say "  FIX   PermitRootLogin no - root cannot log in at all; use a sudo user"
       grep -qE '^allowusers ' <<<"$t" && ! grep -qE "^allowusers .*\b$AK_USER(@|\b)" <<<"$t" && say "  FIX   AllowUsers does not include $AK_USER"
-      grep -qE '^pubkeyacceptedalgorithms ' <<<"$t" && key_lines | grep -q '^ssh-rsa\|[[:space:]]ssh-rsa ' && ! grep -q 'rsa-sha2' <<<"$t" && say "  warn  RSA keys need rsa-sha2-* in PubkeyAcceptedAlgorithms"
+      grep -qE '^pubkeyacceptedalgorithms ' <<<"$t" && key_lines | grep '^ssh-rsa\|[[:space:]]ssh-rsa ' >/dev/null && ! grep -q 'rsa-sha2' <<<"$t" && say "  warn  RSA keys need rsa-sha2-* in PubkeyAcceptedAlgorithms"
     fi
   elif [ -r "$sd" ]; then
     say "  info  (no sshd -T: reading $sd and sshd_config.d/*.conf; first match wins)"

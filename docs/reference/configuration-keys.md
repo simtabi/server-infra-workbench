@@ -49,7 +49,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `PG_BASE_IMAGE` | `postgis/postgis:18-3.6` |  |
 | `PGVECTOR_PKG` | `postgresql-18-pgvector` |  |
 | `PG_MAX_CONNECTIONS` | `200` |  |
-| `PG_EXTENSIONS` | `vector postgis pg_trgm pgcrypto uuid-ossp citext pg_stat_statements` | Created in PG_DB and template1 (so every later database has them). Must exist in the image. |
+| `PG_EXTENSIONS` | `vector postgis pg_trgm pgcrypto uuid-ossp citext pg_stat_statements` | Created in PG_DB and template1 (so every later database has them). Must exist in the image: postgis needs a postgis/* PG_BASE_IMAGE (validate refuses it otherwise). |
 | `PG_PORT` | `5432` |  |
 
 ## PgBouncer (session mode, scram-sha-256)
@@ -88,8 +88,9 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `PGBOUNCER_POOL_MODE` | `session` |  |
 | `DOCKER_NETWORK` | `vsw_db` | compose network with a fixed subnet |
 | `DOCKER_SUBNET` | `172.30.88.0/24` | pg_hba + MySQL root host use it |
-| `TLS_MODE` | `off` | off \| require (self-signed, made on the server) |
+| `TLS_MODE` | `off` | off \| require \| verify-full (self-signed CA made on the server; verify-full = clients check CA + host) |
 | `TLS_DAYS` | `825` |  |
+| `TLS_CA_WEB_PATH` | `/etc/ssl/certs/vsw-db-ca.crt` | where `tls-ca` tells web servers to put the public CA |
 | `EXTRA_BIND_IPS` | (empty) | e.g. 10.200.0.1 (wg0); comma or space separated |
 | `ALLOW_PUBLIC_BIND` | `0` | 1 = a public EXTRA_BIND_IPS entry is on purpose (TLS_MODE=require is then mandatory) |
 | `PEER_REGIONS` | (empty) | app servers' regions, e.g. nyc1; doctor warns on a mismatch |
@@ -101,7 +102,16 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `MARIADB_ED25519` | `0` | 1 = new MariaDB users use ed25519 (PHP mysqlnd cannot) |
 | `MY_APP_HOST` | `%` | host part of MySQL/MariaDB app users (ports are VPC-only) |
 | `BINLOG_DAYS` | `7` | MySQL/MariaDB binlog retention on the server |
-| `STATE_DIR` | `/var/lib/vps-server-workbench/db` | status stamps for doctor/monitoring |
+| `STATE_DIR` | `/var/lib/server-infra-workbench/db` | status stamps for doctor/monitoring |
+| `DOCKER_GROUP_ALLOW` | (empty) | users allowed in the docker group; doctor warns about any other non-root member |
+
+## monitoring
+
+| Key | Default | Notes |
+|---|---|---|
+| `MONITOR_USER` | `vsw_monitor` | read-only pg_monitor role for postgres_exporter (CONNECTION LIMIT 5, db postgres only) |
+| `MONITOR_PASSWORD_FILE` | `/etc/vsw-monitor/pg-monitor.pass` | 600, written by `monitor-user`; never printed |
+| `METRICS_TEXTFILE_DIR` | `/var/lib/vsw-monitor/textfile` | vsw_db.prom for node_exporter; skipped when the folder is missing |
 
 ## environments
 
@@ -113,7 +123,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `PROTECTED_ENVS` | `stg prd` |  |
 | `PRD_LOCATION` | `local` | local \| droplet \| managed (prd not on this host) |
 | `ENV_MIGRATOR` | `0` | 1 = separate <app>_<env>_migrator for DDL |
-| `ENV_SECRETS_DIR` | `/etc/vps-server-workbench/secrets` |  |
+| `ENV_SECRETS_DIR` | `/etc/server-infra-workbench/secrets` |  |
 | `FRESH_BACKUP_MIN` | `15` | protected envs: destructive ops need a backup this fresh |
 | `TRASH_DAYS` | `7` | soft-dropped Postgres DBs are purged after this |
 | `DROPPED_DUMP_DAYS` | `30` | MySQL/MariaDB: dumps of dropped DBs kept this long |
@@ -127,6 +137,9 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `PITR_DAYS` | `14` |  |
 | `PITR_REPO_TYPE` | `s3` | s3 \| posix (posix: a local/volume path, tests and NFS) |
 | `PITR_REPO_PATH` | `/pgbackrest` |  |
+| `PITR_S3_URI_STYLE` | `host` | host (DigitalOcean Spaces, AWS S3) \| path (Garage, MinIO, SeaweedFS) |
+| `PITR_S3_CA_FILE` | (empty) | PEM CA of a private S3 endpoint (self-hosted Garage behind TLS); TLS is always verified |
+| `PITR_S3_HOST_IP` | (empty) | IPv4 for the endpoint host name inside the postgres container (a private name not in DNS) |
 | `PITR_FULL_CRON` | `30 2 * * 0` |  |
 | `PITR_DIFF_CRON` | `30 2 * * 1-6` |  |
 | `PGBACKREST_PKG` | `pgbackrest` |  |
@@ -137,11 +150,12 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `OFFSITE_BUCKET` | (empty) |  |
 | `OFFSITE_PREFIX` | `db/<hostname>` |  |
 | `OFFSITE_ENCRYPTION` | `openssl` | openssl (AES-256, key file) \| age (recipients file) |
-| `OFFSITE_KEY_FILE` | `/etc/vps-server-workbench/backup.key` | chmod 600 |
-| `OFFSITE_CREDS_FILE` | `/etc/vps-server-workbench/offsite.env` | chmod 600: OFFSITE_ACCESS_KEY / OFFSITE_SECRET_KEY |
+| `OFFSITE_KEY_FILE` | `/etc/server-infra-workbench/backup.key` | chmod 600 |
+| `OFFSITE_CREDS_FILE` | `/etc/server-infra-workbench/offsite.env` | chmod 600: OFFSITE_ACCESS_KEY / OFFSITE_SECRET_KEY |
 | `OFFSITE_TOOL` | `rclone` | rclone \| aws |
 | `OFFSITE_KEEP_DAYS` | `400` |  |
 | `BINLOG_SHIP_CRON` | `*/5 * * * *` |  |
+| `MYSQLBINLOG_IMAGE` | (empty) | binlog-replay decoder (mysql images lack mysqlbinlog); empty: built from MYSQL_IMAGE + Oracle's signed client RPM |
 | `RESTORE_TEST_CRON` | `0 5 * * 0` |  |
 | `RESTORE_TEST_TIMEOUT` | `3600` |  |
 | `DOCTOR_CRON` | `7 * * * *` |  |
@@ -149,8 +163,12 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `ALERT_WEBHOOK` | (empty) | https URL, JSON POST {event,status,host,message} |
 | `HEALTHCHECK_URL` | (empty) | check-in URL (healthchecks.io style: /fail on failure) |
 | `ALERT_COMMAND` | (empty) | local hook: <cmd> <event> <ok\|fail> <message> |
+| `ALERT_ON_OK` | `0` | 1 = also send successes to ALERT_EMAIL/ALERT_WEBHOOK (failures always go) |
+| `DO_TOKEN_FILE` | `/root/.config/digitalocean-token` | chmod 600; lets `upgrade` take a droplet snapshot (or DIGITALOCEAN_TOKEN) |
 | `BACKUP_MAX_AGE_H` | `26` |  |
 | `RESTORE_TEST_MAX_AGE_D` | `8` |  |
+| `DOCTOR_DISK_WARN_PCT` | `80` | doctor warns at this disk use on DB_DIR |
+| `DOCTOR_DISK_BAD_PCT` | `90` | ... and reports a PROBLEM (exit 1, fails `upgrade`) from here |
 
 ## Per-environment keys (not in the example)
 

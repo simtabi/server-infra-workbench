@@ -1,0 +1,10 @@
+# config/database.yml (production part). No host, user or password here: the pg gem is libpq, which reads
+# PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE from the environment and the password from PGPASSFILE (600).
+# One database per env (what the DB manager creates): Solid Queue, Cache and Cable live in it too, see README.
+production:
+  adapter: postgresql
+  encoding: unicode
+  database: <%= ENV.fetch("PGDATABASE") %>
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS", 3).to_i + 2 %>   # Puma threads + Solid Queue's threads in Puma
+  prepared_statements: true      # PgBouncer in session mode (the default here) is fine with them
+  connect_timeout: 5

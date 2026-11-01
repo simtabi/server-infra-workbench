@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Console\Application;
-use Simtabi\VpsServerWorkbench\Console\Output;
-use Simtabi\VpsServerWorkbench\Console\ProviderFactory;
-use Simtabi\VpsServerWorkbench\Gcp\Auth\StaticTokenProvider;
-use Simtabi\VpsServerWorkbench\Security\Credentials;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Console\Application;
+use Simtabi\ServerInfraWorkbench\Console\Output;
+use Simtabi\ServerInfraWorkbench\Console\ProviderFactory;
+use Simtabi\ServerInfraWorkbench\Gcp\Auth\StaticTokenProvider;
+use Simtabi\ServerInfraWorkbench\Security\Credentials;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class ConsoleTest extends TestCase
 {
@@ -25,8 +25,9 @@ final class ConsoleTest extends TestCase
     private bool $answer = false;
 
     /** @param array<string, string> $env */
-    private function app(array $env = ['DIGITALOCEAN_TOKEN' => 'do-token-abcdef', 'CLOUDFLARE_API_TOKEN' => 'cf-token-abcdef', 'PLOI_API_TOKEN' => 'ploi-token-abcdef', 'GCP_PROJECT' => 'proj-123']): Application
+    private function app(?array $env = null): Application
     {
+        $env ??= ['DIGITALOCEAN_TOKEN' => self::fake('do'), 'CLOUDFLARE_API_TOKEN' => self::fake('cf'), 'PLOI_API_TOKEN' => self::fake('ploi'), 'GCP_PROJECT' => 'proj-123'];
         $this->stdout = self::memory();
         $this->stderr = self::memory();
 
@@ -118,7 +119,7 @@ final class ConsoleTest extends TestCase
 
     public function test_bad_input_is_usage_error_before_any_request(): void
     {
-        foreach ([['do', 'droplet', 'abc'], ['do', 'droplets', '--bogus'], ['cf', 'dns', 'list'], ['nope'], ['gcp', 'snapshot', 'Bad_Zone', 'disk'], ['do', 'snapshot', '1', '--name']] as $argv) {
+        foreach ([['do', 'droplet', 'abc'], ['do', 'droplets', '--bogus'], ['cf', 'dns', 'list'], ['nope'], ['gcp', 'snapshot', 'Bad_Zone', 'disk'], ['do', 'snapshot', '1', '--name'], ['do', 'alerts', 'standard', '--email', 'a@example.com', '--droplet', '1', '--droplet', '2', '--dry-run']] as $argv) {
             self::assertSame(Application::USAGE, $this->app()->run($argv), implode(' ', $argv));
         }
         self::assertSame([], $this->http->requests);
@@ -132,15 +133,15 @@ final class ConsoleTest extends TestCase
         self::assertSame(0, $this->app()->run(['credentials']));
         self::assertMatchesRegularExpression('/PLOI_API_TOKEN\s+env/', $this->out());
         self::assertMatchesRegularExpression('/GOOGLE_APPLICATION_CREDENTIALS\s+missing/', $this->out());
-        self::assertStringNotContainsString('ploi-token-abcdef', $this->out());
+        self::assertStringNotContainsString(self::fake('ploi'), $this->out());
     }
 
     public function test_api_errors_exit_1_with_redacted_message(): void
     {
-        $this->http->json(['message' => 'Unauthenticated. token do-token-abcdef'], 401);
+        $this->http->json(['message' => 'Unauthenticated. token '.self::fake('do')], 401);
         self::assertSame(Application::FAILED, $this->app()->run(['do', 'droplets']));
         self::assertStringContainsString('HTTP 401', $this->err());
-        self::assertStringNotContainsString('do-token-abcdef', $this->err());
+        self::assertStringNotContainsString(self::fake('do'), $this->err());
     }
 
     public function test_cf_upsert_and_gcp_instances(): void
@@ -160,7 +161,7 @@ final class ConsoleTest extends TestCase
     public function test_help_and_version(): void
     {
         self::assertSame(0, $this->app()->run(['help']));
-        self::assertStringContainsString('workbench do ...', $this->out());
+        self::assertStringContainsString('siwo do ...', $this->out());
         self::assertSame(0, $this->app()->run(['cf', '--help']));
         self::assertStringContainsString('dns upsert', $this->out());
         self::assertSame(0, $this->app()->run(['--version']));

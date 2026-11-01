@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Unit;
+namespace Simtabi\ServerInfraWorkbench\Tests\Unit;
 
-use Simtabi\VpsServerWorkbench\Cloudflare\Cloudflare;
-use Simtabi\VpsServerWorkbench\Cloudflare\Data\DnsRecordType;
-use Simtabi\VpsServerWorkbench\Exception\ApiException;
-use Simtabi\VpsServerWorkbench\Exception\NotFoundException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Tests\Fixtures\MockHttpClient;
-use Simtabi\VpsServerWorkbench\Tests\TestCase;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Cloudflare;
+use Simtabi\ServerInfraWorkbench\Cloudflare\Data\DnsRecordType;
+use Simtabi\ServerInfraWorkbench\Exception\ApiException;
+use Simtabi\ServerInfraWorkbench\Exception\NotFoundException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Tests\Fixtures\MockHttpClient;
+use Simtabi\ServerInfraWorkbench\Tests\TestCase;
 
 final class CloudflareTest extends TestCase
 {
@@ -18,7 +18,7 @@ final class CloudflareTest extends TestCase
 
     private function cf(): Cloudflare
     {
-        return Cloudflare::make('cf-token-abcdef', $this->options());
+        return Cloudflare::make(self::fake('cf'), $this->options());
     }
 
     private function zone(): self

@@ -14,7 +14,7 @@ published, so nobody depends on the old paths.
 
 - All code lives under `src/`: `src/shell/<area>/`, `src/php/`, `src/python/`. The top level is only
   `bin/ src/ stacks/ config/ docs/ examples/ tests/` plus the root files.
-- Standalone helpers become subcommands of a package (the plan finder is `bin/workbench plans`), not a
+- Standalone helpers become subcommands of a package (the plan finder is `bin/siwo plans`), not a
   `tools/` folder.
 - `scripts/` and every shim are deleted. Moves before 1.0 are listed in
   [structure.md](../structure.md#old-to-new-paths) instead.
@@ -22,6 +22,6 @@ published, so nobody depends on the old paths.
 
 ## Consequences
 
-- The tree answers "where is X" at a glance; `bin/workbench list` answers it from the terminal.
+- The tree answers "where is X" at a glance; `bin/siwo list` answers it from the terminal.
 - Anyone with a pre-release checkout must use the new paths; the live server paths are unchanged.
 - Package tooling runs with `--working-dir=src/php` and `PYTHONPATH=src/python/src`.

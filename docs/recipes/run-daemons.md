@@ -2,7 +2,8 @@
 
 Create two daemons on the server's **Daemons** page in Ploi. Ploi runs them under
 Supervisor and restarts them if they exit; `php artisan queue:restart` in the
-deploy script makes workers pick up each new release.
+deploy script (on a zero-downtime site, the post-deploy script:
+[why](../tools/deploy-script.md#zero-downtime-sites)) makes workers pick up each new release.
 
 | Field | Queue worker | Scheduler |
 |---|---|---|

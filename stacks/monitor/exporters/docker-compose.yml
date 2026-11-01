@@ -1,0 +1,76 @@
+# Prometheus exporters. Rendered and started by src/shell/monitor/monitor.sh; do not edit on the server.
+# Every port is published on MONITOR_AGENT_BIND (private/WireGuard IP) only. The DB exporters (profile
+# "postgres") join the DB manager's compose network and log in as vsw_monitor (pg_monitor, no data access).
+name: vsw-mon-exporters
+services:
+  node-exporter:
+    image: ${NODE_EXPORTER_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --web.listen-address=${NODE_EXPORTER_LISTEN:?set by monitor.sh}
+      - --collector.textfile.directory=/textfile
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|run|sys|var/lib/docker/.+)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+      - ${MONITOR_TEXTFILE_DIR:?}:/textfile:ro
+    ports: ["${MONITOR_AGENT_BIND:?}:${NODE_EXPORTER_PORT:-9100}:9100"]
+    networks: [vsw_monitor]
+    mem_limit: 64m
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://${NODE_EXPORTER_LISTEN}/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+  cadvisor:
+    image: ${CADVISOR_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --store_container_labels=false
+      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,percpu,process,referenced_memory,resctrl,sched,tcp,udp
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports: ["${MONITOR_AGENT_BIND:?}:${CADVISOR_PORT:-9338}:8080"]
+    networks: [vsw_monitor]
+    mem_limit: 128m
+    security_opt: [no-new-privileges:true]
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+  postgres-exporter:
+    profiles: [postgres]
+    image: ${POSTGRES_EXPORTER_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: "${MONITOR_PG_HOST:-postgres}:5432/postgres?sslmode=${MONITOR_PG_SSLMODE:-disable}"
+      DATA_SOURCE_USER: ${MONITOR_PG_USER:-vsw_monitor}
+      DATA_SOURCE_PASS: ${MONITOR_PG_PASSWORD:-}
+    ports: ["${MONITOR_AGENT_BIND:?}:${POSTGRES_EXPORTER_PORT:-9187}:9187"]
+    networks: [vsw_monitor, db]
+    mem_limit: 64m
+    security_opt: [no-new-privileges:true]
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+  pgbouncer-exporter:
+    profiles: [postgres]
+    image: ${PGBOUNCER_EXPORTER_IMAGE:?pin an image tag}
+    restart: unless-stopped
+    environment:
+      # built by monitor.sh into secrets.env (600): no DSN with a password slot in a tracked file.
+      # Empty only when the postgres profile is off (compose interpolates every service).
+      PGBOUNCER_EXPORTER_CONNECTION_STRING: ${PGBOUNCER_EXPORTER_CONNECTION_STRING:-}
+    ports: ["${MONITOR_AGENT_BIND:?}:${PGBOUNCER_EXPORTER_PORT:-9127}:9127"]
+    networks: [vsw_monitor, db]
+    mem_limit: 32m
+    security_opt: [no-new-privileges:true]
+    logging: {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+networks:
+  vsw_monitor: {external: true, name: vsw_monitor}
+  db:
+    external: true
+    name: ${MONITOR_DB_NETWORK:-vsw_db}

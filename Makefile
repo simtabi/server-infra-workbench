@@ -1,25 +1,45 @@
-# vps-server-workbench - dev front door. Run from the repo root:  make <target>
+# server-infra-workbench - dev front door. Run from the repo root:  make <target>
 #
 # SCRIPTS is every shell script in the repo, found by extension, so a new script
 # is linted without editing this file. PHP and Python targets skip (exit 0) with
 # a note when php, composer or python3 is missing, so `make ci` works anywhere.
 SHELL   := /bin/bash
-SCRIPTS := $(shell find . -name '*.sh' -not -path './.git/*' -not -path '*/vendor/*' | sort) bin/workbench
+SCRIPTS := $(shell find . -name '*.sh' -not -path './.git/*' -not -path '*/vendor/*' | sort) bin/siwo
 PHP_OK   = command -v php >/dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'
 PY_OK    = command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))'
 
-.PHONY: help lint syntax shellcheck fmt-check compose-check links mermaid test it ci \
+.PHONY: help live-test live-sweep lint syntax shellcheck fmt-check compose-check links mermaid test it ci ci-local secrets-check docs-commands \
         php-install php-lint php-test php py-lint py-test python
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
 
+GITLEAKS_IMAGE := zricethezav/gitleaks:v8.30.1
+SHELLCHECK_VERSION := 0.11.0
+SHELLCHECK_IMAGE := koalaman/shellcheck:v$(SHELLCHECK_VERSION)
+
+secrets-check: ## no hardcoded secrets: repo scanner (tracked files) + gitleaks (full history, .gitleaks.toml)
+	python3 tests/security/no-hardcoded-secrets.py --self-test
+	python3 tests/security/no-hardcoded-secrets.py
+	@if command -v gitleaks >/dev/null 2>&1; then gitleaks git --no-banner --redact --config .gitleaks.toml --log-opts=--all .; \
+	  elif command -v docker >/dev/null 2>&1; then docker run --rm -v "$$PWD:/repo" -w /repo $(GITLEAKS_IMAGE) git --no-banner --redact --config .gitleaks.toml --log-opts=--all /repo; \
+	  else echo "gitleaks not installed and no docker - skipping the history scan"; fi
+
 syntax: ## bash -n on every script
 	@for f in $(SCRIPTS); do bash -n "$$f" || exit 1; echo "bash -n ok  $$f"; done
 
-shellcheck: ## shellcheck every script (install: brew install shellcheck / apt install shellcheck)
-	@command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck is not installed"; exit 1; }
-	shellcheck -x $(SCRIPTS)
+# One shellcheck version everywhere: a local binary of exactly this version, otherwise the pinned image.
+# ubuntu-latest ships an older shellcheck, so CI and laptops used to disagree on findings.
+shellcheck: ## shellcheck every script with the pinned version (local binary if it matches, else docker)
+	@v="$$(shellcheck --version 2>/dev/null | sed -n 's/^version: //p')"; \
+	  if [ "$$v" = "$(SHELLCHECK_VERSION)" ] && [ -z "$(SHELLCHECK_DOCKER)" ]; then echo "shellcheck $$v (local)"; shellcheck -x $(SCRIPTS); \
+	  elif command -v docker >/dev/null 2>&1; then echo "shellcheck $(SHELLCHECK_VERSION) ($(SHELLCHECK_IMAGE))"; \
+	    docker run --rm -v "$$PWD:/mnt" -w /mnt $(SHELLCHECK_IMAGE) -x $(SCRIPTS); \
+	  else echo "need shellcheck $(SHELLCHECK_VERSION) (found: $${v:-none}) or docker"; exit 1; fi
+
+ci-local: ## the CI gate exactly as the workflow runs it (pinned shellcheck image, same make ci)
+	@echo "php: $$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo missing) (CI 8.4)  python: $$(python3 -c 'import platform;print(platform.python_version())' 2>/dev/null || echo missing) (CI 3.14)"
+	$(MAKE) ci SHELLCHECK_DOCKER=1
 
 lint: syntax shellcheck ## syntax + shellcheck
 
@@ -52,15 +72,23 @@ py-test: ## unittest for src/python
 
 python: py-lint py-test ## all Python checks
 
-compose-check: ## docker compose config for stacks/caddy + stacks/addons, caddy validate (needs docker)
+compose-check: ## docker compose config for stacks/caddy, stacks/addons, stacks/monitor; caddy validate; promtool (needs docker)
 	@command -v docker >/dev/null 2>&1 || { echo "docker not installed - skipping"; exit 0; }
 	cd stacks/caddy && SITE_DOMAIN=example.com docker compose config -q && echo "compose ok  stacks/caddy"
 	@for d in stacks/addons/*/; do n=$$(basename $$d); \
-	  { cat $$d/addon.env.example; printf 'ADDON_BIND=127.0.0.1\nADDON_DATA_DIR=/tmp/vsw-cc\nRUSTFS_ACCESS_KEY=x\nRUSTFS_SECRET_KEY=y\nSEAWEED_ADMIN_PASSWORD=z\n'; } \
-	    | sed 's/[[:space:]]*#.*//' > /tmp/vsw-cc-$$n.env; \
-	  (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env config -q) && echo "compose ok  stacks/addons/$$n" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; \
-	  if [ -f $$d/compose.bridge.yml ]; then (cd $$d && docker compose --env-file /tmp/vsw-cc-$$n.env -f docker-compose.yml -f compose.bridge.yml config -q) \
-	    && echo "compose ok  stacks/addons/$$n (bridge)" || { rm -f /tmp/vsw-cc-$$n.env; exit 1; }; fi; rm -f /tmp/vsw-cc-$$n.env; done
+	  { cat $$d/addon.env.example; printf 'ADDON_BIND=127.0.0.1\nADDON_DATA_DIR=/tmp/siw-cc\nRUSTFS_ACCESS_KEY=x\nRUSTFS_SECRET_KEY=%s\nSEAWEED_ADMIN_PASSWORD=%s\n' $$(openssl rand -hex 12) $$(openssl rand -hex 12); } \
+	    | sed 's/[[:space:]]*#.*//' > /tmp/siw-cc-$$n.env; \
+	  (cd $$d && docker compose --env-file /tmp/siw-cc-$$n.env config -q) && echo "compose ok  stacks/addons/$$n" || { rm -f /tmp/siw-cc-$$n.env; exit 1; }; \
+	  if [ -f $$d/compose.bridge.yml ]; then (cd $$d && docker compose --env-file /tmp/siw-cc-$$n.env -f docker-compose.yml -f compose.bridge.yml config -q) \
+	    && echo "compose ok  stacks/addons/$$n (bridge)" || { rm -f /tmp/siw-cc-$$n.env; exit 1; }; fi; rm -f /tmp/siw-cc-$$n.env; done
+	@for d in stacks/monitor/*/; do n=$$(basename $$d); \
+	  { cat $$d/monitor.env.example; printf 'MONITOR_BIND=127.0.0.1\nMONITOR_AGENT_BIND=10.0.0.2\nMONITOR_TEXTFILE_DIR=/tmp/siw-cc\nBESZEL_AGENT_LISTEN=10.0.0.2:45876\nNODE_EXPORTER_LISTEN=10.0.0.2:9100\nBESZEL_ADMIN_EMAIL=a@example.com\nBESZEL_ADMIN_PASSWORD=%s\nGRAFANA_ADMIN_PASSWORD=%s\nBESZEL_KEY=k\n' $$(openssl rand -hex 12) $$(openssl rand -hex 12); } \
+	    | sed 's/[[:space:]]*#.*//' > /tmp/siw-cc-m-$$n.env; \
+	  (cd $$d && docker compose --env-file /tmp/siw-cc-m-$$n.env config -q) && echo "compose ok  stacks/monitor/$$n" || { rm -f /tmp/siw-cc-m-$$n.env; exit 1; }; \
+	  if [ -f $$d/compose.host.yml ]; then (cd $$d && docker compose --env-file /tmp/siw-cc-m-$$n.env -f docker-compose.yml -f compose.host.yml config -q) \
+	    && echo "compose ok  stacks/monitor/$$n (host network)" || { rm -f /tmp/siw-cc-m-$$n.env; exit 1; }; fi; rm -f /tmp/siw-cc-m-$$n.env; done
+	@docker run --rm --entrypoint promtool -v "$$PWD/stacks/monitor/prometheus/rules:/r:ro" $$(sed -n "s/^PROMETHEUS_IMAGE=//p" stacks/monitor/prometheus/monitor.env.example) \
+	  check rules /r/vsw.yml >/dev/null && echo "promtool ok stacks/monitor/prometheus/rules" || { echo "promtool check rules FAILED"; exit 1; }
 	@for f in stacks/caddy/conf/Caddyfile stacks/caddy/variants/*.Caddyfile; do \
 	  docker run --rm -e SITE_DOMAIN=example.com -v "$$PWD/$$f:/c/Caddyfile:ro" $${CADDY_IMAGE:-caddy:2.11} \
 	    caddy validate --config /c/Caddyfile --adapter caddyfile >/dev/null 2>&1 \
@@ -69,8 +97,13 @@ compose-check: ## docker compose config for stacks/caddy + stacks/addons, caddy 
 links: ## check relative links and #anchors in all Markdown
 	python3 tests/docs/check-links.py .
 	python3 tests/docs/gen-config-keys.py --check
+	python3 tests/docs/check-config-examples.py .
 
-mermaid: ## render every Mermaid block to /tmp/vsw-mermaid (needs node; downloads mermaid-cli)
+docs-commands: php-install ## every documented command/subcommand/--flag exists (vs --help); every Markdown table row matches its header
+	python3 tests/docs/check-commands.py .
+	python3 tests/docs/check-tables.py .
+
+mermaid: ## render every Mermaid block to /tmp/siw-mermaid (needs node; downloads mermaid-cli)
 	bash tests/docs/render-mermaid.sh
 
 test: ## offline smoke tests (no servers touched)
@@ -79,13 +112,25 @@ test: ## offline smoke tests (no servers touched)
 	bash tests/shell/smoke-addons.sh
 	bash tests/shell/smoke-server.sh
 	bash tests/shell/smoke-net.sh
+	bash tests/shell/smoke-progress.sh
+	bash tests/shell/smoke-monitor.sh
+	python3 stacks/monitor/prometheus/grafana/dashboards.py --check
+	bash examples/run.sh --all
 
-it: ## Docker integration tests: 1.3 -> 1.4 upgrade, privileges, envs, backups; add-ons; server tools on Ubuntu 24.04 (~9 min)
-	bash tests/shell/upgrade-it.sh
-	bash tests/shell/addons-it.sh
-	bash tests/shell/server-it.sh
+it: ## Docker integration tests: upgrade, add-ons, server tools, DB features (verify-full, metrics, migrate-managed, pg-major-upgrade), PITR restore (posix and S3 via Garage + TLS), MySQL/MariaDB binlog replay, a 3-node Garage cluster, monitoring, WireGuard between two hosts (~13 min)
+	bash tests/shell/run-suites.sh tests/shell/upgrade-it.sh tests/shell/addons-it.sh tests/shell/server-it.sh \
+	  tests/shell/db-features-it.sh tests/shell/pitr-it.sh tests/shell/pitr-s3-it.sh tests/shell/mysql-pitr-it.sh \
+	  tests/shell/garage-cluster-it.sh tests/shell/monitor-it.sh tests/shell/wg-it.sh
+
+live-test: ## LIVE, SPENDS MONEY on DigitalOcean: Spaces PITR, server setup over --host, 3-node Garage over a VPC (dry run unless LIVE_ARGS=--yes; docs/live-tests.md). Never in CI
+	bash tests/live/pitr-spaces-live.sh $(LIVE_ARGS)
+	bash tests/live/server-live.sh $(LIVE_ARGS)
+	bash tests/live/garage-live.sh $(LIVE_ARGS)
+
+live-sweep: ## list what a killed live test left on DigitalOcean (LIVE_ARGS=--yes deletes it)
+	bash tests/live/sweep.sh $(LIVE_ARGS)
 
 client-check: ## fail if a .client-denylist term (or a built-in one) is in a tracked file or commit message
 	tests/shell/client-check.sh
 
-ci: lint test client-check php python links compose-check ## the gate CI runs
+ci: secrets-check lint test client-check php python links docs-commands compose-check ## the gate CI runs

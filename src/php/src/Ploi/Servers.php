@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Ploi;
+namespace Simtabi\ServerInfraWorkbench\Ploi;
 
-use Simtabi\VpsServerWorkbench\Http\Transport;
-use Simtabi\VpsServerWorkbench\Ploi\Data\Server;
-use Simtabi\VpsServerWorkbench\Support\Validate;
+use Simtabi\ServerInfraWorkbench\Http\Transport;
+use Simtabi\ServerInfraWorkbench\Ploi\Data\Server;
+use Simtabi\ServerInfraWorkbench\Support\Validate;
 
 final readonly class Servers
 {

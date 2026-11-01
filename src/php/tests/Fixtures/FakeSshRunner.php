@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Fixtures;
+namespace Simtabi\ServerInfraWorkbench\Tests\Fixtures;
 
-use Simtabi\VpsServerWorkbench\Keys\SshRunner;
+use Simtabi\ServerInfraWorkbench\Keys\SshRunner;
 
 /** A pretend server: one authorized_keys file, backups, and scripted ssh behaviour. No processes run. */
 final class FakeSshRunner implements SshRunner

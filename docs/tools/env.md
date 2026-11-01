@@ -1,4 +1,4 @@
-# Laravel `.env` per environment: `workbench env init|check`
+# Laravel `.env` per environment: `siwo env init|check`
 
 `src/shell/env/env.sh` creates and checks a site's `.env` on the web server. It reads and writes values but
 **never prints one**: output is key names only (`+ added`, `~ changed`, `* generated`).
@@ -26,9 +26,9 @@ ssh -t db-1 'sudo /root/docker-db-server-manager.sh env-creds prd --out /root/pr
 (umask 077; ssh db-1 'sudo cat /root/prd-db.env && sudo rm /root/prd-db.env' > ~/prd-db.env)
 
 # from your workstation: write the prd .env on web-1 (values go over as a file, not argv)
-bin/workbench env init --host web-1 --env prd --site app.example.com \
+bin/siwo env init --host web-1 --env prd --site app.example.com \
   --from ~/prd-db.env --url https://app.example.com --set MAIL_MAILER=smtp --dry-run
-bin/workbench env init --host web-1 --env prd --site app.example.com \
+bin/siwo env init --host web-1 --env prd --site app.example.com \
   --from ~/prd-db.env --url https://app.example.com --set MAIL_MAILER=smtp     # type app.example.com
 rm ~/prd-db.env
 ```
@@ -54,8 +54,8 @@ PgBouncer 6432 on prd, `MAIL_MAILER=log` or `LOG_LEVEL=debug` on prd, duplicate 
 ## Check
 
 ```bash
-bin/workbench env check --host web-1 --env prd --site app.example.com      # vs the template + rules
-bin/workbench env check --path ./stg.env --against ./prd.env                # keys only, both ways (local)
+bin/siwo env check --host web-1 --env prd --site app.example.com      # vs the template + rules
+bin/siwo env check --path ./stg.env --against ./prd.env                # keys only, both ways (local)
 ```
 
 Reports keys missing from and extra to the reference, the file mode, and the validation rules above.
@@ -67,4 +67,17 @@ Exit 1 on an error, so it fits a deploy hook or cron.
   what this stack uses (`DB_SSLMODE`, `AWS_ENDPOINT` for Spaces/Garage, `GOTENBERG_URL`,
   `SESSION_SECURE_COOKIE`, `LOG_STACK=daily`).
 - [`config/credentials.env.example`](../../config/credentials.env.example): the workstation credentials file
-  for the platform commands (`~/.config/vps-server-workbench/credentials`, mode 600).
+  for the platform commands (`~/.config/server-infra-workbench/credentials`, mode 600).
+
+## Add-on keys (`--addons`)
+
+`env init --addons` (or `ENV_ADDONS=auto`) also merges the `laravel.env` files the [add-ons](addons.md) wrote on
+that host (`/opt/vsw-addons/*/laravel.env`, from `addon.sh laravel-env <name>`).
+
+- **Why:** the add-on keys (Gotenberg URL and login, S3 keys for Garage or SeaweedFS) used to be pasted into the
+  `.env` by hand, which put secrets on the clipboard and in terminal scrollback.
+- Order: the existing `.env`, then `--from`, then the add-ons, then `--set`, so an explicit `--set` always wins.
+- Only 600/400 files are read; any other mode is skipped with a warning. An empty add-on value (the RustFS key
+  placeholder) never clears a value you already have.
+- The output names the add-ons and the changed keys, never the values. The audit log records `addons=...`.
+

@@ -1,0 +1,4 @@
+services:
+  netdata:
+    network_mode: host
+    ports: !reset []

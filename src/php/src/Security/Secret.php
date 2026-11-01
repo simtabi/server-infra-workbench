@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Security;
+namespace Simtabi\ServerInfraWorkbench\Security;
 
 /**
  * A credential that cannot leak by accident: it prints, dumps, var_exports and json-encodes as "***".

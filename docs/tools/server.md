@@ -1,4 +1,4 @@
-# Server tools: `workbench server ...` and `workbench web diagnose`
+# Server tools: `siwo server ...` and `siwo web diagnose`
 
 Shell tools that run **on a droplet** (or from your workstation with `--host`, which copies the tool plus
 `src/shell/lib/common.sh` over ssh, runs it with `sudo`, and removes the copy). They all follow the same rules:
@@ -7,9 +7,9 @@ Shell tools that run **on a droplet** (or from your workstation with `--host`, w
 |---|---|
 | Plan first | Every run prints what it found and what it would change. `--dry-run` stops there |
 | Confirm | `--yes`, or type `yes`. Production fixes need the **site domain typed**; `--yes` is not enough |
-| Lock | One run per tool at a time (`/run/lock/vsw-<tool>.lock`) |
-| Audit | `/var/log/vps-server-workbench/audit.log`: who, what, outcome. Values are never logged |
-| Backups | Any file replaced is copied to `<file>.bak.<timestamp>` (mode 600) first; writes are atomic |
+| Lock | One run per tool at a time (`/run/lock/vsw-<tool>.lock`; `SIWO_LOCK_DIR` moves it) |
+| Audit | `/var/log/server-infra-workbench/audit.log` (`SIWO_LOG_DIR` moves it; a server set up before the rename keeps `/var/log/vps-server-workbench`): who, what, outcome. Values are never logged |
+| Backups | Any file replaced is copied to `<file>.bak.<timestamp>` (mode 600) first; writes are atomic. In `/etc/apt/*.d` the copy is `<file>.<timestamp>.bak`, which apt skips quietly (`harden` renames older `.bak.<timestamp>` copies there) |
 | Re-runnable | Items already in place report `ok` and are skipped |
 
 Exit codes: `0` fine, `1` a failure was found or a step failed, `2` usage error, `3` not confirmed.
@@ -17,9 +17,9 @@ Exit codes: `0` fine, `1` a failure was found or a step failed, `2` usage error,
 ## `server init`: first boot
 
 ```bash
-bin/workbench server init --host db-1 --role db                 # plan
-bin/workbench server init --host db-1 --role db --yes           # apply (copies init.sh + harden.sh)
-bin/workbench server init --host web-1 --role web --yes         # Ploi web server: timezone, swap, base tools, harden
+bin/siwo server init --host db-1 --role db                 # plan
+bin/siwo server init --host db-1 --role db --yes           # apply (copies init.sh + harden.sh)
+bin/siwo server init --host web-1 --role web --yes         # Ploi web server: timezone, swap, base tools, harden
 ```
 
 | Item | What it does | Why |
@@ -36,9 +36,9 @@ does only the generic items.
 ## `server inventory`
 
 ```bash
-bin/workbench server inventory --host db-1 --pull --client acme   # -> local/acme/inventory/db-1/ (gitignored)
-bin/workbench server inventory --json                             # on the server, to stdout
-bin/workbench server inventory --host db-1 --install-cron --yes   # daily 05:17 into /var/lib/vps-server-workbench/inventory
+bin/siwo server inventory --host db-1 --pull --client acme   # -> local/acme/inventory/db-1/ (gitignored)
+bin/siwo server inventory --json                             # on the server, to stdout
+bin/siwo server inventory --host db-1 --install-cron --yes   # daily 05:17 into /var/lib/server-infra-workbench/inventory
 ```
 
 Records OS, kernel, timezone, pending upgrades and reboot, CPU/RAM/swap/disk, IPv4 addresses, listening TCP
@@ -55,9 +55,9 @@ Inventories contain IPs and hostnames: they stay under `local/<client>/` or `inv
 ## `server harden`
 
 ```bash
-bin/workbench server harden --host db-1                 # plan only
-bin/workbench server harden --host db-1 --yes           # apply
-bin/workbench server harden --host web-1 --role web --check   # exit 1 if anything would change (cron/CI)
+bin/siwo server harden --host db-1                 # plan only
+bin/siwo server harden --host db-1 --yes           # apply
+bin/siwo server harden --host web-1 --role web --check   # exit 1 if anything would change (cron/CI)
 ```
 
 | Item | What it does | Why |
@@ -67,6 +67,7 @@ bin/workbench server harden --host web-1 --role web --check   # exit 1 if anythi
 | `fail2ban` | sshd jail: 5 failures in 10 min, 1 h ban, systemd backend | Fewer brute-force attempts and less log noise |
 | `sysctl` | `/etc/sysctl.d/90-workbench.conf`: syncookies, rp_filter, no redirects/source routing, `kptr_restrict`, `dmesg_restrict` | Drops spoofed and redirected packets |
 | `journald` | Cap at 500 MB, one month | An uncapped journal can fill a small disk and stop the DB |
+| `dockergroup` | Reports non-root members of the `docker` group as a warning. `--fix-docker-group` removes them (`gpasswd -d`, after the usual confirmation); `--docker-allow a,b` keeps intended users | The `docker` group is root without a password: `docker run -v /:/host` owns the server, so a leaked deploy key becomes root. Reporting by default keeps `harden --yes` from breaking a workflow that relies on it |
 | `firewall` | Only with `--firewall` (`--allow 80,443`): ufw allows OpenSSH first, then default-deny inbound. **Skipped on Ploi servers** (Ploi owns ufw) | Defence in depth behind the DO cloud firewall |
 
 **Lockout guard:** the `ssh` item is refused when neither root nor any `/home/*` user has an `authorized_keys`
@@ -75,14 +76,14 @@ entry. After applying, keep the session open and test a new login. If you do get
 
 Docker-published ports bypass ufw (Docker writes its own iptables rules). `harden` warns when a container
 publishes on `0.0.0.0`. Bind DB ports to the private IP (the manager does) and use a DO cloud firewall
-(`workbench do firewall-apply db`).
+(`siwo do firewall-apply db`).
 
 ## `server update --reboot-window`
 
 ```bash
-bin/workbench server update --host db-1                                   # plan: what is upgradable, reboot pending?
-bin/workbench server update --host db-1 --yes --reboot-window 02:00-04:00 # upgrade; reboot inside the window
-bin/workbench server update --host db-1 --yes --no-reboot --backup-first  # manager backup, upgrade, never reboot
+bin/siwo server update --host db-1                                   # plan: what is upgradable, reboot pending?
+bin/siwo server update --host db-1 --yes --reboot-window 02:00-04:00 # upgrade; reboot inside the window
+bin/siwo server update --host db-1 --yes --no-reboot --backup-first  # manager backup, upgrade, never reboot
 ```
 
 - Reboots only when `/var/run/reboot-required` exists. Inside the window: in 1 minute. Outside: scheduled
@@ -97,9 +98,9 @@ bin/workbench server update --host db-1 --yes --no-reboot --backup-first  # mana
 ## `web diagnose`
 
 ```bash
-bin/workbench web diagnose --host web-1 --site app.example.com              # read-only
-bin/workbench web diagnose --host web-1 --site app.example.com --fix --dry-run
-bin/workbench web diagnose --host web-1 --site app.example.com --env prd --fix   # asks you to type app.example.com
+bin/siwo web diagnose --host web-1 --site app.example.com              # read-only
+bin/siwo web diagnose --host web-1 --site app.example.com --fix --dry-run
+bin/siwo web diagnose --host web-1 --site app.example.com --env prd --fix   # asks you to type app.example.com
 ```
 
 Checks (the `.env` is read but no value is ever printed): site dir and `artisan`; `.env` exists and is
@@ -120,8 +121,9 @@ Postgres (5432), the DO cloud firewall or ufw, or the DB containers being down. 
 
 ## Testing
 
-`tests/shell/smoke-server.sh` (part of `make test`) runs every tool against a fake root (`VSW_SYSROOT`)
+`tests/shell/smoke-server.sh` (part of `make test`) runs every tool against a fake root (`SIWO_SYSROOT`)
 with stub commands on `PATH`. `tests/shell/server-it.sh` (part of `make it`) runs `init`, `harden`,
-`inventory`, `update --dry-run` and `env` for real as root in a throwaway Ubuntu 24.04 container: real apt,
+`inventory`, `update --dry-run` and `env` for real as root in a throwaway Ubuntu 26.04 container (`SERVER_IT_IMAGE=ubuntu:24.04` for the previous LTS): real apt,
 real `sshd -t`/`sshd -T` (including the rollback of a broken drop-in), real audit log and cron install.
-Swap, the Docker install and `--host` are covered by the offline stubs only.
+Swap, the Docker install and `--host` are covered by the offline stubs here, and for real on a throwaway
+droplet by the opt-in `server-live` ([live tests](../live-tests.md)).

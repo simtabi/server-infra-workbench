@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve `simtabi/vps-server-workbench`. Please read the
+Thanks for helping improve `simtabi/server-infra-workbench`. Please read the
 [Code of Conduct](CODE_OF_CONDUCT.md) first, and report security issues as described in
 [SECURITY.md](SECURITY.md), not in public issues.
 
@@ -26,11 +26,18 @@ Where things go and how to name them: [docs/structure.md](docs/structure.md#wher
 - **PHP**: `make php`: Pint (`--test`), PHPStan at level max with strict rules and no baseline, PHPUnit.
 - **Python**: `make python`.
 - **Docs**: `make links` (relative links and anchors).
+- **Secrets**: `make secrets-check` (repo scanner + gitleaks over the full history). `make ci` runs it.
+- **Documented commands**: `make docs-commands` checks every `bin/siwo` / `src/shell` command, subcommand
+  and `--flag` in the Markdown against the tool's own `--help`. Rename a flag and the docs fail CI.
+- **Same gate as CI**: `make ci-local` runs `make ci` with the pinned shellcheck image (`SHELLCHECK_VERSION`).
 
 ## Rules
 
 - **No secrets**, ever: not in code, tests, examples, docs or commit messages. Use obvious placeholders
-  (`<token>`, `203.0.113.10`, `example.com`).
+  (`<token>`, `<generated>`, `203.0.113.10`, `example.com`).
+- **No hardcoded passwords, not even test ones.** Generate them per run (`openssl rand -hex 12` in shell,
+  `self::secret()`/`self::fake()` in PHP tests, `secrets.token_urlsafe()` in Python). See
+  [docs/security.md](docs/security.md#secrets-in-the-repository-generated-never-written-down).
 - **No project names outside `examples/` and `CHANGELOG.md`**; `make test` enforces it.
 - **Tests never touch the network or a real server.** PHP tests use the mock PSR-18 client in
   `src/php/tests/Fixtures`; shell tests stub `docker`/`ssh`.

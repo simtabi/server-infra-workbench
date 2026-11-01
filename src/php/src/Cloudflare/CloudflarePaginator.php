@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Cloudflare;
+namespace Simtabi\ServerInfraWorkbench\Cloudflare;
 
-use Simtabi\VpsServerWorkbench\Exception\ApiException;
-use Simtabi\VpsServerWorkbench\Http\Paginator;
-use Simtabi\VpsServerWorkbench\Support\Data;
+use Simtabi\ServerInfraWorkbench\Exception\ApiException;
+use Simtabi\ServerInfraWorkbench\Http\Paginator;
+use Simtabi\ServerInfraWorkbench\Support\Data;
 
 /** Cloudflare v4: {success, errors, result, result_info: {page, total_pages}}. */
 final class CloudflarePaginator implements Paginator

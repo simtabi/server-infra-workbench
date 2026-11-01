@@ -1,7 +1,7 @@
 # High availability
 
 What it takes to keep the app up when a droplet, a disk or a region fails, which parts this repo automates and
-which are documented steps. Pick a profile with `bin/workbench configure` ([profiles](reference/profiles.md));
+which are documented steps. Pick a profile with `bin/siwo configure` ([profiles](reference/profiles.md));
 `production-ha` sets up the plan below. The database topologies are compared in
 [Database environments](database-environments.md#topologies).
 

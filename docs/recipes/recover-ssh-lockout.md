@@ -42,7 +42,7 @@ bash /root/fixkeys.sh --version      # prints: fixkeys 2.0.0
 ```
 
 If pasting a long text is unreliable, the server may still reach GitHub:
-`curl -fsSLo /root/fixkeys.sh https://raw.githubusercontent.com/simtabi/vps-server-workbench/main/src/shell/ssh/fixkeys.sh`.
+`curl -fsSLo /root/fixkeys.sh https://raw.githubusercontent.com/simtabi/server-infra-workbench/main/src/shell/ssh/fixkeys.sh`.
 
 ## 3. Diagnose, then fix
 
@@ -72,14 +72,14 @@ bash fixkeys.sh --root /mnt --user root add 'ssh-ed25519 AAAA... me@laptop'
 ```
 
 `--root` reads users and owners from `/mnt/etc/passwd` (numeric ids, so ownership is right on the real
-system) and writes the audit line to `/mnt/var/log/vps-server-workbench/audit.log`. `sshd -T` can't run
+system) and writes the audit line to `/mnt/var/log/server-infra-workbench/audit.log`. `sshd -T` can't run
 against a mounted disk, so it reads `/mnt/etc/ssh/sshd_config` and its drop-ins instead. Switch back to
 *Boot from Hard Drive* and power-cycle.
 
 ## Prevent the next one
 
-- `workbench server harden` refuses to turn passwords off when no `authorized_keys` entry exists and rolls
+- `siwo server harden` refuses to turn passwords off when no `authorized_keys` entry exists and rolls
   back a drop-in that fails `sshd -t`. Keep a second session open when changing ssh.
-- Remove keys with `workbench keys server remove`: it won't remove the key you are logged in with, and it
+- Remove keys with `siwo keys server remove`: it won't remove the key you are logged in with, and it
   tests a fresh login after every change.
 - Keep the provider account's console access (and 2FA recovery codes) somewhere you can reach.

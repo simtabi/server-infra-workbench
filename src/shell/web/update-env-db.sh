@@ -35,7 +35,9 @@ ENV_FILE="" SITE="" FROM="" REMOTE="" BACKUP=1 DRY=0
 SETS=()
 
 die()   { printf '!! %s\n' "$*" >&2; exit 1; }
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
+# usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
+# title box, so --help printed one line; awk counts the rules instead.
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,""); print}' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in

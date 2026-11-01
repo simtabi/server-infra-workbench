@@ -1,23 +1,27 @@
-# `bin/workbench` — the command line
+# `bin/siwo` — the command line
 
 One entry point for everything in the repo. It only resolves paths and execs: shell tools keep their own
 flags, platform commands run on the [PHP core](platform-api.md), and `py` runs the [Python package](python.md).
 
 ```bash
-bin/workbench list                         # every tool and where it lives
-bin/workbench help                         # this summary;  bin/workbench help do|cf|ploi|gcp  for one area
+bin/siwo list                         # every tool and where it lives
+bin/siwo help                         # this summary;  bin/siwo help do|cf|ploi|gcp|github  for one area
 ```
 
-Optional: put it on your `PATH` with `ln -s "$PWD/bin/workbench" ~/.local/bin/workbench`.
+Optional: put it on your `PATH` with `ln -s "$PWD/bin/siwo" ~/.local/bin/siwo`.
 
-## Shell tools: `workbench <area> <tool>`
+`siwo` is short for Server + Infrastructure + WOrkbench. Its old name `bin/workbench` still works: it prints a
+one-line deprecation notice (hidden by `SIWO_QUIET=1`) and forwards everything to `bin/siwo`. It goes away after
+1.0 ([ADR 0014](../adr/0014-rename-to-server-infra-workbench.md)).
+
+## Shell tools: `siwo <area> <tool>`
 
 Runs `src/shell/<area>/<tool>.sh` with the remaining arguments, unchanged.
 
 ```bash
-bin/workbench db remote-run --host db-01 --expect-ip 10.0.0.5 -- doctor
-bin/workbench web check-db-reach 10.0.0.5
-bin/workbench tunnels db-tunnel --help
+bin/siwo db remote-run --host db-01 --expect-ip 10.0.0.5 -- doctor
+bin/siwo web check-db-reach 10.0.0.5
+bin/siwo tunnels db-tunnel --help
 ```
 
 | Command | Page |
@@ -27,53 +31,63 @@ bin/workbench tunnels db-tunnel --help
 | `ssh fixkeys` (console lockout recovery; normally pasted, not run through the dispatcher) | [ssh-keys.md](ssh-keys.md) |
 | `addon plan\|install\|status ...` | [addons.md](addons.md) |
 | `net wireguard setup\|status\|remove` | [net.md](net.md) |
+| `monitor plan\|install\|status\|doctor\|targets\|tunnel\|remove ...` | [monitor.md](monitor.md) |
+| `status [--host H ...] [--url U] [--json]` | [monitor.md](monitor.md#siwo-status) |
 
 Area and tool names must match `[a-z0-9-]+`, so nothing outside `shell/` can be reached.
 
-## Platform APIs: `workbench do|cf|ploi|gcp`
+## Platform APIs: `siwo do|cf|ploi|gcp|github`
 
 Requires PHP 8.4+ and `composer install --working-dir=src/php` (the dispatcher says so if either is missing).
+The table lists the common commands; the full reference per provider, with the least-privilege token for each
+command, is in [docs/providers](../providers/README.md) ([DigitalOcean](../providers/digitalocean.md),
+[Cloudflare](../providers/cloudflare.md), [GCP](../providers/gcp.md), [GitHub](../providers/github.md),
+[Ploi](../providers/ploi.md)), and `siwo help <area>` prints it.
 
 | Command | What it does |
 |---|---|
-| `workbench do droplets [--tag T]` | List droplets: id, name, status, region, size, private and public IPv4 |
-| `workbench do droplet <id>` | One droplet |
-| `workbench do snapshots [<droplet-id>]` | All droplet snapshots, or one droplet's |
-| `workbench do snapshot <droplet-id> [--name N] [--wait] [--timeout S]` | **Write.** Snapshot a droplet (default name `workbench-<id>-<UTC time>`) |
-| `workbench do snapshot-delete <snapshot-id>` | **Destructive.** Needs `--force` |
-| `workbench do account` | Check the token (prints the account record) |
-| `workbench do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I] [--vpc UUID] [--tag T] [--backups] [--user-data FILE]` | **Write.** Create a droplet; a no-op when one with that name exists |
-| `workbench do resize <id> --size S [--disk] [--timeout S]` | **Write, downtime.** Shut down (falls back to power off), resize, power back on (always attempted, even when the resize fails). CPU/RAM-only by default so you can size back down; `--disk` grows the disk permanently and needs `--force`. Snapshot first |
-| `workbench do alerts [list]` | Monitoring alert policies |
-| `workbench do alerts standard --email a@x (--droplet ID[,ID] \| --tag T)` | **Write.** CPU > 85% for 10m, memory > 90% for 10m, disk > 85% for 5m. Creates only the missing ones (matched by description), so it is safe to rerun |
-| `workbench do alerts create --type cpu\|memory\|disk\|load1\|load5\|load15\|bandwidth-out --value N [--window 5m\|10m\|30m\|1h] [--below] --email a@x (--droplet ID \| --tag T)` | **Write.** One custom policy |
-| `workbench do alerts delete <uuid>` | **Destructive.** Needs `--force` |
-| `workbench do firewalls` | Cloud firewalls (`WORLD-OPEN` marks non-web ports open to everyone) |
-| `workbench do firewall-apply db\|web --vpc VPC_ID\|CIDR [--ssh-from CIDR] [--ports P] [--droplet ID] [--tag T]` | **Write.** Create or update a preset firewall |
-| `workbench do firewall-delete <id>` | **Destructive.** Needs `--force` |
-| `workbench do uptime [checks]` / `state <id>` / `alerts <id>` | Uptime checks, their per-region state and alerts |
-| `workbench do uptime check-create <name> <url>` / `alert-create <id> down\|down_global\|latency\|ssl_expiry --email a@x` | **Write.** Uptime checks and their alerts |
-| `workbench do uptime check-delete <id>` | **Destructive.** Needs `--force` |
-| `workbench cf zones` | List zones |
-| `workbench cf dns list <zone> [--type T] [--name N]` | DNS records in a zone (name or id) |
-| `workbench cf dns upsert <zone> <type> <name> <content> [--ttl 1] [--proxied] [--priority P] [--comment C]` | **Write.** Create, update, or report "no change". Short names expand (`db` → `db.example.com`); refuses when several records match |
-| `workbench cf dns delete <zone> <record-id>` | **Destructive.** Needs `--force` |
-| `workbench cf verify` | Check the token is active |
-| `workbench ploi servers` / `server <id>` / `sites <server-id>` | Read servers and sites |
-| `workbench ploi deploy <server-id> <site-id>` | **Write.** Run the site's deploy script |
-| `workbench ploi site-create <server-id> <domain>` / `site-delete` | **Write** / **destructive** |
-| `workbench ploi deploy-script <server-id> <site-id>` / `deploy-script-set ... --file deploy.sh` | Print, or replace (no-op when identical) |
-| `workbench ploi daemons <server-id>` / `daemon-create --command C` / `daemon-delete` | Queue workers and other daemons |
-| `workbench keys ...` | SSH keys on provider accounts and servers; see `workbench help keys` |
-| `workbench health <url>... [--expect 200] [--contains T] [--max-ms 1500]` | Health-endpoint check; exit 1 when any fails |
-| `workbench gcp instances [--zone Z]` | Instances, all zones unless `--zone` |
-| `workbench gcp snapshots` / `firewalls` | Snapshots; firewall rules (`WORLD-OPEN` marks rules open to `0.0.0.0/0`) |
-| `workbench gcp snapshot <zone> <disk> [--name N] [--wait]` | **Write.** Snapshot a persistent disk |
-| `workbench credentials` | Where each credential comes from (`env`, `file`, `missing`); never prints values |
-| `workbench version` | Library and PHP version |
+| `siwo do droplets [--tag T]` | List droplets: id, name, status, region, size, private and public IPv4 |
+| `siwo do droplet <id>` | One droplet |
+| `siwo do snapshots [<droplet-id>]` | All droplet snapshots, or one droplet's |
+| `siwo do snapshot <droplet-id> [--name N] [--wait] [--timeout S]` | **Write.** Snapshot a droplet (default name `workbench-<id>-<UTC time>`) |
+| `siwo do snapshot-delete <snapshot-id>` | **Destructive.** Needs `--force` |
+| `siwo do account` | Check the token (prints the account record) |
+| `siwo do droplet-create <name> --region R --size S --ssh-keys ID[,ID] [--image I] [--vpc UUID] [--tag T] [--backups] [--user-data FILE]` | **Write.** Create a droplet; a no-op when one with that name exists. Image: `--image`, else `SIWO_DROPLET_IMAGE`, else `ubuntu-26-04-x64` (the newest Ubuntu LTS); `--image latest` asks the API for the newest Ubuntu LTS ([why](#default-droplet-image)) |
+| `siwo do resize <id> --size S [--disk] [--timeout S]` | **Write, downtime.** Shut down (falls back to power off), resize, power back on (always attempted, even when the resize fails). CPU/RAM-only by default so you can size back down; `--disk` grows the disk permanently and needs `--force`. Snapshot first |
+| `siwo do alerts [list]` | Monitoring alert policies |
+| `siwo do alerts standard --email a@x (--droplet ID[,ID] \| --tag T)` | **Write.** CPU > 85% for 10m, memory > 90% for 10m, disk > 85% for 5m. Creates only the missing ones (matched by description), so it is safe to rerun |
+| `siwo do alerts create --type cpu\|memory\|disk\|load1\|load5\|load15\|bandwidth-out --value N [--window 5m\|10m\|30m\|1h] [--below] --email a@x (--droplet ID \| --tag T)` | **Write.** One custom policy |
+| `siwo do alerts delete <uuid>` | **Destructive.** Needs `--force` |
+| `siwo do firewalls` | Cloud firewalls (`WORLD-OPEN` marks non-web ports open to everyone) |
+| `siwo do firewall-apply db\|web --vpc VPC_ID\|CIDR [--ssh-from CIDR] [--ports P] [--droplet ID] [--tag T]` | **Write.** Create or update a preset firewall |
+| `siwo do firewall-delete <id>` | **Destructive.** Needs `--force` |
+| `siwo do uptime [checks]` / `state <id>` / `alerts <id>` | Uptime checks, their per-region state and alerts |
+| `siwo do uptime check-create <name> <url>` / `alert-create <id> down\|down_global\|latency\|ssl_expiry --email a@x` | **Write.** Uptime checks and their alerts |
+| `siwo do uptime check-delete <id>` | **Destructive.** Needs `--force` |
+| `siwo cf zones` | List zones |
+| `siwo cf dns list <zone> [--type T] [--name N]` | DNS records in a zone (name or id) |
+| `siwo cf dns upsert <zone> <type> <name> <content> [--ttl 1] [--proxied] [--priority P] [--comment C]` | **Write.** Create, update, or report "no change". Short names expand (`db` → `db.example.com`); refuses when several records match |
+| `siwo cf dns delete <zone> <record-id>` | **Destructive.** Needs `--force` |
+| `siwo cf verify` | Check the token is active |
+| `siwo ploi servers` / `server <id>` / `sites <server-id>` | Read servers and sites |
+| `siwo ploi deploy <server-id> <site-id>` | **Write.** Run the site's deploy script |
+| `siwo ploi site-create <server-id> <domain>` / `site-delete` | **Write** / **destructive** |
+| `siwo ploi deploy-script <server-id> <site-id>` / `deploy-script-set ... --file deploy.sh` | Print, or replace (no-op when identical) |
+| `siwo ploi daemons <server-id>` / `daemon-create --command C` / `daemon-delete` | Queue workers and other daemons |
+| `siwo keys ...` | SSH keys on provider accounts and servers; see `siwo help keys` |
+| `siwo health <url>... [--expect 200] [--contains T] [--max-ms 1500]` | Health-endpoint check; exit 1 when any fails |
+| `siwo gcp instances [--zone Z]` | Instances, all zones unless `--zone` |
+| `siwo gcp snapshots` / `firewalls` | Snapshots; firewall rules (`WORLD-OPEN` marks rules open to `0.0.0.0/0`) |
+| `siwo gcp snapshot <zone> <disk> [--name N] [--wait]` | **Write.** Snapshot a persistent disk |
+| `siwo github runs --repo owner/name` / `run <run-id> --repo owner/name --wait` | Workflow runs; wait for one to finish |
+| `siwo github secrets set <NAME> --repo owner/name --value-file FILE` | **Write.** Sealed locally (libsodium); never from argv |
+| `siwo credentials` | Where each credential comes from (`env`, `file`, `missing`); never prints values |
+| `siwo version` | Library and PHP version |
 
 GCP commands take `--project P` (else `GCP_PROJECT`, else the service-account key's project).
-`digitalocean`, `cloudflare` and `gcloud` work as aliases of `do`, `cf` and `gcp`.
+`digitalocean`, `cloudflare`, `gcloud` and `gh` work as aliases of `do`, `cf`, `gcp` and `github`.
+One-time secrets (Spaces keys, Origin CA keys, generated database passwords) are written to the `--out` file
+(mode 600, refused inside the git checkout) and never printed.
 
 ### Flags
 
@@ -100,32 +114,76 @@ Unknown options and malformed ids, zones, names, IPs or TTLs are rejected before
 ### Examples
 
 ```bash
-bin/workbench credentials
-bin/workbench do droplets --tag db --json | jq -r '.[] | "\(.name) \(.privateIpv4)"'
-bin/workbench do snapshot 123456 --name db-pre-upgrade --dry-run      # see exactly what would be sent
-bin/workbench do snapshot 123456 --name db-pre-upgrade --yes --wait   # take it and wait for completion
-bin/workbench do resize 123456 --size s-2vcpu-4gb --dry-run          # plan: shutdown, resize, power on
-bin/workbench do resize 123456 --size s-2vcpu-4gb --yes              # ~1-5 min of downtime (estimate)
-bin/workbench do alerts standard --email ops@example.com --tag db --dry-run
-bin/workbench cf dns upsert example.com A db 203.0.113.10 --ttl 300 --dry-run
-bin/workbench cf dns upsert example.com A db 203.0.113.10 --ttl 300 --yes
-bin/workbench ploi deploy 42 1001 --yes
-bin/workbench gcp firewalls --project my-project
+bin/siwo credentials
+bin/siwo do droplets --tag db --json | jq -r '.[] | "\(.name) \(.privateIpv4)"'
+bin/siwo do snapshot 123456 --name db-pre-upgrade --dry-run      # see exactly what would be sent
+bin/siwo do snapshot 123456 --name db-pre-upgrade --yes --wait   # take it and wait for completion
+bin/siwo do resize 123456 --size s-2vcpu-4gb --dry-run          # plan: shutdown, resize, power on
+bin/siwo do resize 123456 --size s-2vcpu-4gb --yes              # ~1-5 min of downtime (estimate)
+bin/siwo do alerts standard --email ops@example.com --tag db --dry-run
+bin/siwo cf dns upsert example.com A db 203.0.113.10 --ttl 300 --dry-run
+bin/siwo cf dns upsert example.com A db 203.0.113.10 --ttl 300 --yes
+bin/siwo ploi deploy 42 1001 --yes
+bin/siwo gcp firewalls --project my-project
 ```
 
+### Default droplet image
+
+New droplets get the **newest Ubuntu LTS** (`ubuntu-26-04-x64` today). Why:
+
+- A new server should start on the release with the longest support window left; starting on an older
+  LTS only brings its upgrade date closer.
+- The default lives in one place, `Droplets::DEFAULT_IMAGE` in the PHP core, so the help, the docs and the
+  tests cannot disagree (a unit test fails when they do). Bump it when a new LTS ships (April of even years),
+  after `make it` passes on that release.
+- It is a constant, not a live lookup, so a dry run shows exactly what will be created and the default
+  never changes under you between a plan and the real run.
+
+| To get | Do |
+|---|---|
+| The default (newest LTS known to this release) | nothing |
+| A fixed image on this workstation, e.g. to match servers still on 24.04 | `SIWO_DROPLET_IMAGE=ubuntu-24-04-x64` in the environment or the credentials file |
+| A different image for one droplet | `--image <slug>` (wins over the setting) |
+| Whatever is newest on DigitalOcean right now | `--image latest` or `SIWO_DROPLET_IMAGE=latest` (one read-only `GET /v2/images`; falls back to the default) |
+
 In your own shell scripts, quote the area when it follows another word that bash treats as a keyword
-(`bin/workbench 'do' droplets`), or use the `digitalocean` alias; shellcheck flags a bare `do` (SC1010).
+(`bin/siwo 'do' droplets`), or use the `digitalocean` alias; shellcheck flags a bare `do` (SC1010).
 
-Every write, dry runs included, is appended to the audit log (`~/.local/state/vps-server-workbench/audit.log`;
-`VSW_AUDIT_LOG=off` to disable). See [platform-api.md](platform-api.md#audit-log).
+Every write, dry runs included, is appended to the audit log (`~/.local/state/server-infra-workbench/audit.log`;
+`SIWO_AUDIT_LOG=off` to disable). See [platform-api.md](platform-api.md#audit-log).
 
-## Python: `workbench py`
+## Python: `siwo py`
 
 ```bash
-bin/workbench py ping 10.0.0.5 6432 --json
+bin/siwo py ping 10.0.0.5 6432 --json
 ```
 
 See [python.md](python.md).
+
+## Progress output
+
+Long steps show what is running, for how long, and (where the total is known) a bar with an ETA:
+manager `upgrade` (numbered steps), `backup` per engine, `offsite` encrypt/upload, `restore-test`, the
+snapshot wait, `server update|init` apt runs, the DigitalOcean action waits (snapshot, resize, power) in the
+PHP core, the Python plan finder, and `make it` (one line per suite plus a summary table).
+
+| Setting | Effect |
+|---|---|
+| `SIWO_PROGRESS=auto` (default) | spinner/bar on a terminal, one plain line per step otherwise (logs, cron, CI) |
+| `SIWO_PROGRESS=tty` / `plain` / `off` | force a mode |
+| `--quiet` / `-q` or `SIWO_QUIET=1` | no progress lines; errors and results still print |
+| `SIWO_VERBOSE=1` | on a terminal, also show the output of wrapped commands (normally replayed only on failure) |
+| `NO_COLOR=1` | no colour (https://no-color.org) |
+
+Why it is built this way:
+
+- Progress goes to **stderr**, so `--json` and other stdout stays parseable.
+- Non-terminal output never contains `\r` or escape codes: cron mail and log files stay readable (tested).
+- A wrapped shell step runs as a background job and is waited on, so `set -e` still applies inside it
+  (`if cmd` or `cmd ||` would silently switch errexit off).
+- The DB manager is uploaded as one file, so it embeds a copy of `src/shell/lib/progress.sh` between
+  `# >>> progress.sh` markers; `tests/shell/smoke-progress.sh` fails when the copy drifts.
+- The PHP waits get progress through a decorated `Sleeper`, so no API client changed.
 
 ## Checks
 

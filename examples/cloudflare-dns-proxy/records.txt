@@ -1,0 +1,7 @@
+# zone          type   name                    content                 mode      comment
+# mode: proxied = through Cloudflare (web only) | dns = DNS-only (grey cloud). cf-dns.sh refuses anything else.
+# Never put a private (VPC) address or a DB name in public DNS: the apps reach the DB by its private IP.
+example.com     A      example.com             203.0.113.10            proxied   web-01 (apex)
+example.com     CNAME  www.example.com         example.com             proxied   www -> apex
+example.com     A      app.example.com         203.0.113.10            proxied   web-01
+example.com     A      ssh-web-01.example.com  203.0.113.10            dns       admin SSH by name; CF cannot proxy port 22

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
-use Simtabi\VpsServerWorkbench\Exception\ConfirmationRequiredException;
-use Simtabi\VpsServerWorkbench\Exception\TransportException;
-use Simtabi\VpsServerWorkbench\Exception\ValidationException;
-use Simtabi\VpsServerWorkbench\Safety\AuditLog;
-use Simtabi\VpsServerWorkbench\Safety\PendingAction;
-use Simtabi\VpsServerWorkbench\Security\Redactor;
+use Simtabi\ServerInfraWorkbench\Exception\ConfirmationRequiredException;
+use Simtabi\ServerInfraWorkbench\Exception\TransportException;
+use Simtabi\ServerInfraWorkbench\Exception\ValidationException;
+use Simtabi\ServerInfraWorkbench\Safety\AuditLog;
+use Simtabi\ServerInfraWorkbench\Safety\PendingAction;
+use Simtabi\ServerInfraWorkbench\Security\Redactor;
 
 /**
  * ~/.ssh/authorized_keys on a running server, over ssh. Because this file decides who can log in:
@@ -105,7 +105,7 @@ final class ServerKeys
     public function remove(string $selector, bool $force = false): PendingAction
     {
         $text = $this->read();
-        $entry = AuthorizedKeys::select($text, $selector) ?? throw new ValidationException(sprintf('no single key matches "%s" (use the number from: workbench keys server list)', $selector));
+        $entry = AuthorizedKeys::select($text, $selector) ?? throw new ValidationException(sprintf('no single key matches "%s" (use the number from: siwo keys server list)', $selector));
         $key = $entry['key'];
         $session = $this->sessionFingerprint();
         if ($session !== null && $session === $key->fingerprint()) {

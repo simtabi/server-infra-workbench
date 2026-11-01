@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Keys;
+namespace Simtabi\ServerInfraWorkbench\Keys;
 
 use Psr\Http\Message\RequestInterface;
-use Simtabi\VpsServerWorkbench\Http\Authenticator;
-use Simtabi\VpsServerWorkbench\Security\Secret;
+use Simtabi\ServerInfraWorkbench\Http\Authenticator;
+use Simtabi\ServerInfraWorkbench\Security\Secret;
 
 /** A token in any header ("Authorization: Bearer x", "X-Auth-Token: x", ...), plus fixed extra headers. */
 final readonly class HeaderToken implements Authenticator

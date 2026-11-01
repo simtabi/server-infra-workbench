@@ -5,7 +5,7 @@ there. Every row has the **command**, how to **verify** it worked, and **why** i
 
 Conventions:
 
-- `M` is the DB manager on the DB server: `sudo /root/docker-db-server-manager.sh`. `bin/workbench` runs on your
+- `M` is the DB manager on the DB server: `sudo /root/docker-db-server-manager.sh`. `bin/siwo` runs on your
   workstation (never paste workstation commands into a server shell: see [lessons](../lessons-learned.md#ssh-and-access)).
 - `<db>` / `<web>` are ssh aliases; `<client>` is the gitignored `local/<client>/` folder.
 - Plan first: every write has `--dry-run` (or prints a plan and asks). Read the plan, then run it for real.

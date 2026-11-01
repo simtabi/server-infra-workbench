@@ -6,6 +6,292 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (project renamed: server-infra-workbench)
+
+- The project is now `server-infra-workbench` (was `vps-server-workbench`); it covers far more than one VPS
+  ([ADR 0014](docs/adr/0014-rename-to-server-infra-workbench.md)). GitHub redirects the old URLs.
+  - Composer package `simtabi/server-infra-workbench`, PHP namespace `Simtabi\ServerInfraWorkbench`, Python
+    package `server_infra_workbench`.
+  - The command is `siwo` (Server + Infrastructure + WOrkbench): `bin/siwo`, console script `siwo-py`,
+    `src/php/bin/siwo-php`. `bin/workbench` is a deprecated shim that prints one notice and runs `bin/siwo`;
+    `workbench-py` still works. Help text, docs, examples, runbooks and checklists use `siwo`, and
+    `make docs-commands` fails on `bin/workbench` in the docs. `remote-run.sh --snapshot-with siwo`
+    (`workbench` still accepted).
+  - Environment variables are `SIWO_*` (the command's name). An unset `SIWO_X` falls back to `VSW_X` and prints
+    one deprecation note.
+  - Credentials, `keys.json` and the audit log live under `~/.config|~/.local/state/server-infra-workbench/`;
+    an existing `vps-server-workbench` directory keeps being used while the new one does not exist. Server
+    directories (`/etc`, `/var/lib`, `/var/log`, `/usr/local/lib`) follow the same rule (`siw_path`).
+  - Temporary files use `siw-`; live tests tag `siw-livetest` with prefix `siwlt-`, and `tests/live/sweep.sh`
+    still sweeps the old `vsw-livetest` / `vswlt-` names.
+  - Short `vsw` names already on servers are kept (database roles, `vsw_*` metrics and dashboards,
+    `/opt/vsw-*`, `/etc/vsw-*.conf`, the `vsw_db` network); see
+    [naming](docs/reference/naming.md#frozen-identifiers). `# Managed by` headers get the new name on the
+    next re-run.
+
+### Fixed (pre-release audit, 2026-11-01)
+
+- Deploy script on zero-downtime sites: `queue:restart`, `POST_DEPLOY_CMDS` and `HEALTHCHECK_CMD` ran before
+  Ploi made the release live, so workers restarted on the old code and the health check tested the old
+  release. The main script now builds the caches in the release and stops; the same script with
+  `STAGE="post"` in Ploi's post-deploy script runs the live steps (`examples/_shared/ploi-script.sh --post`).
+  In-place sites are unchanged.
+- `configure` checked web and DB on one droplet as two machines (the OS counted twice, each role against its
+  own size). `SINGLE_DROPLET=1` (or equal `DB_PRIVATE_IP`/`WEB_PRIVATE_IP`) now checks one `db+web` node of
+  `DB_DROPLET_MB`, with add-ons and monitoring placed on either role added in; stg/prd on it is flagged.
+
+### Added (pre-release audit, 2026-11-01)
+
+- `configure`: `CLOUD=gcp` checks GCP region names (a zone is refused with its region; an unknown well-formed
+  region is an info), suggests E2 machine types, defaults the off-site endpoint to GCS, allows a second region
+  without WireGuard (global VPC network) and refuses the DO-only `DO_ALERTS`/`UPTIME_CHECKS`.
+
+### Added
+
+- Platform APIs (P3 provider audit): full REST coverage for five providers on the shared transport, each with a
+  guide in [docs/providers](docs/providers/README.md) (why, least-privilege token per command, command reference,
+  checklist, lessons learned):
+  - DigitalOcean: `do volumes` (grow only), `do vpcs` (default handling; refuses deleting the default or a VPC with
+    members), `do spaces-keys`, `do domains`, `do dns`, `do reserved-ips`, `do projects`, `do tags`, `do ssh-keys`
+    (alias of `keys account --provider digitalocean`), `do regions`/`sizes`, `do power`, `do droplet-delete`.
+  - Cloudflare: `cf settings` and `cf ssl` (weakening needs `--force`), `cf origin-certs` (key and CSR made
+    locally), `cf purge`, `cf firewall` (IP access rules; custom WAF rules read-only).
+  - GCP: `gcp instance` create/start/stop/reset/delete, `gcp firewall-create`/`firewall-delete` (world-open
+    non-web ports need `--force`), Cloud DNS (`gcp dns`, atomic changes), Cloud Storage (`gcp buckets`, private
+    and versioned by default).
+  - GitHub (new, `workbench github`, alias `gh`, `GITHUB_TOKEN`): repos, Actions runs/wait/dispatch/rerun/cancel,
+    repository and environment secrets sealed locally with libsodium (value only from a file or stdin), deploy
+    keys (read-only unless `--write --force`), releases.
+  - Ploi: crons, databases (generated password to a 600 file), Let's Encrypt certificates, `server-restart`.
+- One-time secrets (Spaces secret keys, Origin CA private keys, generated database passwords) are returned as an
+  `IssuedCredential`, never serialised, and written by the CLI to `--out` (mode 600, created exclusively, refused
+  inside the git checkout, checked before any request).
+- Transport: GitHub `Link` pagination, rate-limit awareness (quota headers; GitHub's 403 with
+  `x-ratelimit-remaining: 0` waits for the reset like a 429).
+- Tests: mocked unit and contract tests for every new resource and the CLI, and a gated live read-only suite
+  (`VSW_LIVE=1`, `phpunit --testsuite live`) whose client refuses anything but GET.
+- DB manager: `log-errors [--since 24h|7d|all] [--service postgres|pgbouncer]`, a read-only, grouped and masked
+  summary of Postgres/PgBouncer ERROR/FATAL lines (exit 1 when there are any); `doctor` warns on Postgres log
+  errors in the last 24 h ([plan](docs/plan/postgres-log-quoting-errors.md)).
+- `bin/workbench db pg-log-errors --host <db-alias>`: the same summary from the workstation over ssh, nothing
+  installed on the server.
+- Examples: the 17 catalog entries still marked planned are now runnable examples, each mapped to a profile
+  and validated offline by `examples/run.sh`: laravel-horizon-reverb, laravel-octane, wordpress, symfony,
+  node-nextjs, nestjs, django, fastapi, rails, go-api, static-site-caddy, ploi-managed-site,
+  single-droplet-all-in-one, ha-two-web-lb, gcp-vm, backups-pitr-spaces, cloudflare-dns-proxy. Each has a
+  README with the reasons, `.env.example`-style settings (secrets generated on the server, never in the repo)
+  and its Ploi deploy settings, daemons and Nginx snippets where it needs them.
+- `examples/_shared`: `app-env.sh` (the DB block in each stack's own names, the password in a pgpass file, not
+  a URL; `--stack none` for app keys only), `with-env.sh`, `reload-daemon.sh` (restart by port after Ploi
+  activates the release, wait for health), `nginx-proxy.conf`, `ploi-script.sh` (the generic deploy script with
+  an example's settings; `--check`). `run.sh` runs `selftest` lines and checks every `ploi-deploy.settings.sh`.
+- DB manager: `binlog-replay --target 'YYYY-MM-DD HH:MM:SS' [--engine] [--from DIR] [--force-prod] | --prepare`,
+  MySQL/MariaDB point-in-time restore: newest dump finished before T, then the shipped binlogs from the dump's
+  position up to T (UTC). Guards like `restore` (type RESTORE; protected envs need `--force-prod`), ships the
+  binlogs and takes a safety backup first, refuses a binlog gap, skips account statements, takes a new backup
+  after. `backup` records each MySQL/MariaDB dump's binlog coordinates and UTC finish time. MySQL images lack
+  `mysqlbinlog`: a decoder image is built from `MYSQL_IMAGE` plus Oracle's signed client RPM of the same version
+  (`MYSQLBINLOG_IMAGE` overrides).
+- Tests: `mysql-pitr-it` (MySQL 9.7 and MariaDB binlog replay, in `make it`). Opt-in live tests on throwaway
+  DigitalOcean resources, never in CI ([live tests](docs/live-tests.md)): `pitr-spaces-live` (PITR on a real
+  Spaces bucket with a bucket-scoped key), `server-live` (swap, Docker and `--host` on a droplet, across a
+  reboot), `garage-live` (3-node Garage over a real VPC, one node down). Shared `tests/live/lib`: dry run by
+  default, cost guard, watchdog, trap teardown, verified cleanup; `make live-test`, `make live-sweep`.
+
+### Changed
+
+- The CLI is split into one command class per provider (`Console\Commands\*`) with a shared `Runner`; output,
+  flags and exit codes are unchanged. `docs/tools/platform-api.md`, `cli.md`, `status.md` and
+  `config/credentials.env.example` document the new scopes; the documented-command checker covers `github`/`gh`
+  and two-word subcommands. CI installs `ext-sodium`.
+
+### Fixed (test gaps, 2026-11)
+
+- MySQL dumps did not load back into the same server (ERROR 3546, GTID_PURGED overlap; GTIDs are on in MySQL
+  9.7): `backup` and the soft-drop dump use `--set-gtid-purged=OFF`. This affected `restore` of MySQL dumps.
+- A MySQL- or MariaDB-only config (`ENABLE_POSTGRES=0`) was refused when the default `PG_EXTENSIONS` had postgis
+  and the base image could not provide it: the check now runs only with Postgres on.
+
+### Fixed (final audit, 2026-11)
+- Python style gate never ran: ruff was optional and absent locally and in CI, and the code had drifted (89 findings, 8 files unformatted). Now formatted and clean under ruff 0.17.3, E501 left to the formatter, and CI installs ruff so `make py-lint` enforces it. Real fixes among the findings: `ApiClient` refuses any non-HTTPS URL (including API pagination links) before it builds a request with the bearer token, and errors chain their cause (`raise ... from`).
+- Tests that read a file mode tried BSD `stat -f %Lp` first. GNU `stat -f` means filesystem status and exits 0, so on Linux (CI) the mode check compared garbage. They now try `stat -c %a` first, like the tools.
+- MySQL healthcheck pinged the socket, which the image's temporary init server (`--skip-networking`) answers: the container went healthy, then restarted under the first hardening query (`ERROR 2002`, an intermittent install failure seen in db-features-it). It now pings over TCP (127.0.0.1), which only the final server answers; MariaDB already used `healthcheck.sh --connect`.
+- server-it accepts `permitrootlogin prohibit-password` from `sshd -T`: OpenSSH 10 on Ubuntu 26.04 prints the canonical name, OpenSSH 9 printed the old alias `without-password`.
+- Confirm prompts and `init` wrote to `/dev/stderr` / `/dev/stdout` by path. On Linux that reopens the file, so a run redirected to a log (`> log 2>&1`, `>> log`) lost everything printed before the prompt. They now write to fd 2 / fd 1, and a smoke check refuses the pattern (caught by CI on Linux; macOS dup()s these paths so local runs passed).
+
+The rehearsal's "noted, not fixed" items and audit gaps:
+
+- `backup()` names copies under `/etc/apt/*.d` `<file>.<ts>.bak` (apt warned "invalid filename extension" on
+  every run for `.bak.<ts>`); `harden` renames older `20auto-upgrades.bak.<ts>` copies.
+- `workbench do snapshots <droplet-id>` fills the DROPLET column (the per-droplet endpoint has no `resource_id`).
+- DB manager: the generated Dockerfile gives `ARG PG_BASE_IMAGE` a default (no `InvalidDefaultArgInFrom`) and
+  sets `DEBIAN_FRONTEND=noninteractive` as a build `ARG` (no debconf tty noise). Existing servers see this as a
+  one-line Dockerfile diff on the next `upgrade`.
+- `harden` without `--firewall` notes an inactive ufw and points at the DO cloud firewall or `--firewall --allow`.
+- Garage `doctor`: 2 of 3 healthy nodes is a warning (quorum kept), a failure only below the write quorum.
+- `server-it` and the `wg-it` image run on Ubuntu 26.04, the droplet default (`SERVER_IT_IMAGE=ubuntu:24.04`
+  for the previous LTS).
+- Examples: runnable `mysql-app`, `multi-engine-migration` and `managed-postgres-prd`, so every profile has a
+  runnable example.
+
+### Fixed (live rollout rehearsal, 2026-11)
+
+A rehearsal of the [live rollout runbook](docs/runbooks/live-rollout.md) on throwaway droplets (a DB snapshot
+clone, a web droplet, a three-node Garage cluster) found these ([report](docs/rehearsals/2026-11-live-rollout.md)):
+
+- DB manager: `rebind-ip [--dry-run]` for a snapshot restored to a new private IP; `upgrade` preflight names it.
+- DB manager: `upgrade --allow-unhealthy` for scripted runs on an unhealthy stack (dry runs continue to the plan).
+- DB manager: a legacy stack on `db_default` is moved to `DOCKER_NETWORK` during the apply (was: "active endpoints", rollback).
+- DB manager: old Postgres image tags are retired from a stack without `stack.env` (container tag) and on a no-op `upgrade`.
+- DB manager: `PITR_S3_HOST_IP` (`extra_hosts` for a private S3 name); `offsite` trusts `PITR_S3_CA_FILE`
+  (`RCLONE_CA_CERT` or `AWS_CA_BUNDLE`, one per tool); rclone runs without a config file notice.
+- DB manager: `pitr setup` no longer takes a docker error for a pgBackRest version; the upgrade that turns PITR on
+  treats the missing stanza as a warning instead of rolling back.
+- DB manager: `doctor` reads unattended upgrades from `APT::Periodic` (the service unit is often disabled) and a
+  failed doctor no longer prints an `ERROR: line N` trap line.
+- `remote-run.sh` uploads to staging names, so a `root` login works ("are the same file").
+- `net wireguard setup` refuses a tunnel /24 that overlaps a host network (exit 2).
+- `monitor.sh plan` says when Docker is missing; `confirm()` without a terminal prints no `/dev/tty` error.
+- Runbook: rclone install, PITR needs an upgrade first, `--yes` for scripted deletes, Docker for the monitoring hub,
+  `addon.sh laravel-env` before task 15, `rebind-ip` after a restore to a new IP.
+
+### Changed (droplet image)
+
+- `workbench do droplet-create` defaults to the newest Ubuntu LTS, `ubuntu-26-04-x64` (was `ubuntu-24-04-x64`).
+  One source of truth, `Droplets::DEFAULT_IMAGE`; override with `--image`, or per workstation with
+  `VSW_DROPLET_IMAGE` (environment or credentials file). `--image latest` resolves the newest Ubuntu LTS from
+  `GET /v2/images`, falling back to the constant. A unit test keeps the help and docs in step with the constant
+  ([why](docs/tools/cli.md#default-droplet-image)).
+
+### Added (P3: tests, examples, secret hygiene)
+
+- `tests/shell/wg-it.sh` in `make it`: a real WireGuard tunnel between two containers (ssh, kernel WireGuard
+  with `NET_ADMIN` only, ufw), skipped when the kernel lacks WireGuard ([networking](docs/tools/net.md)).
+- [Examples catalog](examples/README.md) with profile and add-on mapping, and runnable examples
+  (`examples/run.sh`, in `make test`): laravel-multitenant, split-web-db-vpc, cross-region-wireguard,
+  monitoring, s3-storage, gotenberg.
+- `make secrets-check` (in `make ci` and the pre-push hook): `tests/security/no-hardcoded-secrets.py` plus
+  gitleaks with `.gitleaks.toml` over the full history ([security](docs/security.md#secrets-in-the-repository-generated-never-written-down)).
+- PITR on S3-compatible storage: `PITR_S3_URI_STYLE` (host/path) and `PITR_S3_CA_FILE` (private CA, verified);
+  a port in `OFFSITE_ENDPOINT` becomes `repo1-storage-port`; `validate` refuses an `http://` endpoint for an s3 repo.
+  `tests/shell/pitr-s3-it.sh` in `make it` restores to a time through Garage behind TLS ([backups](docs/backups-and-recovery.md#pitr-repository-on-s3)).
+- Garage clusters: `GARAGE_REPLICATION` (fixed at the first install; >1 needs host networking), `GARAGE_PEERS`
+  joins, `addon.sh garage-node-id`; each install stages its role and the one that completes the cluster applies
+  the layout and creates the bucket and key. `doctor` checks this node's role and the healthy node count.
+  `tests/shell/garage-cluster-it.sh` in `make it` (host networking, three nodes, one node down); `addons-it` now
+  installs RustFS ([garage](stacks/addons/garage/README.md#three-node-cluster)).
+- `tests/docs/check-tables.py` in `make docs-commands`: every Markdown table row has its header's cell count.
+
+### Changed (P3)
+
+- `docs/lessons-learned.md`: six 3-column rows that sat in the 2-column Process table (their rule column was dropped by
+  GitHub) moved to a new Testing and CI table.
+- Every test password, token and key is generated per run (shell `openssl rand`, PHP `random_bytes`).
+- The pgbouncer exporter gets a libpq `key=value` connection string built by `monitor.sh` into
+  `secrets.env`; no URL with a password slot remains in a tracked file.
+- `make compose-check` generates its dummy secrets and no longer sets the unused `PG_EXPORTER_DSN` keys.
+- `make it` cleanup: `tests/shell/it-lib.sh` (`it_purge`, `it_rm_net`) removes each suite's containers, networks
+  and volumes by compose project, detaching foreign containers first; every suite has its own subnet; the
+  runner fails a suite that leaves `vsw*` containers, networks or volumes behind (and removes them).
+- The manager's `up -d --wait` failures print each unhealthy container's state, exit code, OOM flag, last
+  health probes and a redacted log tail, so a CI failure explains itself.
+
+### Fixed (P3)
+
+- `validate_config` refuses `postgis` in `PG_EXTENSIONS` on a base image that is not `postgis/*`. Before, the first
+  boot's `CREATE EXTENSION postgis` failed mid-init, the container restarted on a half-initialised cluster with no
+  extensions, and `install` passed only if the restart got healthy in time. This was the intermittent
+  `monitor-it` "postgres unhealthy": that suite used `postgres:18` with the default extension list; it now sets
+  `PG_EXTENSIONS`.
+- `server-it` failed some runs at "sshd -T" while sshd showed exactly the expected settings: `sshd -T | grep -qx`
+  under `pipefail` is false when grep exits on the first match and sshd gets SIGPIPE. The output is now captured,
+  then grepped; the same for monitor-it's Prometheus rules and Grafana datasources bodies. The check also prints
+  `sshd -t` / `sshd -T` and the drop-ins on failure (it was `2>/dev/null`, which hid the cause).
+- RustFS: install now creates a bucket-scoped app key (IAM user + policy `vsw-app-<bucket>` through the admin
+  API) and `laravel-env` writes it. Before, the app had no usable key unless you made one in the console, and
+  a failed bucket create was only a warning. `doctor` checks the app key.
+- `make it` runs can share one Docker daemon: `VSW_IT_PREFIX` / `VSW_IT_PORT_OFFSET` (it-lib) give
+  `addons-it` and `garage-cluster-it` their own project names and ports, and the leak guard watches only its
+  own prefix. Before, a second run recreated the first run's Garage containers and its leak guard could remove
+  them. `addon.sh` takes `ADDON_PROJECT_PREFIX` and records `ADDON_PROJECT` in `stack.env`.
+  It ignores an exported `COMPOSE_PROJECT_NAME` (the caddy stack documents one): honouring it would put every
+  add-on in one compose project, and `uninstall` (`down --remove-orphans`) would remove the other add-ons.
+
+- `reset` and `uninstall --purge` accept `--force-prod`. On a server with a protected env they told you to add
+  the flag but never parsed it (only `RESET_FORCE_PROD=1` / `PURGE_FORCE_PROD=1` worked); unknown options are
+  now refused instead of ignored.
+- `make it` flake: the DB manager's `doctor` measured the laptop's disk (`DB_DIR` sits in `/tmp` in the suites).
+  At 90% full it reported a PROBLEM, so `upgrade` rolled back and upgrade-it failed depending on how full the
+  disk was. The limits are now keys (`DOCTOR_DISK_WARN_PCT`/`DOCTOR_DISK_BAD_PCT`, 80/90; add-ons
+  `ADDON_DISK_WARN_PCT`/`ADDON_DISK_BAD_PCT`, 85/95), validated, and the suites set them to 100. Suites print
+  the PROBLEM / `!!` lines on failure (`it_why`), not only a tail that had scrolled past them.
+- `pitr-s3-it` flake: the TLS front joined the DB network after `install`, so the first boot's `archive_command`
+  could wait on an unresolvable endpoint and the init server's shutdown ran past 60 s. The front now joins as
+  soon as compose creates the network, as a reachable Spaces endpoint would be; the docs say the repo must answer first.
+
+### Fixed (docs and command audit)
+
+- `remote-run.sh --no-upload --config FILE` now uploads the config; before, the remote installed whatever
+  `~/docker-db-server-manager.conf` an earlier run had left behind. Upgrade detection matches the command word
+  (`upgrade`/`apply`), so `env-apply` and `pg-major-upgrade` no longer get `--snapshot-taken` (which
+  `pg-major-upgrade` refused), and every upgrade segment in a `--` list gets the flag, not only the first.
+- `bin/workbench do|cf|ploi|gcp`: a value option given twice (`--droplet A --droplet B`) is a usage error;
+  it used to keep only the last one silently. Pass a comma-separated list.
+- Live rollout runbook: task 11 passed `--droplet` twice (only the web droplet got alerts); `firewall-delete`
+  and `alerts delete` rollbacks lacked `--force`.
+- `--help` of 12 shell tools no longer prints bare `#` lines; the manager help lists `gfs-keep` and the global
+  flags; `net wireguard` help lists `--ping`; `addon.sh` help lists `--force` and `--accept-experimental`.
+- Config examples list the keys the code reads: `MONITOR_PG_USER/HOST/SSLMODE`, `MONITOR_PGBOUNCER_*`,
+  `MONITOR_STACKS_DIR`, `CADDY_IMAGE` (monitor), `WAIT_TIMEOUT`, `ADDON_STACKS` (add-ons), `ALERT_ON_OK`,
+  `DO_TOKEN_FILE` (manager). `web-db.env.example` no longer ships a placeholder password. The monitor example
+  pointed at a non-existent `docs/decisions/` ADR path; `config/README.md` had the wrong add-ons conf path.
+- `docs/README.md` command reference lists every tool and manager command; `bin/workbench list` shows
+  `env`/`addon`/`monitor`/`status` as shell shortcuts (`env` was listed under Python) and `do resize|alerts`.
+- Ubuntu 24.04 or 26.04 LTS in the docs; the `droplet-create` default image (`ubuntu-24-04-x64`) is documented.
+- `examples/generic-laravel` gets the `example.conf` the catalog promised and says to copy into `local/`.
+
+### Added (docs and command audit)
+
+- `make docs-commands` checks DB manager commands (`M <cmd>`, the manager path, comma-separated `remote-run.sh --`
+  lists) against its dispatch table and help, flags after `<placeholders>`, repeated PHP value options,
+  destructive PHP commands without `--force`, and the reverse: every manager command, shell tool and PHP
+  subcommand is documented somewhere.
+- `tests/docs/check-config-examples.py` in `make links`: missing and dead keys in the config examples.
+- [ADR 0013](docs/adr/0013-dev-on-2gb-postgres-only.md): dev and staging stay on 2 GB with Postgres only.
+- Runbook optional tasks 16-19: dev budget, OS updates with a reboot window, `web diagnose`, the first
+  off-site restore drill.
+
+### Added (P2: manager 1.5.0, monitoring, progress)
+
+- **Monitoring** ([monitor](docs/tools/monitor.md), [ADR 0012](docs/adr/0012-monitoring-stack.md)): `bin/workbench monitor`
+  with any mix of `beszel`, `kuma`, `netdata` and `prometheus` (Prometheus, Alertmanager, Grafana with provisioned
+  dashboards, node-exporter, cAdvisor, postgres/pgbouncer exporters, blackbox) per role (`hub`, `agent`, `both`).
+  UIs on loopback (`tunnel`), agents on the private IP, pinned images, generated secrets in 600 files, RAM gate
+  (exit 3), `doctor`, `targets`, `remove` (files kept). Profiles default to `beszel,kuma`; configurator keys `MONITOR_*`.
+- `bin/workbench status`: one-screen, read-only health of one or more nodes, `--json`, health URLs.
+- **Manager 1.5.0**: `TLS_MODE=verify-full` (CA on the server, PgBouncer verifies Postgres, `tls-ca`, `env` prints
+  `DB_SSLROOTCERT`); `monitor-user` (`pg_monitor`, connection limit 5); `metrics` (node-exporter textfile, refreshed by
+  backups, off-site copies and restore tests); `migrate-managed` (target credentials from a 600 file, extension and
+  version checks, row counts compared); `pg-major-upgrade --to N` (verified backup, dump/reload, inventory compare,
+  auto-rollback, `--cleanup`).
+- `env init --addons` / `ENV_ADDONS=auto`: merges the add-ons' `laravel.env` files (600 only, values never printed).
+- Progress UX for shell, PHP and Python (steps, bars, spinners; plain lines off a TTY, `NO_COLOR`, `--quiet`).
+- `server harden` `dockergroup` item (`--fix-docker-group`), and a `doctor` warning for non-root docker group members.
+- Recipes: [pg-major-upgrade](docs/recipes/pg-major-upgrade.md), [verify-full TLS](docs/recipes/verify-full-tls.md),
+  [migrate-to-managed](docs/recipes/migrate-to-managed.md), [retag-postgres-image](docs/recipes/retag-postgres-image.md);
+  [live rollout runbook](docs/runbooks/live-rollout.md); [P1/P2 plan](docs/plan/p1-p2-implementation.md).
+- Tests: `smoke-monitor`, `smoke-progress`, `db-features-it` (verify-full, metrics, migrate-managed, 18 to 19 upgrade
+  with rollback and cleanup), `monitor-it` (every stack in containers); `make it` runs the suites in order.
+
+### Fixed (P2)
+
+- Restore test waits for MySQL over TCP (the socket answered before the listener was up).
+- `status.sh` no longer aborts when a stamp file is missing.
+- Shell scripts no longer use `cmd | grep -q` (SIGPIPE + `pipefail` made a match look like a miss); this
+  silently skipped Beszel's self-registration on `monitor install`.
+- `monitor doctor` no longer exits mid-report when no target is down; Prometheus `file_sd` polls every 30s.
+- Tests: `pitr-it` (PITR restore end to end on a posix repo) added to `make it`.
+
 ### Added (cross-region)
 
 - `bin/workbench net wireguard setup|status|remove` ([networking](docs/tools/net.md)): plan and confirm, keys

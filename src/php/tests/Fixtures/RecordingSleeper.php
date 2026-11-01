@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Simtabi\VpsServerWorkbench\Tests\Fixtures;
+namespace Simtabi\ServerInfraWorkbench\Tests\Fixtures;
 
-use Simtabi\VpsServerWorkbench\Http\Sleeper;
+use Simtabi\ServerInfraWorkbench\Http\Sleeper;
 
 final class RecordingSleeper implements Sleeper
 {

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Offline tests for the server tools (server/*, web/diagnose, ssh/fixkeys): a fake root
-# (VSW_SYSROOT) and stub commands on PATH; nothing touches this machine's /etc or the network.
+# (SIWO_SYSROOT) and stub commands on PATH; nothing touches this machine's /etc or the network.
 # shellcheck disable=SC2015,SC2016  # stub bodies are literal shell
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+gen() { openssl rand -hex "${1:-12}"; }  # repo rule: test secrets are generated per run, never hardcoded
 pass=0
 ok()   { pass=$((pass + 1)); printf 'ok   %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
@@ -15,7 +16,7 @@ for c in systemctl apt-get sysctl sshd dpkg-query apt-mark shutdown ufw php; do 
 stub nc 'exit 1'
 stub apt "printf 'Listing...\nopenssl/noble-updates 3.0.13 amd64 [upgradable from: 3.0.12]\ndocker-ce/noble 5:28 amd64 [upgradable from: 5:27]\n'"
 stub docker 'case "$1" in ps) [ "$2" = -q ] && echo c0ffee || echo "10.0.0.5:5432->5432/tcp";; esac'
-export PATH="$T/bin:$PATH" VSW_SYSROOT="$T/root" VSW_TTY="$T/tty" VSW_LOG_DIR="$T/log"
+export PATH="$T/bin:$PATH" SIWO_SYSROOT="$T/root" SIWO_TTY="$T/tty" SIWO_LOG_DIR="$T/log"
 H=src/shell/server/harden.sh U=src/shell/server/update.sh W=src/shell/web/diagnose.sh
 : > "$T/tty"
 
@@ -41,25 +42,52 @@ stub sshd
 mkdir -p "$T/root/home/ploi"; bash "$H" --firewall --only firewall >"$T/o"
 grep -q 'Ploi server - skipped' "$T/o" && ok "harden: firewall left to Ploi on a Ploi server" || fail "ploi firewall"
 bash "$H" --role mail >/dev/null 2>&1 && fail "bad role" || ok "harden: validates --role"
+# docker group = root-equivalent: report, allow-list, confirmed fix
+fresh; printf 'root:x:0:\ndocker:x:999:ploi,deploy\n' > "$T/root/etc/group"
+bash "$H" --only dockergroup >"$T/o" 2>&1 || true
+grep -q 'warn  dockergroup: ploi deploy in the docker group' "$T/o" && grep -q 'nothing to change' "$T/o" && ok "harden: reports non-root docker group members (warn, no change by default)" || { cat "$T/o"; fail "docker group report"; }
+bash "$H" --only dockergroup --docker-allow ploi,deploy >"$T/o" 2>&1; grep -q 'ok    dockergroup: only root and allowed' "$T/o" && ok "harden: DOCKER_GROUP_ALLOW exempts intended users" || { cat "$T/o"; fail "docker allow"; }
+DOCKER_GROUP_ALLOW=Bad bash "$H" --only dockergroup >/dev/null 2>&1 && fail "bad allow list" || ok "harden: validates DOCKER_GROUP_ALLOW"
+if bash "$H" --only dockergroup --fix-docker-group --check >/dev/null 2>&1; then fail "--check with docker fix pending"; fi
+DOCKER_GROUP_ALLOW=deploy bash "$H" --only dockergroup --fix-docker-group --yes >"$T/o" 2>&1
+grep -qx 'docker:x:999:deploy' "$T/root/etc/group" && ls "$T/root/etc/group".bak.* >/dev/null 2>&1 && grep -q 'item=dockergroup' "$T/log/audit.log" \
+  && ok "harden --fix-docker-group --yes: removes only non-allowed users, backup + audit" || { cat "$T/o" "$T/root/etc/group"; fail "docker fix"; }
+# apt.conf.d backups end in .bak (apt skips those quietly; FILE.bak.<ts> gets an "invalid filename extension" notice)
+fresh; A="$T/root/etc/apt/apt.conf.d"; mkdir -p "$A"; echo 'APT::Periodic::Unattended-Upgrade "0";' > "$A/20auto-upgrades"
+echo old > "$A/20auto-upgrades.bak.20260101000000"
+bash "$H" --only updates >"$T/o" 2>&1 || true
+grep -q 'rename 1 old .*20auto-upgrades.bak.<ts> backup' "$T/o" && ok "harden plan: old apt.conf.d .bak.<ts> backups listed for renaming" || { cat "$T/o"; fail "apt bak plan"; }
+bash "$H" --only updates --yes >"$T/o" 2>&1
+[ -z "$(find "$A" -name '*.bak.*')" ] && [ -f "$A/20auto-upgrades.20260101000000.bak" ] && [ "$(find "$A" -name '20auto-upgrades.*.bak' | wc -l | tr -d ' ')" = 2 ] \
+  && grep -q 'Unattended-Upgrade "1"' "$A/20auto-upgrades" && ok "harden updates: backup named .<ts>.bak in apt.conf.d, old .bak.<ts> renamed" || { ls -la "$A"; cat "$T/o"; fail "apt bak names"; }
+# ufw inactive and not managed: a note pointing at the cloud firewall or --firewall (no warn, no change)
+stub ufw 'case "$1" in status) echo "Status: inactive";; esac'
+bash "$H" --only journald >"$T/o" 2>&1 || true
+grep -q 'note  ufw is inactive and not managed without --firewall' "$T/o" && ! grep -q 'todo  firewall' "$T/o" && ok "harden: inactive ufw without --firewall is a note" || { cat "$T/o"; fail "ufw note"; }
+bash "$H" --only firewall --firewall >"$T/o" 2>&1 || true
+! grep -q 'note  ufw' "$T/o" && grep -q 'todo  firewall' "$T/o" && ok "harden --firewall: plans ufw, no note" || { cat "$T/o"; fail "ufw firewall plan"; }
+stub ufw
+# writing to /dev/stderr or /dev/stdout by path reopens the file on Linux and truncates a redirected log (lessons-learned)
+! grep -rnE '>[[:space:]]*"?/dev/std(err|out)' src/shell bin >/dev/null && ok "no script writes to /dev/stderr or /dev/stdout by path (use >&2 / fd 1)" || { grep -rnE '>[[:space:]]*"?/dev/std(err|out)' src/shell bin; fail "/dev/std* by path"; }
 
 # --- update -------------------------------------------------------------------------
 fresh
 bash "$U" --dry-run >"$T/o"; grep -q '2 upgradable' "$T/o" && grep -q 'held for this run' "$T/o" && ! grep -q 'upgrade$' "$T/calls" \
   && ok "update: plan lists packages, holds Docker with running containers" || fail "update plan"
 touch "$T/root/var/run/reboot-required"
-VSW_NOW=03:10 bash "$U" --yes --reboot-window 02:00-04:00 >/dev/null
+SIWO_NOW=03:10 bash "$U" --yes --reboot-window 02:00-04:00 >/dev/null
 grep -q 'apt-mark hold docker-ce' "$T/calls" && grep -q 'apt-mark unhold docker-ce' "$T/calls" && grep -q 'shutdown -r +1' "$T/calls" \
   && ok "update: inside the window -> upgrade, unhold, reboot in 1 min" || fail "update in window"
-: > "$T/calls"; VSW_NOW=12:00 bash "$U" --yes --reboot-window 23:30-01:00 --allow-docker >/dev/null
+: > "$T/calls"; SIWO_NOW=12:00 bash "$U" --yes --reboot-window 23:30-01:00 --allow-docker >/dev/null
 grep -q 'shutdown -r 23:30' "$T/calls" && ! grep -q 'apt-mark hold' "$T/calls" && ok "update: outside a midnight-crossing window -> scheduled; --allow-docker" || fail "update outside"
-: > "$T/calls"; VSW_NOW=00:30 bash "$U" --yes --reboot-window 23:30-01:00 >/dev/null; grep -q 'shutdown -r +1' "$T/calls" && ok "update: 00:30 is inside 23:30-01:00" || fail "midnight"
+: > "$T/calls"; SIWO_NOW=00:30 bash "$U" --yes --reboot-window 23:30-01:00 >/dev/null; grep -q 'shutdown -r +1' "$T/calls" && ok "update: 00:30 is inside 23:30-01:00" || fail "midnight"
 : > "$T/calls"; bash "$U" --yes --no-reboot >"$T/o"; ! grep -q shutdown "$T/calls" && grep -q 'reboot required' "$T/o" && ok "update --no-reboot only reports" || fail "no-reboot"
 bash "$U" --reboot-window 25:00-01:00 >/dev/null 2>&1 && fail "bad window" || ok "update: validates the window"
 if bash "$U" >/dev/null 2>&1; then fail "update without yes"; else ok "update: not confirmed without --yes (exit 3)"; fi
 
 # --- web diagnose -----------------------------------------------------------------------
 fresh; A="$T/root/home/ploi/app.example.com"; mkdir -p "$A/storage/logs" "$A/storage/app/public" "$A/bootstrap/cache" "$A/public"; touch "$A/artisan"
-printf 'APP_ENV=production\nAPP_DEBUG=true\nAPP_KEY=base64:test\nAPP_URL=https://app.example.com\nDB_CONNECTION=pgsql\nDB_HOST=203.0.113.9\nDB_PORT=6432\nDB_USERNAME=app\nDB_PASSWORD=not-a-real-password\n' > "$A/.env"; chmod 644 "$A/.env"
+printf 'APP_ENV=production\nAPP_DEBUG=true\nAPP_KEY=base64:test\nAPP_URL=https://app.example.com\nDB_CONNECTION=pgsql\nDB_HOST=203.0.113.9\nDB_PORT=6432\nDB_USERNAME=app\nDB_PASSWORD=%s\n' "$(gen)" > "$A/.env"; chmod 644 "$A/.env"
 if bash "$W" --site app.example.com >"$T/o" 2>&1; then fail "diagnose should fail"; fi
 grep -q 'FAIL  APP_DEBUG=true on prd' "$T/o" && grep -q 'not reachable' "$T/o" && grep -q 'not a private address' "$T/o" && grep -q 'fixable with --fix: env_mode debug_off storage_link' "$T/o" \
   && ok "diagnose: finds debug on prd, unreachable/public DB, fixables" || { cat "$T/o"; fail "diagnose findings"; }
@@ -77,7 +105,8 @@ bash "$W" --site 'bad site' >/dev/null 2>&1 && fail "bad site" || ok "diagnose: 
 # --- env init / check ------------------------------------------------------------------------
 E=src/shell/env/env.sh
 fresh; mkdir -p "$T/root/home/ploi/shop.example.com"; EF="$T/root/home/ploi/shop.example.com/.env"
-printf 'DB_CONNECTION=pgsql\nDB_HOST=10.0.0.5\nDB_PORT=6432\nDB_DATABASE=shop_prd\nDB_USERNAME=shop_prd\nDB_PASSWORD=p@ss w$rd#1\n' > "$T/db.env"
+PW="p@ss w\$rd#$(gen 3)"  # quoting probe: space, \$ and # around a generated part
+printf 'DB_CONNECTION=pgsql\nDB_HOST=10.0.0.5\nDB_PORT=6432\nDB_DATABASE=shop_prd\nDB_USERNAME=shop_prd\nDB_PASSWORD=%s\n' "$PW" > "$T/db.env"
 bash "$E" init --env prd --site shop.example.com --from "$T/db.env" --url https://shop.example.com --dry-run >"$T/o"
 [ ! -f "$EF" ] && grep -q 'generated: APP_KEY (value not shown)' "$T/o" && ok "env init --dry-run: plan, nothing written" || fail "env dry-run"
 if bash "$E" init --env prd --site shop.example.com --from "$T/db.env" >"$T/o" 2>&1; then fail "prd without https"; fi
@@ -85,7 +114,7 @@ grep -q 'APP_URL must be https' "$T/o" && [ ! -f "$EF" ] && ok "env init: refuse
 : > "$T/tty"; bash "$E" init --env prd --site shop.example.com --from "$T/db.env" --url https://shop.example.com --yes >/dev/null 2>&1 && fail "prd --yes"
 echo shop.example.com > "$T/tty"; bash "$E" init --env prd --site shop.example.com --from "$T/db.env" --url https://shop.example.com >"$T/o" 2>&1
 [ "$(stat -c %a "$EF" 2>/dev/null || stat -f %Lp "$EF")" = 600 ] && grep -q '^APP_DEBUG=false$' "$EF" && grep -q '^APP_ENV=production$' "$EF" \
-  && grep -qE '^APP_KEY=base64:.{44}$' "$EF" && grep -q "^DB_PASSWORD='p@ss w\$rd#1'$" "$EF" && ok "env init prd: typed confirm, 600, defaults, APP_KEY, quoting" || { cat "$T/o"; fail "env init write"; }
+  && grep -qE '^APP_KEY=base64:.{44}$' "$EF" && grep -qxF "DB_PASSWORD='$PW'" "$EF" && ok "env init prd: typed confirm, 600, defaults, APP_KEY, quoting" || { cat "$T/o"; fail "env init write"; }
 ! grep -q 'p@ss' "$T/o" && ! grep -q "$(sed -n 's/^APP_KEY=//p' "$EF")" "$T/o" && ok "env init: values never printed" || fail "env leaked"
 key="$(grep '^APP_KEY=' "$EF")"
 bash "$E" init --env prd --site shop.example.com --set APP_KEY=base64:other --set MAIL_MAILER=smtp >"$T/o" 2>&1
@@ -97,6 +126,17 @@ bash "$E" check --env prd --site shop.example.com >"$T/o" 2>&1 && fail "env chec
 grep -q 'missing: REDIS_PORT' "$T/o" && grep -q 'extra (not in the reference): EXTRA_THING' "$T/o" && grep -q 'superuser' "$T/o" \
   && ok "env check: missing, extra and superuser user reported" || { cat "$T/o"; fail "env check findings"; }
 bash "$E" init --env prd --site shop.example.com --set 'bad-key=1' >/dev/null 2>&1 && fail "bad key" || ok "env init: rejects bad keys"
+# env init --addons: merges /opt/vsw-addons/*/laravel.env (600 only), --set wins, empty never clears, values hidden
+sed -i.x 's/^DB_USERNAME=.*/DB_USERNAME=shop_prd/; /^AWS_ACCESS_KEY_ID=/d' "$EF"; KEEP="$(gen)"; GOT="$(gen)"; GAR="$(gen)"; echo "AWS_ACCESS_KEY_ID=$KEEP" >> "$EF"
+AD="$T/root/opt/vsw-addons"; mkdir -p "$AD/gotenberg" "$AD/garage" "$AD/seaweedfs"
+(umask 077; printf 'GOTENBERG_URL=http://127.0.0.1:3000\nGOTENBERG_PASSWORD=%s\n' "$GOT" > "$AD/gotenberg/laravel.env"
+ printf '# garage\nFILESYSTEM_DISK=s3\nAWS_ACCESS_KEY_ID=\nAWS_SECRET_ACCESS_KEY=%s\nAWS_BUCKET=app\n' "$GAR" > "$AD/garage/laravel.env")
+printf 'AWS_REGION=leaky\n' > "$AD/seaweedfs/laravel.env"; chmod 644 "$AD/seaweedfs/laravel.env"
+echo shop.example.com > "$T/tty"; bash "$E" init --env prd --site shop.example.com --addons --set AWS_BUCKET=override >"$T/o" 2>&1 || true
+grep -qx "GOTENBERG_PASSWORD=$GOT" "$EF" && grep -qx "AWS_SECRET_ACCESS_KEY=$GAR" "$EF" && grep -qx "AWS_ACCESS_KEY_ID=$KEEP" "$EF" \
+  && grep -q '^AWS_BUCKET=override$' "$EF" && ! grep -q 'leaky' "$EF" && grep -q 'add-ons: garage gotenberg' "$T/o" && grep -q 'seaweedfs/laravel.env is mode 644' "$T/o" \
+  && [ "$(stat -c %a "$EF" 2>/dev/null || stat -f %Lp "$EF")" = 600 ] && ok "env init --addons: merged (600 files only), --set wins, empty keeps yours, 600" || { cat "$T/o"; fail "env addons"; }
+! grep -qE "$GOT|$GAR" "$T/o" && ok "env init --addons: add-on values never printed" || fail "env addons leaked"
 
 # --- server init ------------------------------------------------------------------------------
 I=src/shell/server/init.sh
@@ -134,7 +174,7 @@ bash "$I" --role db --swap 3X >/dev/null 2>&1 && fail "bad swap" || ok "init: va
 # --- server inventory -------------------------------------------------------------------------
 V=src/shell/server/inventory.sh
 initroot; mkdir -p "$T/root/home/ploi/shop.example.com"; touch "$T/root/home/ploi/shop.example.com/artisan"
-printf 'APP_KEY=base64:secretvalue\nDB_PASSWORD=not-a-real-password\n' > "$T/root/home/ploi/shop.example.com/.env"
+printf 'APP_KEY=base64:%s\nDB_PASSWORD=%s\n' "$(gen)" "$(gen)" > "$T/root/home/ploi/shop.example.com/.env"
 stub docker 'case "$1" in ps) echo "pg|postgres:18|Up 3 days (healthy)";; --version) echo "Docker version 28.5.1, build x";; compose) echo "Docker Compose version v2.40.0";; esac'
 stub ss "printf 'LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 200 10.0.0.5:5432 0.0.0.0:*\n'"
 bash "$V" --json >"$T/o"
@@ -146,18 +186,18 @@ stub ss "printf 'LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 200 10.0.0.5:5432 
 bash "$V" --out /var/lib/vsw/inv >"$T/o"; grep -q 'changes since the last inventory' "$T/o" && grep -q '^+net.listen.0.0.0.0:6379' "$T/root/var/lib/vsw/inv"/changes-*.diff \
   && grep -q 'tool=inventory.*outcome=changed' "$T/log/audit.log" && ok "inventory: diff vs the last run, audited" || fail "inventory diff"
 bash "$V" --install-cron --dry-run >/dev/null; [ ! -e "$T/root/etc/cron.d/vsw-inventory" ] && bash "$V" --install-cron --yes >/dev/null \
-  && grep -q 'inventory.sh --out /var/lib/vps-server-workbench/inventory' "$T/root/etc/cron.d/vsw-inventory" && [ -x "$T/root/usr/local/lib/vps-server-workbench/server/inventory.sh" ] \
+  && grep -q 'inventory.sh --out /var/lib/server-infra-workbench/inventory' "$T/root/etc/cron.d/vsw-inventory" && [ -x "$T/root/usr/local/lib/server-infra-workbench/server/inventory.sh" ] \
   && ok "inventory --install-cron: plan, then tool copy + /etc/cron.d" || fail "inventory cron"
 cat > "$T/bin/ssh" <<STUB
 #!/bin/sh
-case "\$*" in *mktemp*) echo "$T/remote";; *"mkdir -p"*) mkdir -p "$T/remote/tool" "$T/remote/lib";; *) VSW_SYSROOT="$T/root" bash "$T/remote/tool/inventory.sh" --txt;; esac
+case "\$*" in *mktemp*) echo "$T/remote";; *"mkdir -p"*) mkdir -p "$T/remote/tool" "$T/remote/lib";; *) SIWO_SYSROOT="$T/root" bash "$T/remote/tool/inventory.sh" --txt;; esac
 STUB
 printf '#!/bin/sh\n[ "$1" = -q ] && shift\nfor a; do last="$a"; done; cp "$1" "%s/remote/${last#*:%s/remote/}"\n' "$T" "$T" > "$T/bin/scp"; chmod +x "$T/bin/ssh" "$T/bin/scp"
-export VSW_REPO_ROOT="$T/repo"; mkdir -p "$VSW_REPO_ROOT"; L="$VSW_REPO_ROOT/local/smoketest-client"
+export SIWO_REPO_ROOT="$T/repo"; mkdir -p "$SIWO_REPO_ROOT"; L="$SIWO_REPO_ROOT/local/smoketest-client"
 bash "$V" --host db-1 --pull --client smoketest-client >"$T/o" 2>&1 && grep -q 'first inventory' "$T/o" && [ -f "$L/inventory/db-1/inventory.json" ] && [ ! -e local/smoketest-client ] \
   && bash "$V" --host db-1 --pull --client smoketest-client >"$T/o" 2>&1 && grep -q 'no changes' "$T/o" \
   && ok "inventory --pull: saved to local/<client>/inventory/<host>/, diff on the next pull" || { cat "$T/o"; fail "inventory pull"; }
-rm -f "$T/bin/ssh" "$T/bin/scp"; unset VSW_REPO_ROOT
+rm -f "$T/bin/ssh" "$T/bin/scp"; unset SIWO_REPO_ROOT
 
 # --- ssh fixkeys (self-contained; --root = a mounted disk) ------------------------------------
 K=src/shell/ssh/fixkeys.sh FR="$T/fk"
@@ -180,7 +220,7 @@ FK perms >/dev/null 2>&1; [ "$(stat -c %a "$FR/home/deploy" 2>/dev/null || stat 
 FK list >"$T/o" 2>&1; fp2="$(sed -n 's/.*bob@desk  ssh-ed25519  //p' "$T/o")"
 FK remove "$fp2" --yes >/dev/null 2>&1; ! grep -q bob@desk "$AKF" && grep -q alice@laptop "$AKF" && ok "fixkeys remove by fingerprint (backup kept)" || fail "fixkeys remove"
 FK remove 1 --yes >/dev/null 2>&1 || true; grep -q alice@laptop "$AKF" && ok "fixkeys: last key needs typed EMPTY (--yes is not enough)" || fail "fixkeys last key"
-ls "$AKF".bak.* >/dev/null 2>&1 && grep -q 'tool=fixkeys .*outcome=removed .*fp=SHA256:' "$FR/var/log/vps-server-workbench/audit.log" && ! grep -q AAAA "$FR/var/log/vps-server-workbench/audit.log" \
+ls "$AKF".bak.* >/dev/null 2>&1 && grep -q 'tool=fixkeys .*outcome=removed .*fp=SHA256:' "$FR/var/log/server-infra-workbench/audit.log" && ! grep -q AAAA "$FR/var/log/server-infra-workbench/audit.log" \
   && ok "fixkeys: backups + audit with fingerprints only" || fail "fixkeys audit"
 echo 1 > "$FIXKEYS_TTY"; b1="$(grep -l bob@desk "$AKF".bak.* | head -1)"; FK restore "$(basename "$b1")" --yes >/dev/null 2>&1; [ "$(grep -c ssh-ed25519 "$AKF")" = 2 ] && ok "fixkeys restore: a backup put back" || fail "fixkeys restore"
 FK restore /etc/passwd --yes >/dev/null 2>&1 && fail "restore of an arbitrary file" || ok "fixkeys restore: only <file>.bak.* accepted"

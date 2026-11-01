@@ -6,5 +6,8 @@ parameters:
     paths:
         - src
         - tests
+    excludePaths:
+        # a standalone php -S router script (globals, superglobals), not library or test code
+        - tests/Fixtures/MockApi/router.php
     tmpDir: .phpstan.cache
     treatPhpDocTypesAsCertain: false

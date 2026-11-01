@@ -11,12 +11,12 @@
 #  USAGE
 #    inventory.sh                          markdown to stdout
 #    inventory.sh --json                   JSON to stdout
-#    inventory.sh --out /var/lib/vps-server-workbench/inventory
+#    inventory.sh --out /var/lib/server-infra-workbench/inventory
 #                                          write txt/json/md (+ dated copy, diff vs last)
 #    inventory.sh --host db-1 --pull [--client acme]
 #        run on db-1 over ssh, save to local/<client>/inventory/db-1/ (gitignored;
 #        ./inventory/db-1/ without --client) and print what changed since last time
-#    inventory.sh --install-cron [--yes]   daily 05:17 run into /var/lib/vps-server-workbench/inventory
+#    inventory.sh --install-cron [--yes]   daily 05:17 run into /var/lib/server-infra-workbench/inventory
 #
 #  OPTIONS
 #    --json  --md  --out DIR  --host H  --pull  --client C  --install-cron
@@ -27,7 +27,9 @@ TOOL=inventory
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=src/shell/lib/common.sh
 . "$HERE/../lib/common.sh"
-usage() { sed -n '2,/^# =====/{/^# =====/d;s/^#  \{0,1\}//;p;}' "$0"; }
+# usage: the boxed header (between the 1st and 3rd ===== lines). A sed range `2,/=====/` stopped at the
+# title box, so --help printed one line; awk counts the rules instead.
+usage() { awk '/^# =====/{if(++r==3)exit; next} NR>1{sub(/^#  ?/,""); sub(/^#$/,""); print}' "$0"; }
 
 FMT=md OUT="" HOST="" PULL=0 CLIENT="" CRON=0
 while [ $# -gt 0 ]; do
@@ -52,7 +54,7 @@ done
 # ---- collect (key<TAB>value, one fact per line) -------------------------------------------
 fact() { printf '%s\t%s\n' "$1" "$(printf '%s' "${2:-}" | tr '\t\n' '  ' | sed 's/[[:space:]]*$//')"; }
 ver() { "$@" 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true; }
-pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed'; }
+pkg_ok() { have dpkg-query && dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep 'install ok installed' >/dev/null; }
 collect() { # best effort: a missing tool or file is a "?" fact, never an abort (runs in its own subshell)
   set +e +o pipefail
   local os_name kernel n=0 l
@@ -100,7 +102,7 @@ to_json() { # flat facts -> {"collected": "...", "facts": {...}}
 }
 to_md() {
   # shellcheck disable=SC2016  # literal backticks in markdown
-  printf '# Inventory: %s\n\nCollected %s by vps-server-workbench `server inventory` (no secrets).\n' \
+  printf '# Inventory: %s\n\nCollected %s by server-infra-workbench `server inventory` (no secrets).\n' \
     "$(awk -F'\t' '$1=="host.name"{print $2}' "$1")" "$(date -u '+%Y-%m-%d %H:%M UTC')"
   awk -F'\t' '{ split($1, p, "."); sec=p[1]; key=substr($1, length(sec)+2)
     if (sec != last) { printf "\n## %s\n\n| Key | Value |\n|---|---|\n", sec; last=sec }
@@ -113,7 +115,7 @@ if [ -n "$HOST" ]; then
     rest=(); [ "$FMT" = json ] && rest+=(--json); [ "$CRON" = 1 ] && rest+=(--install-cron); [ "$YES" = 1 ] && rest+=(--yes); [ "$DRY" = 1 ] && rest+=(--dry-run)
     [ -z "$OUT" ] || rest+=(--out "$OUT"); remote "$HOST" "$0" "${rest[@]+"${rest[@]}"}"; exit $?
   fi
-  root="${VSW_REPO_ROOT:-$(cd "$HERE/../../.." && pwd)}"   # tests point this at a temp dir
+  root="${SIWO_REPO_ROOT:-$(cd "$HERE/../../.." && pwd)}"   # tests point this at a temp dir
   dest="$root/${CLIENT:+local/$CLIENT/}inventory/$HOST"; mkdir -p "$dest"; chmod 700 "$dest"
   tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
   REMOTE_NOTTY=1 remote "$HOST" "$0" --txt > "$tmp" || die "inventory on $HOST failed (needs passwordless sudo for a non-interactive run)"
@@ -132,14 +134,15 @@ fi
 
 # ---- cron ----------------------------------------------------------------------------------
 if [ "$CRON" = 1 ]; then
-  lib="$R/usr/local/lib/vps-server-workbench" cronf="$R/etc/cron.d/vsw-inventory"
-  say "install: copy this tool to /usr/local/lib/vps-server-workbench/server/, write /etc/cron.d/vsw-inventory (daily 05:17)"
+  lib="$R/usr/local/lib/server-infra-workbench" cronf="$R/etc/cron.d/vsw-inventory"
+  invdir="$(siw_path "$R/var/lib/server-infra-workbench/inventory")"; invdir="${invdir#"$R"}"   # keep a pre-rename history
+  say "install: copy this tool to /usr/local/lib/server-infra-workbench/server/, write /etc/cron.d/vsw-inventory (daily 05:17)"
   [ "$DRY" = 1 ] && { say "plan only - rerun with --yes"; exit 0; }
   [ "$(id -u)" -eq 0 ] || [ -n "$R" ] || die "run as root (sudo)"
   lock; confirm "install the daily inventory cron"
   install -d -m 755 "$lib/server" "$lib/lib"
-  install -m 755 "$0" "$lib/server/inventory.sh"; install -m 644 "$HERE/../lib/common.sh" "$lib/lib/common.sh"
-  printf '# Managed by vps-server-workbench inventory.sh\nSHELL=/bin/bash\n17 5 * * * root /usr/local/lib/vps-server-workbench/server/inventory.sh --out /var/lib/vps-server-workbench/inventory >/dev/null 2>&1\n' \
+  install -m 755 "$0" "$lib/server/inventory.sh"; install -m 644 "$HERE/../lib/common.sh" "$lib/lib/common.sh"; install -m 644 "$HERE/../lib/progress.sh" "$lib/lib/progress.sh"
+  printf '# Managed by server-infra-workbench inventory.sh\nSHELL=/bin/bash\n17 5 * * * root /usr/local/lib/server-infra-workbench/server/inventory.sh --out %s >/dev/null 2>&1\n' "$invdir" \
     | write_file "$cronf" 644
   audit applied "cron=/etc/cron.d/vsw-inventory"; ok "daily inventory cron installed"; exit 0
 fi
