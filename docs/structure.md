@@ -9,7 +9,7 @@ top-level folder has a short `README.md` saying what is in it.
 bin/                 entry point: workbench (shell tools, platform APIs, Python helpers)
 src/                 all source code
   shell/               Bash tools, one folder per area (bin/workbench <area> <tool>)
-    db/                  docker-db-server-manager.sh (runs on the DB server), remote-run.sh (workstation)
+    db/                  docker-db-server-manager.sh (runs on the DB server), remote-run.sh, pg-log-errors.sh (workstation)
     web/                 update-env-db.sh, check-db-reach.sh (web server)
     deploy/              ploi-deploy.sh (pasted into Ploi)
     tunnels/             db-tunnel.sh (workstation SSH tunnels)
@@ -41,6 +41,7 @@ packages do it. Why: [ADR 0002](adr/0002-layout-by-language-then-area.md) and
 |---|---|---|
 | build, check, back up or upgrade the DB server | `src/shell/db/docker-db-server-manager.sh` | `bin/workbench db remote-run --host … -- <command>` |
 | run the manager on a server from my Mac | `src/shell/db/remote-run.sh` | `bin/workbench db remote-run --help` |
+| check the DB server's Postgres log for errors (read-only) | `src/shell/db/pg-log-errors.sh` | `bin/workbench db pg-log-errors --host <db-alias>` |
 | point a site's `.env` at the DB | `src/shell/web/update-env-db.sh` | on the web server |
 | check the web server can reach the DB | `src/shell/web/check-db-reach.sh` | on the web server |
 | the Ploi deploy script | `src/shell/deploy/ploi-deploy.sh` | paste into Ploi |

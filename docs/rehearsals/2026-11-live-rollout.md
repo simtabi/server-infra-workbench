@@ -101,11 +101,18 @@ needs Docker, and `addon.sh laravel-env` before `env init --addons`.
 - The image build shows an `InvalidDefaultArgInFrom` warning and debconf tty noise.
 - ufw stays inactive on nodes after `server init --role db` (the VPC isolated them here).
 - Doctor wording for "replication 3 needs at least that many" nodes is awkward.
+- The clone's Postgres log had five syntax errors from the previous day: an ad-hoc audit with
+  hand-escaped quotes, not the app or the toolkit. Follow-up: [plan](../plan/postgres-log-quoting-errors.md),
+  `log-errors`, `pg-log-errors`.
 
 ## Cleanup and cost
 
 All droplets, snapshots, the firewall and the throwaway SSH key were deleted
-after about 1.6 hours. The rehearsal VPC could not be deleted because
-DigitalOcean made it the region's default VPC (it is free). Approximate cost:
+after about 1.6 hours. The rehearsal VPC could not be deleted at first: it was
+the first VPC in that region, so DigitalOcean made it the region default. A new
+`default-<region>` VPC (range picked by DO) was made the default with
+`doctl vpcs update <id> --default=true`, then the rehearsal VPC was deleted.
+Next time, create the region default first (see
+[lessons learned](../lessons-learned.md#networking)). Approximate cost:
 **under $0.20** (five droplets for about 2 billed hours, four short-lived
 droplets created in the wrong region, and a few hours of snapshot storage).

@@ -32,6 +32,7 @@ documentation IP ranges.
 
 | Lesson | What happened | Rule now |
 |---|---|---|
+| The first VPC in a region becomes its default | a rehearsal created an isolated `/24` VPC in a region with no VPC yet; DigitalOcean made it the region default, then refused to delete it | before a throwaway VPC, check `doctl vpcs list` for a default in that region; if none, create `default-<region>` first (let DO pick the range). To undo: create one, `doctl vpcs update <id> --name default-<region> --default=true`, then delete the old one |
 | The DB is unreachable from the web server | the `.env` used the droplet's **public** IP, or port 5432 when the app should use PgBouncer on 6432 (or the reverse) | `env-creds` and `env` print the private IP and the right port; `web diagnose` lists the usual causes: public vs private IP, 6432 vs 5432, the DO cloud firewall or ufw, containers down |
 | Docker-published ports bypass ufw | a `0.0.0.0:5432` mapping was reachable from the internet with ufw "deny" | every port binds to `PRIVATE_IP`; `doctor` "Exposure" fails on any public listener |
 | Commands meant for the Mac were run on the server | `scp ~/Downloads/...` typed inside an SSH session failed: `~/Downloads` doesn't exist there and the server has no key to itself | look at the prompt before pasting; docs mark each block "on your workstation" or "on the server"; `remote-run.sh` does the upload from the workstation |
@@ -46,6 +47,7 @@ documentation IP ranges.
 
 | Lesson | What happened | Rule now |
 |---|---|---|
+| `\x27` is not a quote in a shell string | an ad-hoc audit over ssh wrote `psql -c "... \x27template1\x27"`; bash kept `\x27` literally and Postgres logged five syntax errors (nothing ran) | send ad-hoc SQL from a quoted heredoc with psql variables (`:'v'`, `:"v"`); `log-errors` / `pg-log-errors` classify it, `doctor` warns on log errors, a test bans `\x27` in toolkit SQL ([plan](plan/postgres-log-quoting-errors.md)) |
 | A new Postgres major would not start next to the old data | the 18+ image entrypoint refuses to init 19 while `18/docker` exists in the same volume | `pg-major-upgrade` renames the old directory to `.pg18-old` (kept for rollback, removed by `--cleanup`); the container test runs the real 18 to 19 path |
 | A dry run died without a message | `df` piped under `pipefail`, and a decimal size from `sum(pg_database_size())` in shell arithmetic, aborted the `set -e` script | `$(...) \|\| fallback` for optional probes; SQL returns `ceil(...)::bigint` for anything the shell counts |
 | MySQL "ready" before it accepts TCP | the restore test's socket ping passed while the TCP listener was still starting | wait with `-h127.0.0.1 --protocol=TCP`, the path the clients use |

@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- DB manager: `log-errors [--since 24h|7d|all] [--service postgres|pgbouncer]`, a read-only, grouped and masked
+  summary of Postgres/PgBouncer ERROR/FATAL lines (exit 1 when there are any); `doctor` warns on Postgres log
+  errors in the last 24 h ([plan](docs/plan/postgres-log-quoting-errors.md)).
+- `bin/workbench db pg-log-errors --host <db-alias>`: the same summary from the workstation over ssh, nothing
+  installed on the server.
+
 ### Fixed (live rollout rehearsal, 2026-11)
 
 A rehearsal of the [live rollout runbook](docs/runbooks/live-rollout.md) on throwaway droplets (a DB snapshot

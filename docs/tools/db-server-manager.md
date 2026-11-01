@@ -161,6 +161,7 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `pg-major-upgrade --to N [--dry-run] \| --cleanup OLD` | rebuilds Postgres (backs up first) | `Type UPGRADE` / `CLEANUP` | dump/reload into the new major, inventory compare, auto-rollback; old data kept until `--cleanup` ([recipe](../recipes/pg-major-upgrade.md)) |
 | `cron-install` / `cron-remove` | cron file only | no | `backup`, `doctor --alert`, `restore-test`, PITR, `binlog-ship`, `purge-trash` jobs ([table](../backups-and-recovery.md#set-up)) |
 | `logs [service]` | no | no | follow the last 200 lines |
+| `log-errors [--since 24h\|7d\|all] [--service postgres\|pgbouncer]` | no | no | read-only: ERROR/FATAL lines grouped, classified and masked (literals, passwords, IPs); exit 1 when there are any ([plan](../plan/postgres-log-quoting-errors.md)) |
 | `uninstall [--purge] [--force-prod]` | `--purge` deletes everything | `Type PURGE`; protected envs: `--force-prod` + env name | stop and remove |
 | `help` | no | no | detailed help |
 
@@ -293,7 +294,7 @@ sudo /root/docker-db-server-manager.sh drop-user shop_report      # type DROP
 Read-only health check (run as root). Every line is `ok`, `warn` or `PROBLEM`; exit code 1 on any problem.
 Sections: host (ufw, updates, reboot, disk, RAM vs [sizing](../reference/sizing.md)), exposure (ports on the
 private IP only), Postgres roles, isolation, `pg_hba`, TLS and extensions, environments and tenants,
-MySQL/MariaDB hardening and grants, backups, off-site copies, restore tests and PITR. The full list is in
+MySQL/MariaDB hardening and grants, Postgres log errors in the last 24 h (a warning; details: `log-errors`), backups, off-site copies, restore tests and PITR. The full list is in
 [Database environments](../database-environments.md#what-doctor-checks). `doctor --alert` (hourly from
 `cron-install`) sends problems to `ALERT_EMAIL`, `ALERT_WEBHOOK`, `HEALTHCHECK_URL` or `ALERT_COMMAND`.
 
@@ -373,6 +374,21 @@ Writes `/etc/cron.d/docker-db-server-backup`, which runs `backup` at `CRON_TIME`
 
 ### `logs [service]`
 `./docker-db-server-manager.sh logs pgbouncer` shows the last 200 lines and keeps following the log.
+
+### `log-errors`
+`sudo ./docker-db-server-manager.sh log-errors --since 7d` reads the postgres container's log with `docker logs`
+(no `stack.env` needed, writes nothing) and prints each kind of ERROR/FATAL once, with a count, first and last
+time (UTC), a masked sample statement and a likely cause. Exit 0 = no errors in the window, 1 = errors.
+From your workstation, without installing anything on the server (the login user needs the docker group, or
+passwordless sudo):
+
+```bash
+bin/workbench db pg-log-errors --host <db-alias> --since 7d
+```
+
+A `shell-quoting` group means a client sent `\x27` literally: an ad-hoc `psql -c` over ssh with hand-escaped
+quotes. Nothing ran. Send ad-hoc SQL from a quoted heredoc with psql variables instead
+([plan](../plan/postgres-log-quoting-errors.md)).
 
 ### `uninstall [--purge] [--force-prod]`
 - Without `--purge`, it stops and removes the containers and keeps the volumes and `/opt/db`. Run `install` to bring everything back.
