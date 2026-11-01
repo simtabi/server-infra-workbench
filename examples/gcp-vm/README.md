@@ -7,6 +7,10 @@ the DigitalOcean-only parts turned off.
 
 **Why:**
 
+- **`CLOUD=gcp`, `REGION=us-central1`.** `configure` then checks GCP region names (a zone such as
+  `us-central1-a` is refused with its region), suggests E2 machine types when a node is short of RAM, and
+  defaults the off-site endpoint to GCS. A GCP VPC network spans regions, so a second region needs no
+  WireGuard tunnel.
 - **Nothing in the DB server is DigitalOcean-specific except three settings.** `DO_ALERTS=0` and
   `UPTIME_CHECKS=0` (Uptime Kuma from the profile's `MONITOR_STACKS` does the probing). `STORAGE=none`, since
   Spaces is the DO default. Off-site goes to GCS through its S3-compatible XML API (`OFFSITE_ENDPOINT=
@@ -14,8 +18,7 @@ the DigitalOcean-only parts turned off.
   write to the bucket).
 - **The private interface is `ens4`, not `eth1`.** A GCP VM has one NIC with the internal IP, and the public
   IP is NAT outside the VM. Set `PRIVATE_IFACE=ens4` (or `PRIVATE_IP=10.128.0.5`) in
-  `/etc/docker-db-server-manager.conf` before `install`, or the manager can't find what to bind to. (Leave
-  `REGION` alone: it's a DigitalOcean slug that `configure` checks, and nothing here uses it.)
+  `/etc/docker-db-server-manager.conf` before `install`, or the manager can't find what to bind to.
 - **A custom VPC, not `default`.** The default network ships `default-allow-internal` (every port from
   `10.128.0.0/9`, so every VM in the project reaches Postgres) and `default-allow-ssh` from `0.0.0.0/0`.
   [`gcp-firewall.sh`](gcp-firewall.sh) plans three rules on `siw`: 80/443 to the web tag, 5432/6432 from the
@@ -27,8 +30,8 @@ the DigitalOcean-only parts turned off.
 
 ```bash
 examples/run.sh gcp-vm      # validate (offline): profile checks, plans, gcp-firewall.sh self-test
-bin/workbench configure --profile production-single --client <you> --set APP=shop --set ALERT_EMAIL=<you@example.com> \
-  --set DB_PRIVATE_IP=10.128.0.5 --set WEB_PRIVATE_IP=10.128.0.6 --set VPC_CIDR=10.128.0.0/20 \
+bin/workbench configure --profile production-single --client <you> --set CLOUD=gcp --set REGION=us-central1 \
+  --set APP=shop --set ALERT_EMAIL=<you@example.com> --set DB_PRIVATE_IP=10.128.0.5 --set WEB_PRIVATE_IP=10.128.0.6 --set VPC_CIDR=10.128.0.0/20 \
   --set OFFSITE_BUCKET=shop-db-backups --set OFFSITE_ENDPOINT=https://storage.googleapis.com --set OFFSITE_REGION=auto \
   --set DO_ALERTS=0 --set UPTIME_CHECKS=0 --set STORAGE=none
 examples/gcp-vm/gcp-firewall.sh --network siw --project my-project            # the plan; --apply runs it

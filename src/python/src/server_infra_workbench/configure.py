@@ -21,7 +21,8 @@ LEVEL_MARK = {"error": "ERROR", "warn": "warn ", "info": "info "}
 WIZARD_KEYS = (  # asked in this order by the interactive wizard; everything else via KEY=VALUE overrides
     ("CLIENT", "client name (folder under local/)"),
     ("APP", "app name (databases are <app>_<env>)"),
-    ("REGION", "DigitalOcean region"),
+    ("CLOUD", "cloud: do (DigitalOcean) | gcp (Google Cloud)"),
+    ("REGION", "region: a DO slug (nyc3) or a GCP region (us-central1)"),
     ("ENVS", "environments on this DB droplet (space separated)"),
     ("DB_DROPLET_MB", "DB droplet RAM in MB"),
     ("WEB_DROPLET_MB", "web droplet RAM in MB"),
@@ -187,7 +188,11 @@ def next_commands(r: P.Resolved, out_dir: Path, turned_off: list[str] | None = N
                 "ssh -t DB_HOST 'sudo /root/docker-db-server-manager.sh monitor-user'   # exporter login (password stays on the node)"
             )
         cmds.append(f"ssh -t {host} 'sudo /tmp/siw-monitor-src/monitor.sh plan'")
-    if v["STORAGE"] == "spaces" or v["OFFSITE"] == "s3":
+    if v["OFFSITE"] == "s3" and v["CLOUD"] == "gcp":
+        cmds.append(
+            "# GCS: create the bucket and an HMAC key of a service account limited to it (examples/gcp-vm)"
+        )
+    if v["STORAGE"] == "spaces" or (v["OFFSITE"] == "s3" and v["CLOUD"] != "gcp"):
         cmds.append(
             "# DO control panel: create the Spaces bucket(s) and a key limited to them (docs/tools/addons.md)"
         )

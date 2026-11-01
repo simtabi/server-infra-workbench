@@ -7,7 +7,6 @@ RAM, region, VPC and best-practice rules, and `render_*()` produce the files `co
 from __future__ import annotations
 
 import ipaddress
-import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,9 +57,11 @@ BOOL_KEYS = (
     "UPTIME_CHECKS",
     "GOTENBERG",
     "MONITOR_ALLOW_TIGHT",
+    "SINGLE_DROPLET",
 )
 INT_KEYS = ("DB_DROPLET_MB", "WEB_DROPLET_MB", "DEDICATED_DROPLET_MB", "WEB_NODES", "MIN_DB_MB")
 ENUMS = {
+    "CLOUD": ("do", "gcp"),
     "DB_MODE": ("self", "managed", "replica"),
     "TLS_MODE": ("off", "require", "verify-full"),
     "MONITOR_HUB": ("web", "db", "dedicated"),
@@ -89,6 +90,54 @@ DO_REGIONS = (
     "atl1",
     "ric1",
 )
+# Google Cloud regions (`gcloud compute regions list`, 2026). A well-formed name missing here is only an info:
+# Google adds regions more often than this list is updated.
+GCP_REGIONS = (
+    "africa-south1",
+    "asia-east1",
+    "asia-east2",
+    "asia-northeast1",
+    "asia-northeast2",
+    "asia-northeast3",
+    "asia-south1",
+    "asia-south2",
+    "asia-southeast1",
+    "asia-southeast2",
+    "australia-southeast1",
+    "australia-southeast2",
+    "europe-central2",
+    "europe-north1",
+    "europe-north2",
+    "europe-southwest1",
+    "europe-west1",
+    "europe-west2",
+    "europe-west3",
+    "europe-west4",
+    "europe-west6",
+    "europe-west8",
+    "europe-west9",
+    "europe-west10",
+    "europe-west12",
+    "me-central1",
+    "me-central2",
+    "me-west1",
+    "northamerica-northeast1",
+    "northamerica-northeast2",
+    "northamerica-south1",
+    "southamerica-east1",
+    "southamerica-west1",
+    "us-central1",
+    "us-east1",
+    "us-east4",
+    "us-east5",
+    "us-south1",
+    "us-west1",
+    "us-west2",
+    "us-west3",
+    "us-west4",
+)
+_GCP_REGION = re.compile(r"^[a-z]+-[a-z]+[0-9]+$")
+_GCP_ZONE = re.compile(r"^([a-z]+-[a-z]+[0-9]+)-[a-z]$")
 SPACES_REGIONS = ("nyc3", "sfo2", "sfo3", "ams3", "sgp1", "lon1", "fra1", "tor1", "blr1", "syd1", "atl1")
 ENV_NAMES = ("tst", "dev", "trn", "stg", "prd")
 
@@ -115,6 +164,13 @@ SIZES = (
     (4096, "s-2vcpu-4gb"),
     (8192, "s-4vcpu-8gb"),
     (16384, "s-8vcpu-16gb"),
+)
+GCP_SIZES = (  # shared-core / standard E2 machine types by memory
+    (1024, "e2-micro"),
+    (2048, "e2-small"),
+    (4096, "e2-medium"),
+    (8192, "e2-standard-2"),
+    (16384, "e2-standard-4"),
 )
 SELF_HOSTED_STORAGE = ("garage", "seaweedfs", "rustfs")
 _NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
@@ -173,7 +229,12 @@ def resolve(name: str, overrides: dict[str, str] | None = None, root: Path | Non
             raise ValueError(f"{k} comes from the profile and cannot be overridden")
         values[k], source[k] = v, "override"
     if values.get("OFFSITE") == "s3" and not values.get("OFFSITE_ENDPOINT"):
-        values["OFFSITE_ENDPOINT"] = f"https://{values.get('REGION', 'nyc3')}.digitaloceanspaces.com"
+        if values.get("CLOUD") == "gcp":  # GCS through its S3-compatible XML API (HMAC key)
+            values["OFFSITE_ENDPOINT"] = "https://storage.googleapis.com"
+            if source.get("OFFSITE_REGION") == "defaults":
+                values["OFFSITE_REGION"], source["OFFSITE_REGION"] = "auto", "derived"
+        else:
+            values["OFFSITE_ENDPOINT"] = f"https://{values.get('REGION', 'nyc3')}.digitaloceanspaces.com"
         source["OFFSITE_ENDPOINT"] = "derived"
     return Resolved(name, prof.get("PROFILE_VERSION", "?"), values, source)
 
@@ -183,16 +244,28 @@ def diff(a: dict[str, str], b: dict[str, str]) -> list[tuple[str, str, str]]:
     return [(k, a.get(k, ""), b.get(k, "")) for k in keys if a.get(k, "") != b.get(k, "")]
 
 
-def size_for(mb: int) -> str:
-    for cap, slug in SIZES:
+def size_for(mb: int, cloud: str = "do") -> str:
+    sizes = GCP_SIZES if cloud == "gcp" else SIZES
+    for cap, slug in sizes:
         if mb <= cap:
             return slug
-    return SIZES[-1][1]
+    return sizes[-1][1]
+
+
+def single_droplet(v: dict[str, str]) -> bool:
+    """Web and DB on one machine: SINGLE_DROPLET=1, or both private IPs set and equal (self-hosted DB only)."""
+    if v.get("DB_MODE") == "managed":
+        return False
+    same_ip = bool(v.get("DB_PRIVATE_IP")) and v.get("DB_PRIVATE_IP") == v.get("WEB_PRIVATE_IP")
+    return v.get("SINGLE_DROPLET") == "1" or same_ip
 
 
 def ram_plan(v: dict[str, str]) -> dict[str, tuple[int, int, list[str]]]:
-    """Per node role: (needed MB, droplet MB, what runs there)."""
+    """Per node: (needed MB, droplet MB, what runs there). One droplet for web + DB is one node, "db+web",
+    sized DB_DROPLET_MB, with the OS counted once and every estimate on it added up."""
     on = lambda k: v.get(k) == "1"  # noqa: E731
+    single = single_droplet(v)
+    node = lambda role: "db+web" if single and role in ("db", "web") else role  # noqa: E731
     nodes: dict[str, tuple[int, int, list[str]]] = {}
     if v["DB_MODE"] != "managed":
         need, items = RAM_OS, ["os"]
@@ -203,14 +276,23 @@ def ram_plan(v: dict[str, str]) -> dict[str, tuple[int, int, list[str]]]:
         if v["PITR"] == "pgbackrest":
             need += RAM_PITR
             items.append("pgbackrest")
-        nodes["db"] = (need, int(v["DB_DROPLET_MB"]), items)
-    nodes["web"] = (RAM_OS + RAM_WEB_APP, int(v["WEB_DROPLET_MB"]), ["os", "php/nginx/workers"])
+        nodes[node("db")] = (need, int(v["DB_DROPLET_MB"]), items)
+    if single:
+        need, mb, items = nodes["db+web"]
+        nodes["db+web"] = (need + RAM_WEB_APP, mb, [*items, "php/nginx/workers"])
+    else:
+        nodes["web"] = (RAM_OS + RAM_WEB_APP, int(v["WEB_DROPLET_MB"]), ["os", "php/nginx/workers"])
     for addon, role in addons_placed(v):
-        if role not in nodes:
-            nodes[role] = (RAM_OS, int(v["DEDICATED_DROPLET_MB"]), ["os"])
-        need, mb, items = nodes[role]
-        nodes[role] = (need + RAM_ADDON[addon], mb, [*items, addon])
-    for role, mode in monitor_placed(v).items():
+        n = node(role)
+        if n not in nodes:
+            nodes[n] = (RAM_OS, int(v["DEDICATED_DROPLET_MB"]), ["os"])
+        need, mb, items = nodes[n]
+        nodes[n] = (need + RAM_ADDON[addon], mb, [*items, addon])
+    modes: dict[str, str] = {}
+    for role, mode in monitor_placed(v).items():  # on one droplet the hub and the agent are the same node
+        n = node(role)
+        modes[n] = "both" if "both" in (mode, modes.get(n)) else "agent"
+    for role, mode in modes.items():
         if role not in nodes:
             nodes[role] = (RAM_OS, int(v["DEDICATED_DROPLET_MB"]), ["os"])
         need, mb, items = nodes[role]
@@ -298,8 +380,31 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
         return out  # the checks below need well-formed values
 
     # region and network
-    if v["REGION"] not in DO_REGIONS:
-        err(f"REGION {v['REGION']!r} is not a DigitalOcean region ({' '.join(DO_REGIONS)})")
+    cloud = v["CLOUD"]
+
+    def region_ok(key: str) -> bool:
+        reg = v[key]
+        if cloud == "do":
+            if reg in DO_REGIONS:
+                return True
+            err(
+                f"{key} {reg!r} is not a DigitalOcean region ({' '.join(DO_REGIONS)}); for Google Cloud set CLOUD=gcp"
+            )
+            return False
+        zone = _GCP_ZONE.match(reg)
+        if zone:
+            err(f"{key} {reg!r} is a GCP zone; use its region {zone.group(1)}")
+        elif not _GCP_REGION.match(reg):
+            err(f"{key} {reg!r} is not a GCP region name (e.g. us-central1; `gcloud compute regions list`)")
+        else:
+            if reg not in GCP_REGIONS:
+                info(
+                    f"{key} {reg}: not in the GCP region list this version knows; check `gcloud compute regions list`"
+                )
+            return True
+        return False
+
+    region_ok("REGION")
     vpc = _net(v["VPC_CIDR"])
     if not vpc or not vpc.is_private:
         err(f"VPC_CIDR {v['VPC_CIDR']!r} must be a private IPv4 network")
@@ -316,17 +421,36 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
         wg = _net(v["WIREGUARD_CIDR"])
         if not v["PEER_REGION"] or v["PEER_REGION"] == v["REGION"]:
             err("WIREGUARD=1 needs PEER_REGION, different from REGION")
-        elif v["PEER_REGION"] not in DO_REGIONS:
-            err(f"PEER_REGION {v['PEER_REGION']!r} is not a DigitalOcean region")
+        else:
+            region_ok("PEER_REGION")
+        if cloud == "gcp":
+            info(
+                "CLOUD=gcp: a VPC network spans regions, so the tunnel is optional (TLS_MODE=require is enough)"
+            )
         if not wg or (vpc and not wg.subnet_of(vpc)):
             err(
                 f"WIREGUARD_CIDR {v['WIREGUARD_CIDR']} must lie inside VPC_CIDR {v['VPC_CIDR']} (the DB only accepts VPC_CIDR)"
             )
         info("cross-region: expect extra latency per query (estimate: a few ms to tens of ms by region pair)")
-    elif v["PEER_REGION"]:
+    elif v["PEER_REGION"] and cloud == "do":
         err(
             "PEER_REGION is set but WIREGUARD=0: DigitalOcean VPCs are regional, cross-region traffic needs WireGuard"
         )
+    elif v["PEER_REGION"] and region_ok("PEER_REGION") and v["PEER_REGION"] != v["REGION"]:
+        info(
+            "CLOUD=gcp: the VPC network spans regions, no WireGuard needed; expect a few ms to tens of ms per query"
+        )
+    if cloud == "gcp":
+        for k in ("DO_ALERTS", "UPTIME_CHECKS"):
+            if v[k] == "1":
+                err(
+                    f"{k}=1 is DigitalOcean monitoring; with CLOUD=gcp use Cloud Monitoring or MONITOR_STACKS"
+                )
+        if v["STORAGE"] == "spaces":
+            warn(
+                "STORAGE=spaces on CLOUD=gcp: DO Spaces works from anywhere but every request leaves Google's network; "
+                "consider GCS (S3 interoperability)"
+            )
 
     # engines and environments
     on = lambda k: v[k] == "1"  # noqa: E731
@@ -367,7 +491,11 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
         advise("backups stay on the DB droplet only (OFFSITE=none); one lost droplet loses them too")
     if v["OFFSITE"] == "s3" and not v["OFFSITE_BUCKET"]:
         info("OFFSITE_BUCKET is empty: create a Spaces bucket and set it before `backup --offsite`")
-    if v["OFFSITE_ENDPOINT"].endswith(".digitaloceanspaces.com") and v["REGION"] not in SPACES_REGIONS:
+    if (
+        cloud == "do"
+        and v["OFFSITE_ENDPOINT"].endswith(".digitaloceanspaces.com")
+        and v["REGION"] not in SPACES_REGIONS
+    ):
         warn(f"Spaces is not offered in {v['REGION']}; set OFFSITE_ENDPOINT to a nearby Spaces region")
     if (prd_here or v["DB_MODE"] == "managed") and not v["ALERT_EMAIL"]:
         advise("no ALERT_EMAIL: failed backups and doctor problems would go unnoticed")
@@ -385,6 +513,23 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
         err("WEB_NODES > 1 needs LOAD_BALANCER=1")
     if int(v["WEB_NODES"]) > 1 and v["STORAGE"] == "none":
         err("two or more web nodes cannot keep files on local disk: pick STORAGE (spaces recommended)")
+    if single_droplet(v):
+        if int(v["WEB_NODES"]) > 1:
+            err("SINGLE_DROPLET=1 means one web node (WEB_NODES=1)")
+        if v["DB_PRIVATE_IP"] and v["WEB_PRIVATE_IP"] and v["DB_PRIVATE_IP"] != v["WEB_PRIVATE_IP"]:
+            err("SINGLE_DROPLET=1 but DB_PRIVATE_IP and WEB_PRIVATE_IP differ")
+        if v["SINGLE_DROPLET"] != "1":
+            info("DB_PRIVATE_IP = WEB_PRIVATE_IP: checked as one droplet (set SINGLE_DROPLET=1 to say so)")
+        if v["WEB_DROPLET_MB"] != v["DB_DROPLET_MB"]:
+            warn(f"one droplet: its size is DB_DROPLET_MB ({v['DB_DROPLET_MB']}); WEB_DROPLET_MB is ignored")
+        shared = [e for e in envs if e in ("stg", "prd")]
+        if shared:
+            advise(
+                f"web and DB on one droplet with {' '.join(shared)}: one failure domain, and a deploy competes "
+                "with the database for RAM; use it for dev only"
+            )
+    elif v["SINGLE_DROPLET"] == "1" and v["DB_MODE"] == "managed":
+        err("SINGLE_DROPLET=1 needs a self-hosted DB (DB_MODE=self)")
     if v["DB_MODE"] == "replica":
         info("DB_MODE=replica: the replica is set up by hand (docs/high-availability.md)")
     if v["DB_MODE"] == "managed":
@@ -440,7 +585,7 @@ def validate(r: Resolved) -> list[tuple[str, str]]:
         what = ", ".join(items)
         if need > have:
             err(
-                f"{role} node needs ~{need} MB ({what}) but has {have} MB: use {size_for(need)} or move something"
+                f"{role} node needs ~{need} MB ({what}) but has {have} MB: use {size_for(need, cloud)} or move something"
             )
         elif need > have * 0.85:
             warn(f"{role} node is tight: ~{need} of {have} MB ({what})")

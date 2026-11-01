@@ -88,6 +88,64 @@ class ProfilesTest(unittest.TestCase):
             )
         )
 
+    def test_single_droplet_is_one_node(self):
+        one = {"ENVS": "dev", "TENANT_ENVS": "", "PROTECTED_ENVS": "", "SINGLE_DROPLET": "1"}
+        plan = P.ram_plan(P.resolve("dev-budget", {**BASE, **one, "DB_DROPLET_MB": "4096"}).values)
+        self.assertEqual(set(plan), {"db+web"})
+        need, have, items = plan["db+web"]
+        self.assertEqual((need, have), (512 + 1024 + 64 + 1024, 4096))  # OS once, engines, web app
+        self.assertIn("php/nginx/workers", items)
+        self.assertTrue(
+            any("db+web node needs" in m and "s-2vcpu-4gb" in m for m in errors("dev-budget", **one))
+        )
+        self.assertEqual(errors("dev-budget", **one, DB_DROPLET_MB="4096"), [])
+        same_ip = {"DB_PRIVATE_IP": "10.0.0.5", "WEB_PRIVATE_IP": "10.0.0.5", "VPC_CIDR": "10.0.0.0/20"}
+        self.assertTrue(
+            errors("dev-budget", **{**one, "SINGLE_DROPLET": "0"}, **same_ip)
+        )  # equal IPs imply it
+        self.assertTrue(
+            any(
+                "WEB_NODES=1" in m
+                for m in errors("dev-budget", **one, DB_DROPLET_MB="4096", WEB_NODES="2", LOAD_BALANCER="1")
+            )
+        )
+        self.assertTrue(any("DB_MODE=self" in m for m in errors("dev-budget", **one, DB_MODE="managed")))
+        r = P.resolve(
+            "dev-budget", {**BASE, "SINGLE_DROPLET": "1", "DB_DROPLET_MB": "4096"}
+        )  # dev-budget has stg
+        self.assertTrue(any(lv == "warn" and "dev only" in m for lv, m in P.validate(r)))
+        mon = P.ram_plan(P.resolve("dev-budget", {**BASE, **one, "MONITOR_STACKS": "beszel"}).values)
+        self.assertEqual(
+            [i for i in mon["db+web"][2] if i.startswith("beszel")], ["beszel"]
+        )  # hub counted once
+
+    def test_gcp_regions(self):
+        gcp = {"CLOUD": "gcp", "REGION": "us-central1", "STORAGE": "none"}
+        self.assertEqual(errors("dev-budget", **gcp), [])
+        self.assertTrue(
+            any("not a GCP region" in m for m in errors("dev-budget", **{**gcp, "REGION": "nyc3"}))
+        )
+        self.assertTrue(
+            any(
+                "use its region us-central1" in m
+                for m in errors("dev-budget", **{**gcp, "REGION": "us-central1-a"})
+            )
+        )
+        self.assertTrue(any("CLOUD=gcp" in m for m in errors("dev-budget", REGION="us-central1")))
+        r = P.resolve("dev-budget", {**BASE, **gcp, "REGION": "us-future9"})
+        self.assertTrue(any(lv == "info" and "not in the GCP region list" in m for lv, m in P.validate(r)))
+        self.assertEqual(
+            errors("dev-budget", **gcp, PEER_REGION="europe-west4"), []
+        )  # global VPC: no WireGuard
+        self.assertTrue(
+            any("DigitalOcean monitoring" in m for m in errors("dev-budget", **gcp, DO_ALERTS="1"))
+        )
+        self.assertTrue(any("e2-medium" in m for m in errors("dev-budget", **gcp, GOTENBERG="1")))
+        v = P.resolve("dev-budget", {**BASE, **gcp}).values
+        self.assertEqual(
+            (v["OFFSITE_ENDPOINT"], v["OFFSITE_REGION"]), ("https://storage.googleapis.com", "auto")
+        )
+
     def test_storage_on_small_web_node_warns_and_strict_errors(self):
         r = P.resolve("dev-budget", {**BASE, "STORAGE": "garage", "STORAGE_ROLE": "web"})
         self.assertTrue(any(lv == "warn" and "competes with PHP" in m for lv, m in P.validate(r)))
@@ -364,7 +422,7 @@ class ConfigureCliTest(unittest.TestCase):
 
     def test_interactive_wizard(self):
         answers = iter(
-            ["dev-budget", "beta", "shop", "", "", "", "", "", "", "", "", "OFFSITE_BUCKET=b1", "", ""]
+            ["dev-budget", "beta", "shop", "", "", "", "", "", "", "", "", "", "OFFSITE_BUCKET=b1", "", ""]
         )
         with mock.patch("builtins.input", lambda _prompt: next(answers)):
             rc, out, _ = run(["configure", "--out-dir", str(self.out)])

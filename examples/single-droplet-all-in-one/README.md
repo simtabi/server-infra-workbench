@@ -13,18 +13,18 @@ stack (Postgres + PgBouncer), environment `dev` of app `lab`, VPC `10.0.0.0/20`.
 - **Not for `stg` or `prd`.** One droplet is one failure domain. A runaway `npm run build` or a PHP worker
   leak takes RAM from Postgres and the OOM killer picks the biggest process, usually Postgres. So
   `ENVS=dev`, with nothing protected and no tenant databases.
-- **4 GB, because both estimates land on the same RAM.** `configure` checks each *role* against its own
-  size (`DB_DROPLET_MB`, `WEB_DROPLET_MB`), not knowing they're one machine. Set both to the droplet's size
-  and add the two estimates yourself:
+- **4 GB, because both estimates land on the same RAM.** With `SINGLE_DROPLET=1` (or both private IPs
+  equal) `configure` checks one `db+web` node of `DB_DROPLET_MB`, the OS counted once:
 
-  | Role | `configure` estimate (MB) |
+  | Runs there | `configure` estimate (MB) |
   |---|---|
-  | db: OS, Postgres, PgBouncer | ~1600 |
-  | web: OS, PHP-FPM, Nginx, workers | ~1536 |
-  | together (the OS counted twice, so a bit high) | ~3100 of 4096 |
+  | OS | 512 |
+  | Postgres, PgBouncer | 1088 |
+  | PHP-FPM, Nginx, workers | 1024 |
+  | together | ~2624 of 4096 |
 
-  That leaves about 1 GB for `composer`/`npm` during a deploy. On 2 GB it doesn't fit; use 2 GB swap as a
-  safety net, not as capacity.
+  That leaves about 1.4 GB for `composer`/`npm` during a deploy. On 2 GB `configure` refuses it; swap is a
+  safety net, not capacity. Add-ons and monitoring placed on `web` or `db` are added to the same node.
 - **Ploi without its own database.** Create the Ploi server with *no* database (no MySQL/Postgres from Ploi),
   or Ploi's Postgres takes port 5432 before the manager's container can bind it.
 - **The DB bound to the private IP, never `0.0.0.0`.** Docker's published ports bypass `ufw`. The manager
@@ -34,7 +34,7 @@ stack (Postgres + PgBouncer), environment `dev` of app `lab`, VPC `10.0.0.0/20`.
 ```bash
 examples/run.sh single-droplet-all-in-one      # validate (offline): profile checks with both roles on one IP
 bin/workbench configure --profile dev-budget --client <you> --set APP=lab --set ENVS=dev --set TENANT_ENVS= \
-  --set PROTECTED_ENVS= --set DB_DROPLET_MB=4096 --set WEB_DROPLET_MB=4096 \
+  --set PROTECTED_ENVS= --set SINGLE_DROPLET=1 --set DB_DROPLET_MB=4096 --set WEB_DROPLET_MB=4096 \
   --set DB_PRIVATE_IP=10.0.0.5 --set WEB_PRIVATE_IP=10.0.0.5 --set VPC_CIDR=10.0.0.0/20
 # after Ploi provisioned the server (no database): swap + Docker only; Ploi owns ufw, nginx, PHP and SSH
 bin/workbench server init --host lab-01 --role db --only swap,docker

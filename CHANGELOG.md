@@ -30,6 +30,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   release. The main script now builds the caches in the release and stops; the same script with
   `STAGE="post"` in Ploi's post-deploy script runs the live steps (`examples/_shared/ploi-script.sh --post`).
   In-place sites are unchanged.
+- `configure` checked web and DB on one droplet as two machines (the OS counted twice, each role against its
+  own size). `SINGLE_DROPLET=1` (or equal `DB_PRIVATE_IP`/`WEB_PRIVATE_IP`) now checks one `db+web` node of
+  `DB_DROPLET_MB`, with add-ons and monitoring placed on either role added in; stg/prd on it is flagged.
+
+### Added (pre-release audit, 2026-11-01)
+
+- `configure`: `CLOUD=gcp` checks GCP region names (a zone is refused with its region; an unknown well-formed
+  region is an info), suggests E2 machine types, defaults the off-site endpoint to GCS, allows a second region
+  without WireGuard (global VPC network) and refuses the DO-only `DO_ALERTS`/`UPTIME_CHECKS`.
 
 ### Added
 

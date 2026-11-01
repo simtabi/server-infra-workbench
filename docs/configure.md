@@ -60,9 +60,12 @@ bin/workbench configure --non-interactive --client acme --keep --set RETENTION="
 
 - **RAM per node**: the enabled engines, pgBackRest and the add-ons placed on each node against the droplet
   size (estimates in the [reference](reference/profiles.md#ram-estimates-used-by-the-checks)); over 100% is an
-  error that names the DO size to use, over 85% a warning. Object storage on a 2 GB web node is flagged.
-- **Region and network**: a real DO region; `VPC_CIDR` is private; `DB_PRIVATE_IP` lies inside it; a peer
-  region only with WireGuard (VPCs are regional), and the WireGuard subnet inside `VPC_CIDR`.
+  error that names the size to use (DO slug, or E2 type with `CLOUD=gcp`), over 85% a warning. Object storage
+  on a 2 GB web node is flagged. Web and DB on one droplet (`SINGLE_DROPLET=1`, or equal private IPs) is one
+  `db+web` node: the OS once plus every estimate on it, against `DB_DROPLET_MB`.
+- **Region and network**: a real region for `CLOUD` (`do` slug, or a `gcp` region; a GCP zone is refused);
+  `VPC_CIDR` is private; `DB_PRIVATE_IP` lies inside it; on DO a peer region only with WireGuard (VPCs are
+  regional; a GCP VPC network spans regions), and the WireGuard subnet inside `VPC_CIDR`.
 - **Engines and envs**: at least one engine; PgBouncer and PITR need Postgres; tenant envs are in `ENVS`; prd on
   this droplet must be protected.
 - **Best practice** (warnings, errors with `STRICT=1`): prd sharing a droplet, prd without PITR or TLS, backups

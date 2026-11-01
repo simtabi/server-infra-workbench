@@ -19,10 +19,15 @@ class CompatTest(unittest.TestCase):
     def test_progress_reads_old_names(self):
         s = io.StringIO()
         self.assertEqual(Progress.detect(s, {"VSW_QUIET": "1"}, True).mode, OFF)
-        self.assertEqual(Progress.detect(s, {"SIW_PROGRESS": "plain", "VSW_PROGRESS": "off", "TERM": "xterm"}, True).mode, PLAIN)
+        self.assertEqual(
+            Progress.detect(s, {"SIW_PROGRESS": "plain", "VSW_PROGRESS": "off", "TERM": "xterm"}, True).mode,
+            PLAIN,
+        )
 
     def test_notice_names_each_old_variable(self):
-        self.assertEqual(compat.legacy_in_use({"VSW_QUIET": "1", "VSW_EMPTY": "", "SIW_X": "1"}), ["VSW_QUIET"])
+        self.assertEqual(
+            compat.legacy_in_use({"VSW_QUIET": "1", "VSW_EMPTY": "", "SIW_X": "1"}), ["VSW_QUIET"]
+        )
         self.assertIn("use SIW_QUIET", compat.notices({"VSW_QUIET": "1"})[0])
 
     def test_cli_prints_the_notice_on_stderr(self):
