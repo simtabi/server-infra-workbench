@@ -155,6 +155,7 @@ generated into `$DB_DIR/.env` and `$ENV_SECRETS_DIR/<env>.env` (both chmod 600).
 | `OFFSITE_TOOL` | `rclone` | rclone \| aws |
 | `OFFSITE_KEEP_DAYS` | `400` |  |
 | `BINLOG_SHIP_CRON` | `*/5 * * * *` |  |
+| `MYSQLBINLOG_IMAGE` | (empty) | binlog-replay decoder (mysql images lack mysqlbinlog); empty: built from MYSQL_IMAGE + Oracle's signed client RPM |
 | `RESTORE_TEST_CRON` | `0 5 * * 0` |  |
 | `RESTORE_TEST_TIMEOUT` | `3600` |  |
 | `DOCTOR_CRON` | `7 * * * *` |  |

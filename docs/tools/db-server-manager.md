@@ -147,6 +147,7 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 | `offsite backup [dir] \| list \| verify [name] \| fetch <name> [dir]` | uploads / downloads | no | encrypted copies in S3/Spaces ([backups](../backups-and-recovery.md)) |
 | `pitr setup \| backup [full\|diff\|incr] \| status \| restore --target T` | `restore` **rewinds the cluster** | `restore`: `Type RESTORE` / env name | pgBackRest point-in-time recovery for Postgres |
 | `binlog-ship` | uploads | no | closed MySQL/MariaDB binlogs off-site, encrypted |
+| `binlog-replay --target 'YYYY-MM-DD HH:MM:SS' [--engine E] [--from DIR] [--force-prod] \| --prepare` | **replaces the user databases** | `Type RESTORE` / env name | MySQL/MariaDB point in time: newest dump before T + binlogs up to T (UTC) |
 | `restore <dir> [postgres\|mysql\|mariadb\|all]` | **overwrites** | `Type RESTORE` (or `--yes`); protected envs: `--force-prod` + env name | checks the manifest, then loads the dumps |
 | `env-init [flags] [--out F] [--dry-run]` | writes a config block | wizard (or flags) | environment layout ([guide](../database-environments.md#set-it-up)) |
 | `env-apply` | creates databases and roles | no | `<app>_<env>` databases, roles, grants, `pg_hba`; idempotent |
@@ -325,8 +326,8 @@ The 1.4.0 Postgres role split by hand: backs up, ends `PG_USER`'s sessions for a
 to a new non-superuser `PG_USER` and makes `PG_ADMIN_USER` the only superuser. `upgrade` does this for you.
 `--rollback` restores the pre-1.4.0 layout.
 
-### `restore-test`, `offsite`, `pitr`, `binlog-ship`
-See [Backups and recovery](../backups-and-recovery.md).
+### `restore-test`, `offsite`, `pitr`, `binlog-ship`, `binlog-replay`
+See [Backups and recovery](../backups-and-recovery.md) ([binlog replay](../backups-and-recovery.md#mysqlmariadb-point-in-time-binlog-replay)).
 
 ### `backup`
 

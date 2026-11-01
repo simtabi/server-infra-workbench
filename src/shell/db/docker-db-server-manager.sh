@@ -268,6 +268,7 @@ Backups and recovery (docs/backups-and-recovery.md)
   offsite backup [dir] | list | verify [name] | fetch <name> [dir]
   pitr setup | backup [full|diff|incr] | status | restore --target 'YYYY-MM-DD HH:MM:SS+00'
   binlog-ship                 copy closed MySQL/MariaDB binlogs (and off-site, encrypted)
+  binlog-replay --target 'YYYY-MM-DD HH:MM:SS' [--engine E] [--from DIR] | --prepare  MySQL/MariaDB point-in-time restore (UTC; DESTRUCTIVE); --prepare builds the decoder image
   cron-install | cron-remove  backup, doctor --alert, restore-test, PITR, binlog-ship, purge-trash jobs
   gfs-keep "daily=7 weekly=4"  read backup names (YYYYmmdd-HHMMSS) on stdin, print the ones RETENTION keeps (read-only)
 
@@ -1839,8 +1840,9 @@ validate_config() { # strict: refuse anything ambiguous before touching the serv
     [[ "${!v}" =~ :latest$ ]] && err "$v uses :latest; pin a version"
   done
   # postgis is in the default PG_EXTENSIONS but only postgis/* bases ship it: on postgres:NN the first boot's
-  # CREATE EXTENSION fails mid-init, the container restarts on a half-initialised cluster (no extensions)
-  case " $PG_EXTENSIONS " in *" postgis "*) case "$PG_BASE_IMAGE" in *postgis*) ;;
+  # CREATE EXTENSION fails mid-init, the container restarts on a half-initialised cluster (no extensions).
+  # Only when Postgres runs: a MySQL/MariaDB-only server never builds the Postgres image.
+  on "$ENABLE_POSTGRES" && case " $PG_EXTENSIONS " in *" postgis "*) case "$PG_BASE_IMAGE" in *postgis*) ;;
     *) err "PG_EXTENSIONS has postgis but PG_BASE_IMAGE '$PG_BASE_IMAGE' is not a postgis image (drop postgis or use postgis/postgis:NN-x.y)" ;; esac ;; esac
   [[ "$DB_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] && [ "$DB_DIR" != / ] || err "DB_DIR '$DB_DIR' must be an absolute path"
   case "$TLS_MODE" in off|require|verify-full) ;; *) err "TLS_MODE must be off, require or verify-full" ;; esac
@@ -2301,7 +2303,7 @@ soft_drop() { # engine db: protected envs never lose data in one step
       echo "undo: ALTER DATABASE \"${2}__trash_$ts\" ALLOW_CONNECTIONS true; ALTER DATABASE \"${2}__trash_$ts\" RENAME TO \"$2\";" ;;
     mysql|mariadb)
       local d="$BACKUP_DIR/dropped"; (umask 077; mkdir -p "$d")
-      local cli=mysqldump rv=MYSQL_ROOT_PASSWORD; [ "$1" = mariadb ] && cli=mariadb-dump rv=MARIADB_ROOT_PASSWORD
+      local cli="mysqldump --set-gtid-purged=OFF" rv=MYSQL_ROOT_PASSWORD; [ "$1" = mariadb ] && cli=mariadb-dump rv=MARIADB_ROOT_PASSWORD
       dc exec -T "$1" sh -c "MYSQL_PWD=\"\$$rv\" exec $cli -uroot --databases '$2' --single-transaction --routines --events --triggers" | gzip > "$d/$2-$ts.sql.gz"
       gzip -cd "$d/$2-$ts.sql.gz" | tail -c 500 | grep 'Dump completed' >/dev/null || die "dump of $2 failed; NOT dropped"
       chmod 600 "$d/$2-$ts.sql.gz"
@@ -2376,7 +2378,12 @@ $(printf '%s\n' "$all" | head -1)"   # never delete the newest
 
 bk_pg() { dc exec -T postgres pg_dumpall -U "$(pg_su)" --clean --if-exists | gzip > "$1"; }
 bk_my() { # engine cli dump out
-  my_sh "$1" "DBS=\$($2 -uroot -NBe \"select schema_name from information_schema.schemata where schema_name not in ($MY_SYS_DBS)\"); [ -z \"\$DBS\" ] && exit 0; exec $3 -uroot --databases \$DBS --single-transaction --routines --events --triggers" | gzip > "$4"
+  # --source-data=2 / --master-data=2: the dump header records (as a comment) the binlog file and
+  # position it is consistent with, the starting point for binlog-replay (point-in-time restore)
+  # --set-gtid-purged=OFF (MySQL): GTIDs are on in MySQL 9, and a dump that sets GTID_PURGED cannot be
+  # loaded back into the server it came from (ERROR 3546), which is what restore and binlog-replay do
+  local sd="--source-data=2 --set-gtid-purged=OFF"; [ "$1" = mariadb ] && sd=--master-data=2
+  my_sh "$1" "DBS=\$($2 -uroot -NBe \"select schema_name from information_schema.schemata where schema_name not in ($MY_SYS_DBS)\"); [ -z \"\$DBS\" ] && exit 0; exec $3 -uroot --databases \$DBS --single-transaction $sd --routines --events --triggers" | gzip > "$4"
 }
 cmd_backup() { # [--cron]
   need_root; need_stack; load_env
@@ -2399,6 +2406,7 @@ cmd_backup() { # [--cron]
     on "$( [ "$e" = mysql ] && echo "$ENABLE_MYSQL" || echo "$ENABLE_MARIADB")" || continue
     cli=mysql dump=mysqldump; [ "$e" = mariadb ] && cli=mariadb dump=mariadb-dump
     progress_run "$e: dump" bk_my "$e" "$cli" "$dump" "$tmp/$e.sql.gz"
+    date -u '+%Y-%m-%d %H:%M:%S' > "$tmp/$e.completed-utc"   # binlog-replay picks the newest dump finished before its target
     printf '%s;\n' "$users_sql" | my_q "$e" | while read -r u; do printf 'show create user %s;\nshow grants for %s;\n' "$u" "$u" | my_q "$e" | sed 's/$/;/'; done | gzip > "$tmp/grants-$e.sql.gz"
   done
   manifest > "$tmp/manifest.txt"
@@ -2625,6 +2633,123 @@ cmd_binlog_ship() {
     find "$d" -name '*.gz' -mtime +"$BINLOG_DAYS" -delete
   done
   stamp binlog-ship
+}
+
+# ---- MySQL/MariaDB point-in-time restore: newest dump before T + shipped binlogs up to T ----
+# The official mysql image (Oracle Linux, server-minimal) has no mysqlbinlog, so the decoder runs
+# in a local image built once from MYSQL_IMAGE plus the signed mysql-community-client RPM of the
+# SAME version (repo.mysql.com; set MYSQLBINLOG_IMAGE to use a prebuilt one offline).
+# MariaDB images ship mariadb-binlog, so MARIADB_IMAGE itself decodes.
+my_binlog_image() { # engine -> image name on stdout (progress on stderr)
+  if [ "$1" = mariadb ]; then echo "$MARIADB_IMAGE"; return 0; fi
+  if [ -n "${MYSQLBINLOG_IMAGE:-}" ]; then echo "$MYSQLBINLOG_IMAGE"; return 0; fi
+  local tag c
+  tag="vsw-local/mysqlbinlog:$(printf '%s' "$MYSQL_IMAGE" | tr -c 'A-Za-z0-9_.-' '-')"
+  docker image inspect "$tag" >/dev/null 2>&1 && { echo "$tag"; return 0; }
+  log "building $tag (mysqlbinlog for $MYSQL_IMAGE, one time)" >&2
+  c="vsw-mybl-build-$$"; docker rm -f "$c" >/dev/null 2>&1 || true
+  docker run --name "$c" --entrypoint sh "$MYSQL_IMAGE" -c '
+    set -e
+    r="$(sed -n "s#^baseurl=\(.*\)/docker/\(el/.*\)#\1/\2#p" /etc/yum.repos.d/mysql-community-minimal.repo | head -1)"
+    [ -n "$r" ] || { echo "cannot derive the MySQL client repo from the image"; exit 1; }
+    v="$(rpm -q --qf "%{VERSION}-%{RELEASE}" mysql-community-server-minimal)"
+    printf "[vsw-mysql-client]\nname=MySQL client\nbaseurl=%s\ngpgcheck=1\ngpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-mysql\nenabled=1\n" "$r" > /etc/yum.repos.d/vsw-mysql-client.repo
+    cd /tmp && microdnf -y download "mysql-community-client-$v" >/dev/null
+    rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-mysql
+    rpm -K mysql-community-client-*.rpm | grep -q "digests signatures OK" || { echo "mysql-community-client signature check failed"; exit 1; }
+    rpm -i --nodeps --replacefiles mysql-community-client-*.rpm
+    rm -f /tmp/*.rpm /etc/yum.repos.d/vsw-mysql-client.repo; microdnf clean all >/dev/null 2>&1 || true
+    mysqlbinlog --version' >&2 || { docker rm -f "$c" >/dev/null 2>&1; die "could not build $tag (needs repo.mysql.com once; or set MYSQLBINLOG_IMAGE)"; }
+  docker commit --change 'ENTRYPOINT []' --change 'CMD ["mysqlbinlog","--version"]' "$c" "$tag" >/dev/null
+  docker rm -f "$c" >/dev/null 2>&1 || true
+  echo "$tag"
+}
+dump_coords() { # dump.sql.gz -> "file pos" from the --source-data/--master-data header comment
+  { gzip -cd "$1" 2>/dev/null || true; } | head -n 80 \
+    | sed -nE "s/.*(SOURCE|MASTER)_LOG_FILE='([^']+)', *(SOURCE|MASTER)_LOG_POS=([0-9]+).*/\2 \4/p" | head -1
+}
+# Account statements are not replayed: dumps hold user databases only, so users, grants and
+# passwords stay as they are now (replaying an old ALTER USER would revert a rotated password).
+binlog_filter() { # stdin: decoded binlog SQL; $1 = file to write the skipped count to
+  LC_ALL=C awk -v out="$1" 'BEGIN { s = 1; k = 0; n = 0 }
+    k { if ($0 ~ /\/\*!\*\/;$/) { k = 0; s = 1 }; next }
+    s && /^#/ { print; next }
+    s && toupper($0) ~ /^((CREATE|ALTER|DROP|RENAME) (USER|ROLE)|GRANT |REVOKE |SET PASSWORD|SET DEFAULT ROLE)/ {
+      if ($0 !~ /\/\*!\*\/;$/) k = 1; n++; next }
+    { print; s = ($0 ~ /\/\*!\*\/;$/) }
+    END { print n > out }'
+}
+cmd_binlog_replay() { # --target 'YYYY-MM-DD HH:MM:SS' (UTC) [--engine mysql|mariadb] [--from DIR] [--force-prod] | --prepare
+  need_root; need_stack; load_env
+  local target="" e="" from="" force=0 prep=0 usage="usage: binlog-replay --target 'YYYY-MM-DD HH:MM:SS' (UTC) [--engine mysql|mariadb] [--from <backup-dir>] [--force-prod] | binlog-replay --prepare [--engine E]"
+  while [ $# -gt 0 ]; do case "$1" in
+    --target) target="${2:-}"; shift ;; --engine) e="${2:-}"; shift ;; --from) from="${2:-}"; shift ;;
+    --force-prod) force=1 ;; --prepare) prep=1 ;; *) die "$usage" ;; esac; shift; done
+  if [ -z "$e" ]; then
+    on "$ENABLE_MYSQL" && e=mysql
+    if on "$ENABLE_MARIADB"; then [ -z "$e" ] || die "both MySQL and MariaDB are enabled: add --engine"; e=mariadb; fi
+    [ -n "$e" ] || die "MySQL and MariaDB are disabled: nothing to replay"
+  fi
+  case "$e" in mysql|mariadb) ;; *) die "$usage" ;; esac
+  in_list "$e" "$(engines)" || die "$e is disabled"
+  local img; img="$(my_binlog_image "$e")" || exit 1
+  if [ "$prep" = 1 ]; then echo "binlog decoder ready: $img"; return 0; fi
+  [[ "$target" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]] || die "$usage"
+  # the starting dump: the newest whose dump finished at or before the target
+  if [ -z "$from" ]; then
+    local b; for b in $(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '20*' 2>/dev/null | sort -r); do
+      [ -f "$b/$e.completed-utc" ] || continue
+      if [[ "$(cat "$b/$e.completed-utc")" < "$target" ]] || [ "$(cat "$b/$e.completed-utc")" = "$target" ]; then from="$b"; break; fi
+    done
+    [ -n "$from" ] || die "no $e backup finished before $target (older backups lack $e.completed-utc: pass --from)"
+  fi
+  [ -d "$from" ] && [ -f "$from/$e.sql.gz" ] || die "no $e.sql.gz in ${from:-?}"
+  verify_backup "$from"
+  local start pos; read -r start pos <<< "$(dump_coords "$from/$e.sql.gz")"
+  [ -n "${start:-}" ] && [ -n "${pos:-}" ] || die "$from/$e.sql.gz has no binlog coordinates (backups made before binlog-replay existed lack them): point-in-time replay needs a newer backup"
+  banner "binlog-replay $e to $target"
+  echo "Restores $e user databases from $from (binlog $start:$pos) and replays the binlogs up to $target UTC."
+  echo "Everything in those databases after $target is lost (a safety backup is taken first)."
+  local pe=""; for a in $(local_envs); do env_protected "$a" && pe="$a"; done
+  if [ -n "$pe" ]; then guard_destructive "$e" "$pe" "$force"; else confirm RESTORE; fi
+  log "shipping the binlogs written so far"
+  cmd_binlog_ship
+  local bd="$BACKUP_DIR/binlogs/$e" base="${start%.*}" files=() f n prev=""
+  for f in $(find "$bd" -maxdepth 1 -name "$base.[0-9]*.gz" -exec basename {} .gz \; | sort); do
+    [[ "$f" < "$start" ]] && continue
+    n=$((10#${f##*.}))
+    [ -z "$prev" ] || [ "$n" = $((prev + 1)) ] || die "binlog gap before $f in $bd: cannot replay past it"
+    prev="$n"; files+=("$f")
+  done
+  [ "${files[0]:-}" = "$start" ] || die "$start (where $from starts) is not in $bd: it was never shipped or has expired (BINLOG_DAYS=$BINLOG_DAYS)"
+  log "safety backup before the replay"
+  cmd_backup
+  # --skip-gtids (MySQL): the server already executed these GTIDs and would silently skip every
+  # replayed transaction; without them each one gets a new GTID
+  local tmpd="$BACKUP_DIR/.replay-$$" cli=mysql rv=MYSQL_ROOT_PASSWORD bin=mysqlbinlog gt=(--skip-gtids)
+  [ "$e" = mariadb ] && cli=mariadb rv=MARIADB_ROOT_PASSWORD bin=mariadb-binlog gt=()
+  (umask 077; mkdir -p "$tmpd")
+  for f in "${files[@]}"; do gzip -cd "$bd/$f.gz" > "$tmpd/$f"; done
+  chmod 644 "$tmpd"/*; chmod 755 "$tmpd"   # read by the decoder container (not root in every image); parent dir stays 700
+  log "restoring $from/$e.sql.gz"
+  local d; for d in $(printf 'select schema_name from information_schema.schemata where schema_name not in (%s);\n' "$MY_SYS_DBS" | my_q "$e"); do
+    printf 'SET SESSION sql_log_bin=0; DROP DATABASE `%s`;\n' "$d" | my_q "$e"
+  done
+  { echo 'SET SESSION sql_log_bin=0;'; gunzip -c "$from/$e.sql.gz"; } | my_q "$e" >/dev/null || { rm -rf "$tmpd"; die "loading $from/$e.sql.gz failed; the safety backup is $(newest_backup)"; }
+  log "replaying ${#files[@]} binlog(s) from $start:$pos to $target UTC"
+  if ! docker run --rm --network none -e TZ=UTC -v "$tmpd:/b:ro" --entrypoint "$bin" "$img" \
+        --disable-log-bin "${gt[@]+"${gt[@]}"}" "--start-position=$pos" "--stop-datetime=$target" "${files[@]/#//b/}" \
+      | binlog_filter "$tmpd/.skipped" \
+      | dc exec -T "$e" sh -c "MYSQL_PWD=\"\$$rv\" exec $cli -uroot --binary-mode"; then
+    rm -rf "$tmpd"; die "binlog replay failed; $e is between $from and $target. Restore the safety backup with: restore $(newest_backup) $e"
+  fi
+  local skipped; skipped="$(cat "$tmpd/.skipped" 2>/dev/null || echo 0)"; rm -rf "$tmpd"
+  [ "$skipped" = 0 ] || echo "skipped $skipped account statement(s) (users and grants stay as they are now)"
+  printf 'FLUSH BINARY LOGS;\n' | my_q "$e"
+  stamp binlog-replay "$e $target"
+  log "new backup (the starting point for the next point-in-time restore)"
+  cmd_backup
+  echo "binlog replay done: $e at $target UTC; run: verify, doctor"
 }
 
 # ---- PITR: pgBackRest inside the postgres container -----------------------------
@@ -3310,7 +3435,7 @@ case "$CMD" in help|-h|--help|init|env-init|env-sql|env-list|gfs-keep) ;; *) che
 case "$CMD" in help|-h|--help|init|env-init) ;; *) validate_envs ;; esac
 case "$CMD" in # mutating commands: one at a time
   upgrade|apply|install|reset|restore|backup|uninstall|create-db|create-user|grant|drop-db|drop-user|rotate-password|\
-  env-apply|role-split|rebind-ip|purge-trash|engine|offsite|binlog-ship|pitr|restore-test|monitor-user|pg-major-upgrade|migrate-managed)
+  env-apply|role-split|rebind-ip|purge-trash|engine|offsite|binlog-ship|binlog-replay|pitr|restore-test|monitor-user|pg-major-upgrade|migrate-managed)
     need_root; take_lock ;;
 esac
 case "$CMD" in
@@ -3343,6 +3468,7 @@ case "$CMD" in
   restore-test) cmd_restore_test "$@" ;;
   offsite)      cmd_offsite "$@" ;;
   binlog-ship)  cmd_binlog_ship ;;
+  binlog-replay) cmd_binlog_replay "$@" ;;
   pitr)         cmd_pitr "$@" ;;
   engine)       cmd_engine "$@" ;;
   gfs-keep)     gfs_keep "$*" ;;
