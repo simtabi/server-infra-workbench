@@ -65,7 +65,7 @@ q() { prom "/api/v1/query?query=$1" | python3 -c 'import json,sys; r=json.load(s
 
 # ---- the DB side: manager install, vsw_monitor role, a backup for the textfile metrics -----------------------------
 run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/install.out" && ok "manager install (postgres + pgbouncer)" || { it_why "$W/install.out" 40; docker logs --tail 30 vswmon-postgres-1 2>&1 | sed "s/^/  pg: /"; fail "install"; }
-run cmd_monitor_user > "$W/mu.out" 2>&1 && [ "$(stat -f %Lp "$W/pg-monitor.pass" 2>/dev/null || stat -c %a "$W/pg-monitor.pass")" = 600 ] \
+run cmd_monitor_user > "$W/mu.out" 2>&1 && [ "$(stat -c %a "$W/pg-monitor.pass" 2>/dev/null || stat -f %Lp "$W/pg-monitor.pass")" = 600 ] \
   && ! cat "$W/mu.out" "$DBM_LOG" 2>/dev/null | grep -qF "$(cat "$W/pg-monitor.pass")" && ok "monitor-user: role created, password file 600, never printed" || { cat "$W/mu.out"; fail "monitor-user"; }
 run cmd_monitor_user > "$W/mu2.out" 2>&1 && ok "monitor-user is idempotent" || { cat "$W/mu2.out"; fail "monitor-user rerun"; }
 (cd "$D" && docker compose --env-file .env --env-file stack.env exec -T postgres psql -X -tA -U vsw_admin -d postgres \
@@ -77,7 +77,7 @@ run cmd_backup > "$W/bk.out" 2>&1 && grep -q 'vsw_backup_last_success_timestamp_
 mon plan > "$W/plan.out" 2>&1 && grep -q 'postgres-exporter, pgbouncer-exporter' "$W/plan.out" && ok "plan: 5 units, DB exporters on" || { cat "$W/plan.out"; fail "plan"; }
 mon install --yes > "$W/mi.out" 2>&1 && grep -q 'monitoring is up on itnode' "$W/mi.out" && ok "install: beszel, beszel-agent, kuma, prometheus, exporters healthy" || { it_why "$W/mi.out" 60; fail "monitor install"; }
 bad=0; for u in beszel beszel-agent kuma prometheus exporters; do for f in secrets.env stack.env; do
-  [ "$(stat -f %Lp "$W/mon/$u/$f" 2>/dev/null || stat -c %a "$W/mon/$u/$f")" = 600 ] || bad=1; done; done
+  [ "$(stat -c %a "$W/mon/$u/$f" 2>/dev/null || stat -f %Lp "$W/mon/$u/$f")" = 600 ] || bad=1; done; done
 [ "$bad" = 0 ] && ok "every secrets.env / stack.env is 600" || fail "modes"
 leak=0; for u in beszel prometheus exporters; do while IFS='=' read -r _ v; do [ -n "$v" ] && [ "${#v}" -ge 12 ] && grep -qF "$v" "$W/mi.out" "$W/audit.log" && leak=1; done < <(grep -v '^#' "$W/mon/$u/secrets.env"); done
 [ "$leak" = 0 ] && ok "no generated secret appears in the output or the audit log" || fail "secret leaked"

@@ -110,6 +110,8 @@ grep -q 'POSTGRES_USER: ${PG_ADMIN_USER}' "$c" && grep -q 'hba_file=/etc/postgre
   && grep -q '"--local-infile=0"' "$c" && grep -q 'secure-file-priv=/var/lib/mysql-files' "$c" && grep -q 'MYSQL_ROOT_HOST: localhost' "$c" \
   && grep -q 'subnet: "${DOCKER_SUBNET}"' "$c" && grep -q '^PG_IMAGE=vsw/postgres:18-postgis-pgvector$' "$T/db/stack.env" \
   && ok "compose: admin bootstrap, pg_hba, logging, local_infile=0, secure_file_priv, no root@'%', fixed subnet, neutral image tag" || fail "compose hardening"
+grep -q 'mysqladmin ping -uroot -h127.0.0.1 --protocol=TCP --silent' "$c" && grep -q '"healthcheck.sh", "--connect", "--innodb_initialized"' "$c" \
+  && ok "compose: MySQL/MariaDB healthchecks need TCP (the entrypoint's temporary socket-only server is not healthy)" || fail "my healthcheck"
 df="$T/db/postgres/Dockerfile"
 grep -qx 'ARG PG_BASE_IMAGE=postgis/postgis:18-3.6' "$df" && [ "$(grep -n '^ARG PG_BASE_IMAGE=' "$df" | cut -d: -f1)" -lt "$(grep -n '^FROM ' "$df" | cut -d: -f1)" ] \
   && grep -qx 'ARG DEBIAN_FRONTEND=noninteractive' "$df" && ! grep -q '^ENV DEBIAN_FRONTEND' "$df" \

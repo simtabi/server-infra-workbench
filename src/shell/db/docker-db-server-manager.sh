@@ -769,7 +769,10 @@ EOF
     ports: ["${PRIVATE_IP}:${MYSQL_PORT}:3306"]
     volumes: [mysql_data:/var/lib/mysql]
     healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -uroot --silent"]
+      # TCP, not the socket: the entrypoint's temporary init server (--skip-networking) answers a socket ping,
+      # so the container went healthy, then restarted under the first query (ERROR 2002). ping exits 0 once
+      # mysqld answers on TCP, even before root@127.0.0.1 exists.
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -uroot -h127.0.0.1 --protocol=TCP --silent"]
       interval: 5s
       timeout: 5s
       retries: 60

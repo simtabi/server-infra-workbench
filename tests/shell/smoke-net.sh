@@ -41,7 +41,7 @@ if bash "$G" setup --host db --peer web >"$T/o" 2>&1; then fail "setup without y
 
 bash "$G" setup --host db --peer web --yes > "$T/o" 2>&1 || { cat "$T/o"; fail "setup --yes"; }
 dc="$T/srv/db/etc/wireguard/wg0.conf" wc="$T/srv/web/etc/wireguard/wg0.conf"
-perm() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+perm() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 [ "$(perm "$dc")" = 600 ] && [ "$(perm "$T/srv/db/etc/wireguard/wg0.key")" = 600 ] && [ "$(perm "$wc")" = 600 ] \
   && ok "setup: configs and keys are 600" || fail "modes"
 ! grep -rq 'SECRET' "$dc" "$wc" "$T/o" "$T/log" && grep -q 'PostUp = wg set %i private-key /etc/wireguard/wg0.key' "$dc" \

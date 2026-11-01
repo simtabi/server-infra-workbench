@@ -45,7 +45,7 @@ run cmd_install > "$W/install.out" 2>&1 && grep -q 'ALL CHECKS PASSED' "$W/insta
 pw="$(grep '^PG_PASSWORD=' "$D/.env" | cut -d= -f2-)"
 
 # ---- verify-full -----------------------------------------------------------------------
-run cmd_tls_ca --out "$W/ca.crt" > "$W/ca.out" 2>&1 && [ "$(stat -f %Lp "$W/ca.crt" 2>/dev/null || stat -c %a "$W/ca.crt")" = 644 ] && grep -q 'BEGIN CERTIFICATE' "$W/ca.crt" \
+run cmd_tls_ca --out "$W/ca.crt" > "$W/ca.out" 2>&1 && [ "$(stat -c %a "$W/ca.crt" 2>/dev/null || stat -f %Lp "$W/ca.crt")" = 644 ] && grep -q 'BEGIN CERTIFICATE' "$W/ca.crt" \
   && ! grep -q 'PRIVATE' "$W/ca.crt" && ok "tls-ca --out: public CA only (644, no key material)" || { cat "$W/ca.out"; fail "tls-ca"; }
 for p in 25442 26442; do
   cli -e PGPASSWORD="$pw" postgres:18 psql -X -tA "host=127.0.0.1 port=$p user=app dbname=app sslmode=verify-full sslrootcert=/w/ca.crt" -c "select 'ok'" 2>&1 | grep -qx ok \
@@ -69,7 +69,7 @@ grep -q 'verify-full: server certificate chains to the CA' "$W/doctor.out" && ok
 myq() { dcx exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot -N -B' <<<"$1"; }
 [ "$(myq 'select @@require_secure_transport')" = 1 ] && [ "$(myq 'select @@local_infile')" = 0 ] && [ -z "$(myq "select 1 from mysql.user where user='root' and host='%'")" ] \
   && ok "mysql: require_secure_transport=ON, local_infile=0, no root@'%'" || fail "mysql hardening"
-run cmd_create_db shopm mysql --readonly-user --out "$W/shopm.creds" > "$W/cdbm.out" 2>&1 && [ "$(stat -f %Lp "$W/shopm.creds" 2>/dev/null || stat -c %a "$W/shopm.creds")" = 600 ] \
+run cmd_create_db shopm mysql --readonly-user --out "$W/shopm.creds" > "$W/cdbm.out" 2>&1 && [ "$(stat -c %a "$W/shopm.creds" 2>/dev/null || stat -f %Lp "$W/shopm.creds")" = 600 ] \
   && ok "mysql: create-db with a read-only user, creds file 600" || { cat "$W/cdbm.out"; fail "mysql create-db"; }
 
 # ---- metrics -----------------------------------------------------------------------------
@@ -77,7 +77,7 @@ psq vsw_admin app "create table t_it(id int primary key, v text); insert into t_
 run cmd_backup > "$W/bk.out" 2>&1 || { it_why "$W/bk.out" 20; fail "backup"; }
 f="$W/textfile/vsw_db.prom"
 grep -q '^vsw_backup_last_success_timestamp_seconds{engine="all"} [0-9]\{10\}$' "$f" && grep -q '^vsw_tls_cert_expiry_timestamp_seconds{cert="db"} [0-9]\{10\}$' "$f" \
-  && grep -q '^vsw_reboot_required [01]$' "$f" && [ "$(stat -f %Lp "$f" 2>/dev/null || stat -c %a "$f")" = 644 ] \
+  && grep -q '^vsw_reboot_required [01]$' "$f" && [ "$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f")" = 644 ] \
   && ok "backup writes textfile metrics (backup time, TLS expiry, reboot flag; 644)" || { cat "$f" 2>/dev/null; fail "metrics"; }
 run cmd_restore_test > "$W/rt.out" 2>&1 && grep -q 'restore test OK' "$W/rt.out" && grep -q '^vsw_restore_test_last_success_timestamp_seconds [0-9]' "$f" \
   && ok "restore-test (postgres + mysql) ok and its metric written" || { it_why "$W/rt.out" 30; fail "restore-test"; }

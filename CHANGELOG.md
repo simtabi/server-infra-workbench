@@ -15,6 +15,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   installed on the server.
 
 ### Fixed (final audit, 2026-11)
+- Tests that read a file mode tried BSD `stat -f %Lp` first. GNU `stat -f` means filesystem status and exits 0, so on Linux (CI) the mode check compared garbage. They now try `stat -c %a` first, like the tools.
+- MySQL healthcheck pinged the socket, which the image's temporary init server (`--skip-networking`) answers: the container went healthy, then restarted under the first hardening query (`ERROR 2002`, an intermittent install failure seen in db-features-it). It now pings over TCP (127.0.0.1), which only the final server answers; MariaDB already used `healthcheck.sh --connect`.
+- server-it accepts `permitrootlogin prohibit-password` from `sshd -T`: OpenSSH 10 on Ubuntu 26.04 prints the canonical name, OpenSSH 9 printed the old alias `without-password`.
 - Confirm prompts and `init` wrote to `/dev/stderr` / `/dev/stdout` by path. On Linux that reopens the file, so a run redirected to a log (`> log 2>&1`, `>> log`) lost everything printed before the prompt. They now write to fd 2 / fd 1, and a smoke check refuses the pattern (caught by CI on Linux; macOS dup()s these paths so local runs passed).
 
 The rehearsal's "noted, not fixed" items and audit gaps:
