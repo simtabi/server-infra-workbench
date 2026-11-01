@@ -24,7 +24,8 @@ grep -q 'todo  packages' /tmp/o && grep -q 'todo  harden' /tmp/o && [ ! -f /etc/
 bash $S/server/init.sh --role base --swap 0 --timezone Europe/London > /tmp/o 2>&1 || { cat /tmp/o; fail "init apply"; }
 [ "$(cat /etc/timezone)" = Europe/London ] && command -v jq >/dev/null && ok "init: timezone (no systemd fallback) and base packages" || fail "init tz/packages"
 sshd -t && sshd -T 2>/dev/null | grep -qx 'passwordauthentication no' && sshd -T 2>/dev/null | grep -qx 'permitrootlogin without-password' \
-  && ok "init -> harden: real sshd -T shows keys only, root by key" || fail "sshd -T"
+  && ok "init -> harden: real sshd -T shows keys only, root by key" \
+  || { echo "--- sshd -t:"; sshd -t || true; echo "--- sshd -T (auth lines):"; sshd -T 2>&1 | grep -iE "passwordauth|permitroot|error|fatal|bad|unsupported" || true; ls -la /etc/ssh/sshd_config.d/ /etc/ssh/ | grep -E "key|conf"; fail "sshd -T"; }
 [ -f /etc/fail2ban/jail.d/workbench-sshd.local ] && dpkg -s fail2ban unattended-upgrades >/dev/null 2>&1 && ok "harden: fail2ban + unattended-upgrades installed for real" || fail "harden pkgs"
 grep -q 'tool=init .*outcome=succeeded' /var/log/vps-server-workbench/audit.log && grep -q 'tool=harden .*outcome=succeeded' /var/log/vps-server-workbench/audit.log && ok "audit: init and harden logged" || fail "audit"
 bash $S/server/init.sh --role base --swap 0 --timezone Europe/London > /tmp/o 2>&1; grep -q 'nothing to change' /tmp/o && ok "init: rerun is a no-op" || { cat /tmp/o; fail "init rerun"; }
