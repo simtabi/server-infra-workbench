@@ -58,7 +58,7 @@ src/shell/db/remote-run.sh --host <db-alias> --expect-ip <private-ip> \
   --config my-db-server.conf -- reset --yes, verify, cron-install, env
 ```
 
-That uploads the script (scp to `~`), installs it to `/root` with `sudo install -m 755`, aborts
+That uploads the script and config to staging names in `~` (`.vsw-upload-*`, so a `root` login never copies a file onto itself), installs them to `/root` with `sudo install -m 755`, aborts
 with `ABORT: this is <host>, not the db server` unless `<private-ip>` is on the host, then runs
 each command with sudo (one password prompt). Use `install` instead of `reset --yes` to keep
 existing data. For `upgrade` it first offers a droplet snapshot from your Mac: doctl if configured,
@@ -67,9 +67,9 @@ otherwise you type `CONTINUE` on the server; `--snapshot-with doctl|workbench|se
 The equivalent by hand:
 
 ```sh
-scp src/shell/db/docker-db-server-manager.sh <db-alias>:~/
+scp src/shell/db/docker-db-server-manager.sh <db-alias>:~/.vsw-upload-docker-db-server-manager.sh
 ssh -t <db-alias> 'ip -4 addr | grep -q "inet <private-ip>/" || { echo "ABORT: $(hostname)"; exit 1; }
-  sudo install -m 755 ~/docker-db-server-manager.sh /root/docker-db-server-manager.sh &&
+  sudo install -m 755 ~/.vsw-upload-docker-db-server-manager.sh /root/docker-db-server-manager.sh && rm -f ~/.vsw-upload-docker-db-server-manager.sh &&
   sudo /root/docker-db-server-manager.sh reset --yes && sudo /root/docker-db-server-manager.sh cron-install &&
   sudo /root/docker-db-server-manager.sh env'
 ```
@@ -129,6 +129,7 @@ To wipe everything and start over, run `sudo ... reset`. You'll be asked to type
 |---|---|---|---|
 | `init [file]` | no (writes a config file) | no | starter config for this host: detects the private IP and VPC range; no root needed |
 | `upgrade [--dry-run] [--snapshot\|--snapshot-taken\|--no-snapshot]` (alias `apply`) | no (backs up first) | snapshot, apply (or `--yes`) | guided upgrade of a running server: preflight, diff, snapshot offer, verified backup, savepoint, apply, verify + doctor, auto-rollback; see [Upgrade](#upgrade) |
+| `rebind-ip [--dry-run]` | no (restarts the stack) | no | after a snapshot restore to a droplet with another private IP: set `PRIVATE_IP` in `/opt/db/.env` (copy kept as `.env.bak.<ts>`) and start the stack on the new IP; `upgrade` preflight names it when the stack binds an IP that is not on the host |
 | `install` | no (keeps `.env` and volumes) | no | Docker, files, build, `up --wait`, ufw, `verify`, summary |
 | `reset [--force-prod]` | **destroys** all DB data | `Type RESET` (or `--yes`); protected envs: `--force-prod` + env name | new passwords, rebuild from scratch |
 | `status` | no | no | `docker compose ps` |
@@ -454,7 +455,11 @@ traffic is unencrypted on the VPC.
 
 A lock (`/run/lock/docker-db-server-manager.lock`) stops two mutating runs at once (stale locks are
 recovered); every run is logged, with secrets redacted, to `/var/log/docker-db-server-manager.log` (chmod 600).
-Prompts need a terminal; without one, use `--yes` plus a snapshot flag.
+Prompts need a terminal; without one, use `--yes` plus a snapshot flag. Unhealthy containers stop the preflight:
+`--dry-run` continues to the plan, a terminal asks, and a scripted run needs `--allow-unhealthy` (the upgrade's
+own rollback still applies). A stack that predates the managed network (`db_default`) is moved onto
+`DOCKER_NETWORK` during the apply: its containers are recreated, volumes kept. `upgrade` with nothing to change
+still retires an old image tag (`PG_IMAGE_LEGACY`, or the running container's tag on a stack without `stack.env`).
 
 
 Major Postgres versions need a dump and restore; see [status.md](../status.md#postgres-major-upgrade).

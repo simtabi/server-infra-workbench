@@ -40,6 +40,7 @@ documentation IP ranges.
 | PgBouncer 6432 vs Postgres 5432 | the app used 5432 directly (connection storms) or tools that need session features went through 6432 | the app uses 6432 (`DB_PORT=6432`); migrations or `pg_dump` that need session state use 5432 from the VPC; both allowed only from the VPC |
 | VPCs are per region | a web server in another region couldn't reach the DB's private IP at all | build peers in one region; otherwise VPC peering, WireGuard or public TLS with an allowlist ([cross-region](cross-region.md)); `doctor` and `check-db-reach` check the region |
 | `eth0` is public, `eth1` is the VPC | the wrong interface was used for the bind address | `PRIVATE_IFACE=eth1` and `EXPECTED_PRIVATE_IP` (wrong-server guard) |
+| The default tunnel subnet can be a VPC | WireGuard's 10.200.0.0/24 overlapped a VPC in the same range, which would have hijacked VPC routes | `net wireguard setup` refuses an overlapping /24 (exit 2) and suggests 10.250.0.x |
 
 ## Databases
 
@@ -56,6 +57,9 @@ documentation IP ranges.
 | Four engines on 1.9 GB | the server swapped and the OOM killer stopped MySQL | RAM estimates in [sizing](reference/sizing.md); `doctor` and `engine enable` warn and print the resize command |
 | An empty staging database behind a 503 | the stg site returned 503 and the DB had no tables: the first deploy never ran migrations (and the site stayed in maintenance mode) | `web diagnose` reports pending migrations and maintenance mode; the deploy script runs `migrate --force`; check `php artisan migrate:status` first |
 | Extensions missing on new databases | `citext` was added to the config after the first install | extensions are created in `template1` too, and `upgrade` converges them |
+| A restored snapshot keeps the old private IP | a clone of the DB droplet on a new VPC IP had every container exit: they bind `PRIVATE_IP` from `/opt/db/.env` | `rebind-ip` rewrites it and starts the stack; `upgrade` preflight names it |
+| A legacy stack sat on `db_default` | the first `upgrade` of a pre-1.4 stack failed with "network has active endpoints" and rolled back | the apply moves the stack's containers to `DOCKER_NETWORK` (volumes kept) before Postgres starts |
+| An old image tag outlived its upgrade | a stack from before `stack.env` named its custom tag only on the container, so `upgrade` never retired it | the running container's tag joins `PG_IMAGE_LEGACY`; a no-op `upgrade` retires old tags too |
 
 ## Backups
 
@@ -66,6 +70,10 @@ documentation IP ranges.
 | Backups on the same droplet die with it | | encrypted off-site copies, key stored off the server ([backups](backups-and-recovery.md)) |
 | Nightly dumps lose up to a day | | pgBackRest PITR for Postgres, binlog shipping for MySQL/MariaDB |
 | Cleanup traps don't always fire | a `RETURN` trap didn't run in a cron restore test, leaving containers using RAM | explicit cleanup on every exit path, and leftovers removed at the start of the next run |
+| A docker error parsed as a version | `pitr setup` on an image without pgBackRest read "OCI runtime exec failed" and took "runtime" for the version | the version must be `pgBackRest N.N`; the error says to set `PITR` and run `upgrade` |
+| Turning PITR on rolled itself back | the upgrade that adds pgBackRest ran doctor before `pitr setup` could create the stanza | in the upgrade's doctor a missing stanza is a warning |
+| Docker DNS ignores `/etc/hosts` | a private S3 name in the host's `/etc/hosts` reached `offsite` but not pgBackRest in the container | `PITR_S3_HOST_IP` adds `extra_hosts` to the postgres service |
+| `AWS_CA_BUNDLE` breaks rclone | exporting it for a private CA made rclone's S3 SDK fail with "unsupported transport" | rclone gets `RCLONE_CA_CERT`, aws gets `AWS_CA_BUNDLE`, never both |
 
 ## SSH and access
 

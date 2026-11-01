@@ -12,7 +12,8 @@ regions](../cross-region.md).
 | `status --host <ssh> [--ping IP]` | handshake age, bytes in/out, optional ping through the tunnel; never shows keys |
 | `remove --host <ssh> [--yes]` | stops and disables the tunnel, backs up the config, removes the Docker ordering drop-in; keeps the key and leaves ufw rules for you to review |
 
-Options: `--host-ip`/`--peer-ip` (default `10.200.0.1`/`10.200.0.2`, same /24), `--host-endpoint`/
+Options: `--host-ip`/`--peer-ip` (default `10.200.0.1`/`10.200.0.2`, same /24; `setup` refuses a tunnel /24 that
+overlaps a network on the host, such as a VPC in 10.200.0.0/16, and suggests `10.250.0.1`/`10.250.0.2`), `--host-endpoint`/
 `--peer-endpoint` (public IPs, detected by default), `--port` (51820), `--db-ports` (5432,6432; opened on `wg0`
 from the peer's tunnel IP on the DB side only), `--iface` (wg0), `--ploi-ufw` (also write ufw rules on a Ploi
 server; by default the rule is printed for Ploi's Network tab).

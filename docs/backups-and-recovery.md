@@ -103,7 +103,11 @@ pgBackRest's S3 driver speaks **HTTPS only**, so `validate` refuses an `http://`
 | Garage / MinIO / SeaweedFS (self-hosted) | `https://s3.internal:8443` behind a TLS proxy | `path` | the proxy's CA (PEM) | no wildcard DNS for bucket hosts; a private CA is verified, never skipped |
 
 A port in the endpoint becomes `repo1-storage-port`; the CA is copied to `postgres/conf/s3-ca.crt` and mounted
-read-only. Use a key scoped to the PITR bucket and keep `PITR_REPO_PATH` distinct per server
+read-only. `offsite` (rclone or aws on the host) trusts the same CA (`RCLONE_CA_CERT` / `AWS_CA_BUNDLE`). A private
+name that is not in DNS goes in the host's `/etc/hosts` for `offsite` and in `PITR_S3_HOST_IP` for pgBackRest: Docker's
+DNS ignores the host's `/etc/hosts`, so the manager adds an `extra_hosts` entry to the postgres service.
+Turning PITR on is `PITR=pgbackrest` plus `upgrade` (the image gains pgBackRest), then `pitr setup`; the upgrade's
+doctor treats the not-yet-created stanza as a warning. Use a key scoped to the PITR bucket and keep `PITR_REPO_PATH` distinct per server
 (`/db-main`, `/db-staging`) so two stanzas never share a path.
 
 Make sure the endpoint resolves and answers from the DB server **before** `install` with `PITR=pgbackrest`:

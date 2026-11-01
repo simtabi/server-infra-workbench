@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed (live rollout rehearsal, 2026-11)
+
+A rehearsal of the [live rollout runbook](docs/runbooks/live-rollout.md) on throwaway droplets (a DB snapshot
+clone, a web droplet, a three-node Garage cluster) found these ([report](docs/rehearsals/2026-11-live-rollout.md)):
+
+- DB manager: `rebind-ip [--dry-run]` for a snapshot restored to a new private IP; `upgrade` preflight names it.
+- DB manager: `upgrade --allow-unhealthy` for scripted runs on an unhealthy stack (dry runs continue to the plan).
+- DB manager: a legacy stack on `db_default` is moved to `DOCKER_NETWORK` during the apply (was: "active endpoints", rollback).
+- DB manager: old Postgres image tags are retired from a stack without `stack.env` (container tag) and on a no-op `upgrade`.
+- DB manager: `PITR_S3_HOST_IP` (`extra_hosts` for a private S3 name); `offsite` trusts `PITR_S3_CA_FILE`
+  (`RCLONE_CA_CERT` or `AWS_CA_BUNDLE`, one per tool); rclone runs without a config file notice.
+- DB manager: `pitr setup` no longer takes a docker error for a pgBackRest version; the upgrade that turns PITR on
+  treats the missing stanza as a warning instead of rolling back.
+- DB manager: `doctor` reads unattended upgrades from `APT::Periodic` (the service unit is often disabled) and a
+  failed doctor no longer prints an `ERROR: line N` trap line.
+- `remote-run.sh` uploads to staging names, so a `root` login works ("are the same file").
+- `net wireguard setup` refuses a tunnel /24 that overlaps a host network (exit 2).
+- `monitor.sh plan` says when Docker is missing; `confirm()` without a terminal prints no `/dev/tty` error.
+- Runbook: rclone install, PITR needs an upgrade first, `--yes` for scripted deletes, Docker for the monitoring hub,
+  `addon.sh laravel-env` before task 15, `rebind-ip` after a restore to a new IP.
+
 ### Changed (droplet image)
 
 - `workbench do droplet-create` defaults to the newest Ubuntu LTS, `ubuntu-26-04-x64` (was `ubuntu-24-04-x64`).
