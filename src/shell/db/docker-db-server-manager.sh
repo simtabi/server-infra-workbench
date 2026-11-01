@@ -3390,11 +3390,30 @@ cmd_migrate_managed() { # --target-env FILE [--db a,b] [--check] [--yes]
 }
 
 # ---- engines: enable / disable without losing data ------------------------------
-set_conf_key() { # key value: edit the manager config file in place (600, backup kept)
-  local f="$DBM_CONFIG"; [ -f "$f" ] || die "no config file $f (init > $f first)"
+set_conf_key() { # key value [file]: edit the manager config file (default $DBM_CONFIG) in place (600, backup kept)
+  local f="${3:-$DBM_CONFIG}"; [ -f "$f" ] || die "no config file $f (init > $f first)"
+  # already set to this value (and only once): leave the file and its mtime alone, no backup (idempotent)
+  [ "$(grep -cE "^(SIWO_DB_)?$1=" "$f")" = 1 ] && grep -qxE "(SIWO_DB_)?$1=\"?$2\"?" "$f" && return 0
   cp -p "$f" "$f.bak-$(date +%Y%m%d-%H%M%S)"
   local t; t="$(mktemp "$f.XXXX")"; chmod 600 "$t"
   grep -vE "^(SIWO_DB_)?$1=" "$f" > "$t" || true; printf '%s=%s\n' "$1" "$2" >> "$t"; mv "$t" "$f"
+}
+# Where the ENABLE_* switches live on a server. Two places can hold them:
+#   $DBM_CONFIG (/etc/docker-db-server-manager.conf, installed by remote-run.sh --config) - read at start-up
+#   $DB_DIR/.env (/opt/db/.env, written by install)                                         - sourced later by
+#                                                    load_env, so a key there WINS over the config file
+# A server built without a config file (or by hand) keeps them only in /opt/db/.env. engines apply writes the
+# new value to every file that defines the key; when none does, to the config file if there is one, else to
+# /opt/db/.env. So the two never disagree, and a .env-only server stays .env-only.
+engine_conf_files() { # key -> the files engines apply writes it to (space separated)
+  local out="" k="^(SIWO_DB_)?$1="
+  [ -f "$DBM_CONFIG" ] && grep -qE "$k" "$DBM_CONFIG" && out="$DBM_CONFIG"
+  [ -f "$DB_DIR/.env" ] && grep -qE "$k" "$DB_DIR/.env" && out="$out $DB_DIR/.env"
+  if [ -z "$out" ]; then if [ -f "$DBM_CONFIG" ]; then out="$DBM_CONFIG"; else out="$DB_DIR/.env"; fi; fi
+  echo "${out# }"
+}
+set_engine_key() { # key value: write an ENABLE_* switch to every file that holds it (backups kept)
+  local f; for f in $(engine_conf_files "$1"); do set_conf_key "$1" "$2" "$f"; done
 }
 # engines status | apply: switch engines on/off without downtime for the others. Removal stops and
 # removes only that container (by id; the compose file is regenerated afterwards); additions start only
@@ -3409,6 +3428,7 @@ svc_state() { local c; c="$(svc_cid "$1")"; [ -n "$c" ] || { echo absent; return
 svc_running() { case "$(svc_state "$1")" in running*) return 0 ;; esac; return 1; }
 engines_status() {
   local s v vol vs
+  echo "settings: $( [ -f "$DBM_CONFIG" ] && echo "$DBM_CONFIG, then " )$DB_DIR/.env (the .env wins when both set a key)"
   printf '%-10s %-7s %-20s %-16s %s\n' ENGINE CONFIG CONTAINER PORT "DATA VOLUME"
   for s in $ENGINE_SVCS; do
     v="$(engine_var "$s")"; vol="$(engine_volume "$s")"; vs=-
@@ -3450,8 +3470,17 @@ cmd_engines() { # [status] | apply [--set ENABLE_X=0|1]... [--dry-run] [--purge]
   check_engines
   if [ "$act" = status ]; then engines_status; return 0; fi
   # plan: settings that change, containers to remove (dependents first), services to start
-  for a in "${sets[@]+"${sets[@]}"}"; do in_list "$a" "$orig" || conf="$conf $a"; done
-  [ -z "$conf" ] || [ -f "$DBM_CONFIG" ] || [ "$dry" = 1 ] || die "no config file $DBM_CONFIG to record$conf (init > $DBM_CONFIG first)"
+  # a setting changes when it differs from the running value OR from any file that holds it (a config file
+  # saying 1 under a .env saying 0 would bring the engine back the day the .env line goes)
+  local f fv
+  for a in "${sets[@]+"${sets[@]}"}"; do
+    if ! in_list "$a" "$orig"; then conf="$conf $a"; continue; fi
+    for f in $(engine_conf_files "${a%%=*}"); do
+      fv="$(sed -nE "s/^(SIWO_DB_)?${a%%=*}=\"?([^\"#[:space:]]*).*/\2/p" "$f" 2>/dev/null | tail -n1)"
+      [ -z "$fv" ] || [ "$fv" = "${a#*=}" ] || { conf="$conf $a"; break; }
+    done
+  done
+  [ -z "$conf" ] || [ -f "$DBM_CONFIG" ] || [ -f "$DB_DIR/.env" ] || [ "$dry" = 1 ] || die "no $DBM_CONFIG or $DB_DIR/.env to record$conf"
   local stop="" start="" keep="" data_stop=""
   for s in adminer pgbouncer mysql mariadb postgres; do v="$(engine_var "$s")"
     on "${!v}" || { [ -z "$(svc_cid "$s")" ] || stop="$stop $s"; }; done
@@ -3459,17 +3488,28 @@ cmd_engines() { # [status] | apply [--set ENABLE_X=0|1]... [--dry-run] [--purge]
     on "${!v}" && ! svc_running "$s" && start="$start $s"; done
   for s in $ENGINE_SVCS; do in_list "$s" "$stop $start" || [ -z "$(svc_cid "$s")" ] || keep="$keep $s"; done
   for s in $stop; do [ -z "$(engine_volume "$s")" ] || data_stop="$data_stop $s"; done
+  # drift: an engine that is off and has no container (removed by hand with docker rm, or an earlier run that
+  # stopped half way) can still be listed in docker-compose.yml or keep its firewall rule; apply regenerates
+  # the files and prunes the rule, so a later `docker compose up` does not bring it back
+  local stale="" fw_stale="" p
+  for s in $ENGINE_SVCS; do v="$(engine_var "$s")"
+    on "${!v}" || in_list "$s" "$stop" || ! grep -qE "^  $s:\$" "$DB_DIR/docker-compose.yml" 2>/dev/null || stale="$stale $s"; done
+  if command -v ufw >/dev/null 2>&1; then for s in postgres pgbouncer mysql mariadb; do v="$(engine_var "$s")"
+    on "${!v}" && continue; p="$(engine_svc_port "$s")"; in_list "$p" "$(enabled_ports | tr '\n' ' ')" && continue
+    if ufw status 2>/dev/null | grep -Eq "^${p}/tcp[[:space:]]+ALLOW( IN)?[[:space:]]+${VPC_CIDR//./\\.}"; then fw_stale="$fw_stale $s:$p"; fi; done; fi
   local purge_list=""   # --purge: the volumes of every engine that ends up off (stopped now or earlier)
   if [ "$purge" = 1 ]; then for s in postgres mysql mariadb; do v="$(engine_var "$s")"
     on "${!v}" || ! docker volume inspect "$(engine_volume "$s")" >/dev/null 2>&1 || purge_list="$purge_list $s"; done; fi
   echo "engines plan ($DB_DIR):"
-  for a in $conf; do echo "  config  set $a in $DBM_CONFIG"; done
+  for a in $conf; do echo "  config  set $a in $(engine_conf_files "${a%%=*}" | sed 's/ / and /g') (dated .bak-* kept)"; done
   [ -z "$data_stop" ] || echo "  backup  a verified backup first (data of:$data_stop)"
   for s in $stop; do echo "  stop    $s: stop + remove its container$( [ -z "$(engine_volume "$s")" ] || [ "$purge" = 1 ] || echo ", keep volume $(engine_volume "$s")")"; done
   for s in $purge_list; do echo "  purge   DELETE volume $(engine_volume "$s") ($s data; typed confirmation)"; done
   for s in $start; do echo "  start   $s$( [ -n "$(engine_volume "$s")" ] && echo " (reuses volume $(engine_volume "$s") if present)")"; done
+  [ -z "$stale" ] || echo "  files   regenerate docker-compose.yml:${stale} off, container already gone, still listed"
+  for a in $fw_stale; do echo "  ufw     remove the ${a#*:}/tcp rule (${a%%:*} is off)"; done
   echo "  keep    ${keep# }${keep:+ (same containers, not restarted)}"
-  if [ -z "$conf$stop$start$purge_list" ]; then echo "nothing to change"; return 0; fi
+  if [ -z "$conf$stop$start$purge_list$stale$fw_stale" ]; then echo "nothing to change"; return 0; fi
   if [ -n "$start" ]; then
     local need have; need="$(engine_ram_mb)"; have="$(host_ram_mb)"
     [ "$have" = 0 ] || [ "$have" -ge "$((need * 90 / 100))" ] || warn "RAM ${have}MB < ${need}MB needed with$start on; consider: bin/siwo do resize <droplet> --size $(size_for_mb "$need")"
@@ -3485,7 +3525,7 @@ cmd_engines() { # [status] | apply [--set ENABLE_X=0|1]... [--dry-run] [--purge]
   for s in $stop; do c="$(svc_cid "$s")"; [ -n "$c" ] || continue
     docker stop -t 60 "$c" >/dev/null && docker rm "$c" >/dev/null && echo "removed the $s container"
   done
-  for a in $conf; do set_conf_key "${a%%=*}" "${a#*=}"; done
+  for a in $conf; do set_engine_key "${a%%=*}" "${a#*=}"; done
   ensure_env_keys; write_files
   for s in $start; do
     [ "$s" != postgres ] || dc build postgres

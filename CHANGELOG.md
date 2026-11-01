@@ -6,6 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (env files in the repo root; remote-run fixes)
+
+- **The repo-root `.env` is the single source of local settings.** Env files live in the repo root only
+  (`.env`, `.env.<client>`; template `.env-example`). The DB server settings that lived in
+  `local/<client>/db-server.conf` move into it as `SIWO_DB_<KEY>`; `remote-run.sh` and `bin/siwo db engines`
+  read it by default (`--env-file` / `SIWO_ENV_FILE` for another one) and install its server keys as
+  `/etc/docker-db-server-manager.conf` (never passwords, secrets, `SIWO_DB_SSH_*` or `SIWO_DB_LOCAL_*`).
+  `--config FILE` still overrides, `--no-config` sends none. `.env-example` gains `SIWO_DB_SSH_IDENTITY` and a
+  server-settings section; `local/README.md` explains the move.
+- `remote-run.sh`: `--host` takes `user@ip` or an alias; `-i/--identity KEY` (ssh and scp, `IdentitiesOnly=yes`;
+  `.pub` and missing files refused); host, key and IP default to `SIWO_DB_SSH_HOST`, `SIWO_DB_SSH_IDENTITY`,
+  `SIWO_DB_PRIVATE_IP`; literal `<placeholders>` and flags missing their value are refused with a fix; sudo is
+  probed with `sudo -n true` before anything is uploaded: passwordless runs as is, otherwise `ssh -t` and
+  sudo's own prompt once (`--sudo auto|nopasswd|prompt`), and a session without a terminal stops early. A
+  password is never passed on a command line. `--dry-run` shows the ssh line, sudo mode and config keys.
+  New page: [docs/tools/remote-run.md](docs/tools/remote-run.md).
+- `bin/siwo db engines`: `-i/--identity`, `--sudo`, `--config`, `--no-config`, same `.env` defaults.
+
+### Fixed
+
+- `engines apply` on a server whose settings live only in `/opt/db/.env` (no `/etc` file) stopped with "no
+  config"; it now writes `ENABLE_*` where the key lives (`/opt/db/.env` wins at runtime; both files when both
+  hold it; dated `.bak-*`, nothing written when already set) and `engines` status names the files.
+- `engines apply` after a manual change (setting edited, container already removed with `docker rm`) is now
+  idempotent: it regenerates the stale `docker-compose.yml` and prunes leftover ufw rules instead of trying to
+  stop what is gone; a re-run says `nothing to change`. Reproduced in `tests/shell/db-users-it.sh`.
+- Docs: the working engines command, sudo behaviour and troubleshooting for `zsh: no such file or directory:
+  db-alias` (an unquoted placeholder) and sudo needing a password/terminal, in the setup guide,
+  users-and-privileges, the manager page and the troubleshooting log; a generalised walkthrough of the manual
+  change (backup + idempotent edit of `/opt/db/.env`, docker-only stop/remove, verify, re-enable, purge) in
+  [docs/rehearsals/2026-11-engines-off-live.md](docs/rehearsals/2026-11-engines-off-live.md).
+
 ### Added (manager 1.6.0: database users, engine toggles, local clients)
 
 - Master login per engine ([users and privileges](docs/databases/users-and-privileges.md),

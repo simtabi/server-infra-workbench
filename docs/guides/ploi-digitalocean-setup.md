@@ -113,26 +113,37 @@ The DB droplet can be added to Ploi the same way (it gets the `ploi` user, sudo 
 Full reference: [DB server manager](../tools/db-server-manager.md),
 [users and privileges](../databases/users-and-privileges.md).
 
-1. **Config**, generated on the server (it detects the private IP and VPC range) and kept in your git-ignored
-   `local/<client>/` folder:
+1. **Config**, generated on the server (it detects the private IP and VPC range), then copied into the
+   git-ignored repo-root `.env` as `SIWO_DB_<KEY>=VALUE` (env files live in the repo root only; the
+   template is `.env-example`). Also set the connection there: `SIWO_DB_SSH_HOST` (`user@public-ip` or an ssh
+   alias), `SIWO_DB_SSH_IDENTITY` (private key) and `SIWO_DB_PRIVATE_IP`:
 
    ```sh
-   ssh myapp-db 'bash -s -- init' < src/shell/db/docker-db-server-manager.sh > local/myapp/db-server.conf
+   ssh myapp-db 'bash -s -- init' < src/shell/db/docker-db-server-manager.sh   # print it, then copy each KEY=VALUE into .env as SIWO_DB_KEY=VALUE
    ```
+
+   `remote-run.sh` turns those keys into the server's `/etc/docker-db-server-manager.conf` on every run (no
+   passwords; [details](../tools/remote-run.md#the-server-config)). An older `local/<client>/db-server.conf`
+   still works when passed with `--config`.
 
 2. **Engine toggles: switch off what the app doesn't use before the first install.** A Postgres-only
    Laravel app needs `ENABLE_POSTGRES=1` and `ENABLE_PGBOUNCER=1`; set `ENABLE_MYSQL=0`, `ENABLE_MARIADB=0`
    and `ENABLE_ADMINER=0`. Every running engine costs RAM ([sizing](../reference/sizing.md)). Turning one off
    later is possible without Postgres downtime (`engines apply`, see
    [turning engines on and off](../databases/users-and-privileges.md#turning-engines-on-and-off)), but keep
-   the same values in `local/<client>/db-server.conf`, or the next `install`/`upgrade` with that config turns
-   them back on.
+   the same values in the root `.env` (`SIWO_DB_ENABLE_*`), or the next `install`/`upgrade` turns them back on.
+   On the server, `/opt/db/.env` wins over the `/etc` file for every key it holds; a server set up by hand may
+   have only `/opt/db/.env`, and `engines apply` then edits that file.
 3. **Install** with nightly backups and print the `DB_*` lines for the app:
 
    ```sh
-   src/shell/db/remote-run.sh --host myapp-db --expect-ip 10.0.0.5 \
-     --config local/myapp/db-server.conf -- install, cron-install, doctor
+   src/shell/db/remote-run.sh -- install, cron-install, doctor          # host, key, IP and config from .env
+   src/shell/db/remote-run.sh --host ploi@203.0.113.10 -i ~/.ssh/myapp-db --expect-ip 10.0.0.5 -- install, cron-install, doctor
    ```
+
+   Put `--dry-run` **before** `--` to print the ssh line, sudo mode and remote script without connecting. If
+   the login user's sudo needs a password, run it in a terminal: remote-run checks `sudo -n true` first and
+   then lets sudo ask once over `ssh -t` (the password is never on a command line).
 
 4. **Master login per engine.** Postgres: `PG_ADMIN_USER` (superuser). MySQL/MariaDB, when on: a named admin
    (default `siwo_admin`) allowed only from the Docker network and the VPC. Passwords are generated on the
@@ -151,7 +162,7 @@ Full reference: [DB server manager](../tools/db-server-manager.md),
 
 | ✔ | Check |
 |---|---|
-| ☐ | Unused engines off in the config **before** `install` (and in `local/<client>/db-server.conf` forever after) |
+| ☐ | Unused engines off in the config **before** `install` (and in the root `.env`, `SIWO_DB_ENABLE_*`, forever after) |
 | ☐ | `doctor` clean: ports bound to the private IP only, no superuser app login, TLS as configured |
 | ☐ | A backup ran and is complete (`-- backup`), the nightly cron is installed |
 | ☐ | One owner login per app database and environment; the credentials file deleted once copied |
@@ -318,6 +329,32 @@ From a staging rollout that never came up. Each finding is generalised; the comm
 | Scheduled tasks never run | [No scheduler](#missing-scheduler) | Add a `schedule:work` daemon |
 | `doctor` warns about a superuser app login | [App uses the master login](#app-uses-a-superuser-database-login) | `create-db` an owner login, switch the `.env` |
 | A token is readable in the deploy script | [Ploi embeds the GitHub token](#ploi-deploy-script-embeds-the-github-token) | Revoke and reconnect; use a deploy key |
+| `zsh: no such file or directory: db-alias` when running `remote-run.sh` | [A `<placeholder>` typed literally](#remote-run-placeholder-and-sudo-errors) | Use the real `user@ip` or set `SIWO_DB_SSH_HOST` |
+| `sudo: a terminal is required` / `a password is required` from `remote-run.sh` | [sudo needs a password](#remote-run-placeholder-and-sudo-errors) | Run it in a terminal; sudo asks once |
+
+### remote-run: placeholder and sudo errors
+
+Turning MySQL and MariaDB off on a Postgres-only DB server failed twice before anything ran:
+
+- `zsh: no such file or directory: db-alias`: the command was pasted with `--host <db-alias>`. Unquoted `<`
+  and `>` are shell redirections, so the shell looked for a file called `db-alias` and never started the
+  script. Fix: the real value (`--host ploi@203.0.113.10`), or `SIWO_DB_SSH_HOST` in `.env` and no `--host`.
+  A quoted placeholder now stops remote-run with `--host is still a placeholder`.
+- sudo needed the login user's password and the run had no terminal (`--dry-run` had been put **after**
+  `--`, which is the manager's plan on the server and still needs sudo). Fix: `--dry-run` **before** `--`
+  for a print-only run; for the real one, a terminal, where sudo asks once over `ssh -t`.
+
+The working sequence:
+
+```sh
+src/shell/db/remote-run.sh --dry-run --host <user>@<db-public-ip> -i ~/.ssh/<db-key> --expect-ip <db-private-ip> -- engines apply --set ENABLE_MYSQL=0 --set ENABLE_MARIADB=0
+src/shell/db/remote-run.sh --host <user>@<db-public-ip> -i ~/.ssh/<db-key> --expect-ip <db-private-ip> -- engines apply --set ENABLE_MYSQL=0 --set ENABLE_MARIADB=0 --dry-run
+src/shell/db/remote-run.sh --host <user>@<db-public-ip> -i ~/.ssh/<db-key> --expect-ip <db-private-ip> -- engines apply --set ENABLE_MYSQL=0 --set ENABLE_MARIADB=0
+```
+
+Doing it by hand (no remote-run), checking it and undoing it:
+[rehearsals/2026-11-engines-off-live.md](../rehearsals/2026-11-engines-off-live.md). All errors:
+[remote-run troubleshooting](../tools/remote-run.md#troubleshooting).
 
 ### Deploys never completed: empty `DB_PASSWORD`
 

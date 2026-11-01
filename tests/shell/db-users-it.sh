@@ -138,4 +138,22 @@ WORKBENCH_CONFIRM="DELETE vswdbu_mariadb_data" run cmd_engines apply --purge > "
 run cmd_engine disable pgbouncer --dry-run > "$W/e1.out" 2>&1 && grep -q 'stop    pgbouncer' "$W/e1.out" && ok "engine disable <e> is engines apply --set (plan shown)" || { cat "$W/e1.out"; fail "engine alias"; }
 if run cmd_engines apply --set ENABLE_POSTGRES=0 > /dev/null 2>&1; then fail "postgres off with pgbouncer on"; fi
 ok "postgres cannot go off while pgbouncer needs it"
+
+# ---- the hand-made state of a live rollout: ENABLE_* only in /opt/db/.env, container removed with docker ----
+# (no ENABLE_* in the config file, MySQL switched off by editing .env and `docker rm`, compose not regenerated)
+pg_id="$(cid postgres)"; pg_started="$(docker inspect -f '{{.State.StartedAt}}' "$pg_id")"
+grep -vE '^(SIWO_DB_)?ENABLE_' "$W/dbm.conf" > "$W/dbm.tmp" && cat "$W/dbm.tmp" > "$W/dbm.conf"
+printf 'ENABLE_POSTGRES=1\nENABLE_PGBOUNCER=1\nENABLE_MYSQL=0\nENABLE_MARIADB=0\nENABLE_ADMINER=0\n' >> "$D/.env"
+c="$(cid mysql)"; docker update --restart=no "$c" >/dev/null && docker stop -t 30 "$c" >/dev/null && docker rm "$c" >/dev/null
+grep -q '^  mysql:' "$D/docker-compose.yml" || fail "setup: compose should still list mysql"
+run cmd_engines apply --dry-run > "$W/drift0.out" 2>&1 && grep -q 'files   regenerate docker-compose.yml: mysql' "$W/drift0.out" && grep -q 'dry run: nothing changed' "$W/drift0.out" \
+  && ok "drift found: mysql off in /opt/db/.env, container gone, still in docker-compose.yml (plan only)" || { cat "$W/drift0.out"; fail "drift plan"; }
+run cmd_engines apply > "$W/drift1.out" 2>&1 || { it_why "$W/drift1.out" 40; fail "drift apply"; }
+! grep -q '^  mysql:' "$D/docker-compose.yml" && [ "$(cid postgres)" = "$pg_id" ] && [ "$(docker inspect -f '{{.State.StartedAt}}' "$pg_id")" = "$pg_started" ] \
+  && docker volume inspect vswdbu_mysql_data >/dev/null 2>&1 && grep -q '^ENABLE_MYSQL=0$' "$D/.env" \
+  && ok "engines apply on that state: compose regenerated, postgres not restarted, mysql volume kept" || { cat "$W/drift1.out"; fail "drift apply result"; }
+run cmd_engines apply --set ENABLE_MYSQL=0 --set ENABLE_MARIADB=0 > "$W/drift2.out" 2>&1 && grep -q 'nothing to change' "$W/drift2.out" \
+  && ok "the documented command on an already-off server: nothing to change (idempotent)" || { cat "$W/drift2.out"; fail "drift rerun"; }
+run cmd_engines apply --set ENABLE_MYSQL=1 --dry-run > "$W/drift3.out" 2>&1 && grep -q "config  set ENABLE_MYSQL=1 in $D/.env" "$W/drift3.out" && ! grep -q "dbm.conf" "$W/drift3.out" \
+  && ok "re-enable plan writes to /opt/db/.env when the config file has no ENABLE_* (the .env is the live source)" || { cat "$W/drift3.out"; fail "env source"; }
 echo "db-users-it: all $pass checks passed"

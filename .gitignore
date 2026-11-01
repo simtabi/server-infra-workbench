@@ -2,8 +2,11 @@
 # Check a path: git check-ignore -v <path>. CI and the pre-commit hook also fail on a staged .env (make env-check).
 
 # ---- env files and local config: NEVER commit (passwords live only in .env and on the servers) ----
+# Env files live in the repo root: /.env is the single source of local settings (DB server keys included,
+# as SIWO_DB_*), /.env.<client> for more than one. The patterns below also catch a stray one anywhere else.
 .env
 .env.*
+.env.bak-*
 *.env
 *.env.local
 *.local

@@ -251,16 +251,24 @@ ssh <db-alias> 'bash -s -- init' < src/shell/db/docker-db-server-manager.sh > my
 ```
 Prints a config for the host it runs on (`EXPECTED_PRIVATE_IP`, `PRIVATE_IP` and
 `VPC_CIDR` from `PRIVATE_IFACE`, engines, users). It contains no secrets. Edit it,
-then install it with `remote-run.sh --config` or `sudo install -m 600 FILE /etc/docker-db-server-manager.conf`.
+then copy its keys into the repo-root `.env` as `SIWO_DB_<KEY>` (remote-run installs them on every run, see
+[remote-run](remote-run.md#the-server-config)), or install a file with `remote-run.sh --config FILE` or
+`sudo install -m 600 FILE /etc/docker-db-server-manager.conf`.
 
 ### Engines
+Where the settings live: the manager reads `/etc/docker-db-server-manager.conf` (if any), then `/opt/db/.env`,
+which **wins** for every key it holds. A server can run from `/opt/db/.env` alone; `engines apply` writes
+`ENABLE_*` into whichever file holds the key (`/opt/db/.env` when neither does) with a dated `.bak-*`, and
+recognises an engine already switched off and removed by hand (it then only regenerates the compose file and
+prunes stale firewall rules). Walkthrough: [rehearsals/2026-11-engines-off-live.md](../rehearsals/2026-11-engines-off-live.md).
+
 Each engine can be switched off in the config: `ENABLE_POSTGRES`, `ENABLE_PGBOUNCER`,
 `ENABLE_MYSQL`, `ENABLE_MARIADB`, `ENABLE_ADMINER` (`1`/`0`; all but Adminer `1` by default). A disabled engine
 gets no container, published port, firewall rule, backup or check. PgBouncer needs Postgres.
 
 On a running server change them with `engines apply` (1.6.0+), not by editing the file and re-running
 `install`: it backs up, stops and removes only the engines turned off, starts and converges only the ones
-turned on, writes the setting to the config file, and checks that the other containers are the same ones, so
+turned on, writes the setting to the config file(s), and checks that the other containers are the same ones, so
 Postgres keeps serving while MySQL and MariaDB go away. Volumes are kept (turning an engine back on brings
 its data back) until `engines apply --purge`. From the workstation, `bin/siwo db engines` applies the
 `SIWO_DB_ENABLE_*` toggles in `.env`. Details: [Users and privileges](../databases/users-and-privileges.md#turning-engines-on-and-off).

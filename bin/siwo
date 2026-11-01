@@ -17,6 +17,11 @@
 #   bin/siwo configure [--profile P]    wizard: profile + overrides -> local/<client>/ (no secrets)
 #   bin/siwo profile list|show|diff     the setup profiles in config/profiles
 #
+#   bin/siwo db engines plan|apply      DB engines on/off             e.g. bin/siwo db engines apply --host user@203.0.113.10 -i ~/.ssh/db-key
+#
+# Local settings: the repo-root .env (git-ignored; template .env-example) is the single source. db remote-run and
+# db engines read SIWO_DB_SSH_HOST / _SSH_IDENTITY / _PRIVATE_IP and the SIWO_DB_* server keys from it; flags
+# override, SIWO_ENV_FILE=path (or --env-file) points at another root env file such as .env.<client>.
 # Writes need --yes (or typing yes), destructive ones also --force; --dry-run sends nothing.
 # Shell tools keep their own flags; this script only resolves paths and execs.
 set -euo pipefail

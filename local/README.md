@@ -14,12 +14,18 @@ local/
     ssh-hosts.sh
 ```
 
+> **Settings moved to the repo-root `.env`.** The DB server settings that used to live in
+> `local/<client>/db-server.conf` now go in the root `.env` as `SIWO_DB_<KEY>=VALUE` (template:
+> [`.env-example`](../.env-example)); `remote-run.sh` and `bin/siwo db engines` turn them into the server
+> config. Keep env files in the repo root only. An old `db-server.conf` here still works with
+> `--config local/<client>/db-server.conf` (an explicit override), but is no longer read by default.
+
 Start from the tracked, generic example:
 
 ```bash
 cp -R examples/generic-laravel local/myapp
-$EDITOR local/myapp/db-server.conf
-src/shell/db/remote-run.sh --host db-01 --expect-ip 10.0.0.5 --config local/myapp/db-server.conf -- status, verify
+cp .env-example .env && chmod 600 .env && $EDITOR .env     # SIWO_DB_SSH_HOST, SIWO_DB_PRIVATE_IP, SIWO_DB_* server keys
+src/shell/db/remote-run.sh -- status, verify                # host, IP, key and server config from .env
 ```
 
 Rules:

@@ -36,6 +36,7 @@ New here? Read [Installation](installation.md), then [Getting started](getting-s
 
 | Page | Tool |
 |---|---|
+| [remote-run](tools/remote-run.md) | `src/shell/db/remote-run.sh`: run manager commands on the DB server from the workstation; root `.env` settings, sudo, troubleshooting |
 | [DB server manager](tools/db-server-manager.md) | `src/shell/db/docker-db-server-manager.sh` and `remote-run.sh`: build, check, back up, upgrade the database droplet |
 | [Deploy script](tools/deploy-script.md) | `src/shell/deploy/ploi-deploy.sh`: zero-downtime Ploi deploys, presets, hooks, first run |
 | [Server tools](tools/server.md) | `src/shell/server/*` and `web/diagnose.sh`: harden, update with a reboot window, diagnose a Laravel site (plan, confirm, audit) |
@@ -104,7 +105,7 @@ Diagrams are [Mermaid](https://mermaid.js.org); GitHub renders them inline; `mak
 |---|---|---|
 | [`bin/siwo`](../bin/siwo) | workstation | `list`, `<area> <tool>`, `do`, `cf`, `ploi`, `gcp`, `keys`, `health`, `credentials`, `env`, `addon`, `monitor`, `status`, `configure`, `profile`, `plans`, `py`; `--dry-run --yes --force --json --verbose --quiet`, see [cli.md](tools/cli.md) |
 | [`docker-db-server-manager.sh`](../src/shell/db/docker-db-server-manager.sh) | DB server (root) | `init install upgrade reset status verify doctor [--alert] env create-db create-user grant rotate-password list-dbs list-users drop-db drop-user role-split env-init env-apply env-list env-sql env-creds purge-trash backup restore restore-test offsite pitr binlog-ship binlog-replay engine gfs-keep cron-install cron-remove logs monitor-user metrics tls-ca pg-major-upgrade migrate-managed uninstall help`; `--yes --dry-run --non-interactive --snapshot --snapshot-taken --no-snapshot --config --quiet --version`, see [db-server-manager.md](tools/db-server-manager.md) |
-| [`remote-run.sh`](../src/shell/db/remote-run.sh) | workstation | `--host --expect-ip --config --script --no-upload --snapshot-with --dry-run -- <cmd>, <cmd>` |
+| [`remote-run.sh`](tools/remote-run.md) | workstation | `--host -i --expect-ip --env-file --config --no-config --sudo --script --no-upload --snapshot-with --dry-run -- <cmd>, <cmd>` (defaults from the root `.env`) |
 | [`update-env-db.sh`](../src/shell/web/update-env-db.sh) | web server or workstation | `--env --site --from --set --remote --no-backup --dry-run` |
 | [`check-db-reach.sh`](../src/shell/web/check-db-reach.sh) | web server or workstation | `<db-ip> [ports]`, `--env FILE`, `--remote ALIAS`, `--db-region R` |
 | [`diagnose.sh`](../src/shell/web/diagnose.sh) | workstation or web server | `--host --site --path --env --owner --fix --yes --dry-run --json-summary`, see [server.md](tools/server.md) |
