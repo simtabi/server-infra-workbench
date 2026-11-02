@@ -22,8 +22,42 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      # Every action reference must match the org pinning rule, offline and exactly: a third-party
+      # action on the commit SHA of a named release, a first-party one (actions/, docker/, github/)
+      # floating on its current major. Whether that release is the newest is Dependabot's job and
+      # laranail/package-tools' verify-action-pins.py; nothing checked the *shape* until this step,
+      # which is how the references here drifted off it with every check staying green.
+      - name: Action pins match the rule
+        run: |
+          python3 - <<'PINS'
+          import os, re, sys
+          d = ".github/workflows"
+          files = sorted(f for f in os.listdir(d) if f.endswith((".yml", ".yaml")))
+          floor = 1
+          if len(files) < floor:
+              sys.exit(f"{len(files)} workflow files in {d}; floor is {floor}. "
+                       "A search that stops matching must fail, not report a clean repository.")
+          uses = re.compile(r"uses:\s*([\w.-]+/[\w./-]+?)@([\w./-]+?)([ \t]*#[ \t]*(\S+))?\s*$", re.M)
+          bad, seen = [], 0
+          for name in files:
+              for ref, at, _, note in uses.findall(open(os.path.join(d, name)).read()):
+                  if ref.startswith("./") or "/.github/workflows/" in ref:
+                      continue                      # a local action or a reusable-workflow call
+                  seen += 1
+                  if ref.startswith(("actions/", "docker/", "github/")):
+                      if not re.fullmatch(r"v\d+", at) or note:
+                          bad.append(f"{name}: {ref}@{at} -- first-party, so float on a bare major tag")
+                  elif not re.fullmatch(r"[0-9a-f]{40}", at):
+                      bad.append(f"{name}: {ref}@{at} -- third-party, so pin to a commit SHA")
+                  elif not note or re.fullmatch(r"v?\d+", note):
+                      bad.append(f"{name}: {ref}@{at[:12]} # {note} -- name the release, not a mutable major")
+          print("\n".join(f"  {b}" for b in bad))
+          print(f"{seen} action references in {len(files)} workflow files; {len(bad)} off the rule")
+          sys.exit(1 if bad else 0)
+          PINS
       # ubuntu-latest ships shellcheck and docker; PHP and Python are pinned here.
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.4'
           extensions: json, openssl, sodium
