@@ -32,3 +32,36 @@ updates:
 # env/conf key, and Dependabot does not resolve Compose interpolation (dependabot-core#15238), so it had
 # nothing to update (and the composer entry pointed at a stale /php path). Image upgrades go through the tools'
 # `upgrade --dry-run` and the pins in *.env.example / config (docs/release.md).
+  - package-ecosystem: pip
+    directory: /src/python
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /stacks/caddy/php
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /tests/shell/wg
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
