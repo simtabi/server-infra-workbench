@@ -49,7 +49,7 @@ flowchart LR
 - **DB server**: a droplet provisioned through Ploi (so it has the `ploi`
   user) running the Docker stack from [`docker-db-server-manager.sh`](tools/db-server-manager.md).
   Every DB port is bound to the **private** IP only, and ufw allows only the VPC range.
-- **Access**: one ed25519 key per host managed by sshmgr, user `ploi`, `sudo`
+- **Access**: one ed25519 key per host managed by authama, user `ploi`, `sudo`
   with the password from Ploi's provisioning email ([ssh-access.md](recipes/set-up-ssh-access.md)).
 
 ## Request flow
