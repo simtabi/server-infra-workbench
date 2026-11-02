@@ -8,7 +8,7 @@ Keys live in two places, and a third tool covers the case where you are already 
 | Change who can log in to a **running** server, while ssh still works | `siwo keys server ...` |
 | **Locked out**: only the provider's web console works | [`src/shell/ssh/fixkeys.sh`](../../src/shell/ssh/fixkeys.sh), pasted into the console |
 
-Per-host keys and `~/.ssh/config` stay with [sshmgr](../recipes/set-up-ssh-access.md); these tools only
+Per-host keys and `~/.ssh/config` stay with [authama](../recipes/set-up-ssh-access.md); these tools only
 put public keys where servers read them. Private keys are never read.
 
 ## `siwo keys`

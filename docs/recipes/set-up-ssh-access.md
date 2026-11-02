@@ -1,7 +1,7 @@
 # SSH access
 
 Keys and `~/.ssh/config` are managed with
-[sshmgr](https://github.com/simtabi/ssh-manager) (sibling package). Refer to
+[authama](https://github.com/simtabi/authama) (sibling package). Refer to
 its docs for the full command reference; this page is only the flow used here.
 
 ## Contents
@@ -18,26 +18,26 @@ its docs for the full command reference; this page is only the flow used here.
 ```mermaid
 sequenceDiagram
     autonumber
-    participant W as Workstation (sshmgr)
+    participant W as Workstation (authama)
     participant P as Ploi panel
     participant S as Server (user ploi)
     participant T as Termius
-    W->>W: sshmgr host apply <profile> <alias> <ip> ploi <role>
+    W->>W: authama ssh host apply <profile> <alias> <ip> ploi <role>
     Note over W: ed25519 key + Host block in ~/.ssh/config
     W->>P: paste the .pub line as an SSH key for user ploi
     P->>S: adds it to ~ploi/.ssh/authorized_keys
     W->>S: ssh <alias> whoami  (prints ploi)
-    W->>T: sshmgr termius export (hosts CSV)
-    W->>T: sshmgr termius keys <alias> (private key to clipboard)
+    W->>T: authama ssh termius export (hosts CSV)
+    W->>T: authama ssh termius keys <alias> (private key to clipboard)
     T->>S: connect with the pasted key
 ```
 
 ## 1. A key per host
 
 ```sh
-sshmgr host apply <profile> <alias> <public-ip> ploi <role> --reconcile
-# web: sshmgr host apply myproject prd-web-00 203.0.113.10 ploi web --reconcile
-# db:  sshmgr host apply myproject prd-db-00  203.0.113.20 ploi db  --reconcile
+authama ssh host apply <profile> <alias> <public-ip> ploi <role> --reconcile
+# web: authama ssh host apply myproject prd-web-00 203.0.113.10 ploi web --reconcile
+# db:  authama ssh host apply myproject prd-db-00  203.0.113.20 ploi db  --reconcile
 ```
 
 This mints an ed25519 key for the host and writes the `Host <alias>` block.
@@ -69,9 +69,9 @@ Termius's CSV import cannot carry keys, so imported hosts stop at key
 selection. Export the hosts, then add each key by hand:
 
 ```sh
-sshmgr termius export                           # hosts CSV for Termius import
-sshmgr termius keys                             # list hosts, key labels, key paths
-sshmgr termius keys <alias> --clear-after 60s   # private key -> clipboard
+authama ssh termius export                           # hosts CSV for Termius import
+authama ssh termius keys                             # list hosts, key labels, key paths
+authama ssh termius keys <alias> --clear-after 60s   # private key -> clipboard
 ```
 
 In Termius: **Keychain > New Key**, set **Label** to the printed label, paste
@@ -85,7 +85,7 @@ server for that user. After an IP change, re-export or edit the host address.
 ```mermaid
 flowchart TD
     q{"What does the prompt say?"}
-    q -->|"you@laptop"| ws["Workstation:<br/>run sshmgr, scp, remote-run.sh,<br/>update-env-db.sh --remote"]
+    q -->|"you@laptop"| ws["Workstation:<br/>run authama, scp, remote-run.sh,<br/>update-env-db.sh --remote"]
     q -->|"ploi@...-db-..."| db["DB server:<br/>sudo /root/docker-db-server-manager.sh ..."]
     q -->|"ploi@...-web-..."| web["Web server:<br/>update-env-db.sh --site, artisan, docker compose"]
     db --> oops{"Typed ssh &lt;alias&gt; or used ~/Downloads?"}

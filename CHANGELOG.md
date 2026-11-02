@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed (SSH tool renamed)
+
+- The SSH access docs point at [authama](https://github.com/simtabi/authama), the new name of sshmgr
+  (`simtabi/ssh-manager`): commands are now `authama ssh host apply` and `authama ssh termius …`. The old
+  `sshmgr` binary still works as a deprecated alias.
+
 ### Changed (env files in the repo root; remote-run fixes)
 
 - **The repo-root `.env` is the single source of local settings.** Env files live in the repo root only

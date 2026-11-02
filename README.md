@@ -33,7 +33,7 @@ A database server for a new project, from your workstation:
 
 ```sh
 # 0. SSH: one key per host (see docs/recipes/set-up-ssh-access.md), add the .pub in Ploi for user ploi
-sshmgr host apply myproject prd-db-00 203.0.113.20 ploi db --reconcile
+authama ssh host apply myproject prd-db-00 203.0.113.20 ploi db --reconcile
 ssh prd-db-00 whoami                                  # -> ploi
 
 # 1. Config for the DB server (no secrets in it): detects the private IP and VPC
