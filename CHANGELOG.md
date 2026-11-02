@@ -174,6 +174,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `CODE_OF_CONDUCT.md` is the three-line pointer to the org code of conduct; the full Contributor Covenant copy it replaces is the org file it points to.
 - The CLI is split into one command class per provider (`Console\Commands\*`) with a shared `Runner`; output,
   flags and exit codes are unchanged. `docs/tools/platform-api.md`, `cli.md`, `status.md` and
   `config/credentials.env.example` document the new scopes; the documented-command checker covers `github`/`gh`
