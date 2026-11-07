@@ -87,11 +87,11 @@ if bash "$U" >/dev/null 2>&1; then fail "update without yes"; else ok "update: n
 
 # --- web diagnose -----------------------------------------------------------------------
 fresh; A="$T/root/home/ploi/app.example.com"; mkdir -p "$A/storage/logs" "$A/storage/app/public" "$A/bootstrap/cache" "$A/public"; touch "$A/artisan"
-printf 'APP_ENV=production\nAPP_DEBUG=true\nAPP_KEY=base64:test\nAPP_URL=https://app.example.com\nDB_CONNECTION=pgsql\nDB_HOST=203.0.113.9\nDB_PORT=6432\nDB_USERNAME=app\nDB_PASSWORD=%s\n' "$(gen)" > "$A/.env"; chmod 644 "$A/.env"
+DIAG_PW="$(gen)"; printf 'APP_ENV=production\nAPP_DEBUG=true\nAPP_KEY=base64:test\nAPP_URL=https://app.example.com\nDB_CONNECTION=pgsql\nDB_HOST=203.0.113.9\nDB_PORT=6432\nDB_USERNAME=app\nDB_PASSWORD=%s\n' "$DIAG_PW" > "$A/.env"; chmod 644 "$A/.env"
 if bash "$W" --site app.example.com >"$T/o" 2>&1; then fail "diagnose should fail"; fi
 grep -q 'FAIL  APP_DEBUG=true on prd' "$T/o" && grep -q 'not reachable' "$T/o" && grep -q 'not a private address' "$T/o" && grep -q 'fixable with --fix: env_mode debug_off storage_link' "$T/o" \
   && ok "diagnose: finds debug on prd, unreachable/public DB, fixables" || { cat "$T/o"; fail "diagnose findings"; }
-! grep -q 'not-a-real-password' "$T/o" && ok "diagnose: never prints .env values" || fail "diagnose leaked"
+! grep -qF "$DIAG_PW" "$T/o" && ok "diagnose: never prints .env values" || fail "diagnose leaked"
 bash "$W" --site app.example.com --fix --dry-run >/dev/null; grep -q 'APP_DEBUG=true' "$A/.env" && ok "diagnose --fix --dry-run changes nothing" || fail "dry-run"
 echo yes > "$T/tty"; bash "$W" --site app.example.com --fix --yes >/dev/null 2>&1 && fail "prd fix with --yes"
 grep -q 'APP_DEBUG=true' "$A/.env" && ok "diagnose: prd --fix ignores --yes and needs the typed domain" || fail "prd typed"
@@ -174,13 +174,13 @@ bash "$I" --role db --swap 3X >/dev/null 2>&1 && fail "bad swap" || ok "init: va
 # --- server inventory -------------------------------------------------------------------------
 V=src/shell/server/inventory.sh
 initroot; mkdir -p "$T/root/home/ploi/shop.example.com"; touch "$T/root/home/ploi/shop.example.com/artisan"
-printf 'APP_KEY=base64:%s\nDB_PASSWORD=%s\n' "$(gen)" "$(gen)" > "$T/root/home/ploi/shop.example.com/.env"
+INV_KEY="$(gen)"; INV_PW="$(gen)"; printf 'APP_KEY=base64:%s\nDB_PASSWORD=%s\n' "$INV_KEY" "$INV_PW" > "$T/root/home/ploi/shop.example.com/.env"
 stub docker 'case "$1" in ps) echo "pg|postgres:18|Up 3 days (healthy)";; --version) echo "Docker version 28.5.1, build x";; compose) echo "Docker Compose version v2.40.0";; esac'
 stub ss "printf 'LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 200 10.0.0.5:5432 0.0.0.0:*\n'"
 bash "$V" --json >"$T/o"
 python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); f=d["facts"]; assert f["os.name"]=="Ubuntu 24.04.3 LTS" and f["size.mem_mb"]=="1966" and f["containers.pg"].startswith("postgres:18") and f["sites.shop.example.com"]=="laravel" and f["ver.docker"]=="28.5.1"' "$T/o" \
   && ok "inventory --json: valid JSON with OS, size, containers, sites, versions" || { cat "$T/o"; fail "inventory json"; }
-! grep -qE 'secretvalue|not-a-real-password' "$T/o" && ok "inventory: never reads .env values" || fail "inventory leaked"
+! grep -qF -e "$INV_KEY" -e "$INV_PW" "$T/o" && ok "inventory: never reads .env values" || fail "inventory leaked"
 bash "$V" --out /var/lib/vsw/inv >/dev/null; [ -f "$T/root/var/lib/vsw/inv/inventory.md" ] && grep -q '| mem_mb | 1966 |' "$T/root/var/lib/vsw/inv/inventory.md" && ok "inventory --out: txt/json/md written" || fail "inventory out"
 stub ss "printf 'LISTEN 0 4096 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 200 10.0.0.5:5432 0.0.0.0:*\nLISTEN 0 511 0.0.0.0:6379 0.0.0.0:*\n'"
 bash "$V" --out /var/lib/vsw/inv >"$T/o"; grep -q 'changes since the last inventory' "$T/o" && grep -q '^+net.listen.0.0.0.0:6379' "$T/root/var/lib/vsw/inv"/changes-*.diff \
