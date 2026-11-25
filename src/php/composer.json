@@ -6,7 +6,7 @@
     "keywords": ["digitalocean", "ploi", "cloudflare", "gcp", "github", "vps", "devops", "psr-18"],
     "authors": [
         {"name": "Simtabi LLC", "email": "opensource@simtabi.com", "homepage": "https://opensource.simtabi.com", "role": "Organization"},
-        {"name": "Imani Manyara", "email": "imani@simtabi.com", "role": "Maintainer"}
+        {"name": "Imani Manyara", "email": "opensource@simtabi.com", "role": "Maintainer"}
     ],
     "require": {
         "php": "^8.4",
